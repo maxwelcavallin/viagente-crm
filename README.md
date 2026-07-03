@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CRM Viagente
 
-## Getting Started
+CRM interno da Viagente (substituto da Clint). Ver a especificação completa em `../viagente-crm-spec.md`.
 
-First, run the development server:
+**Stack:** Next.js (App Router) + TypeScript + Tailwind CSS + shadcn/ui + Drizzle ORM + Neon (Postgres serverless), deploy na Vercel.
+
+## Setup local
+
+### 1. Instalar dependências
+
+```bash
+npm install
+```
+
+### 2. Configurar variáveis de ambiente
+
+Copie `.env.example` para `.env.local` e preencha com a connection string do banco Neon:
+
+```bash
+cp .env.example .env.local
+```
+
+Se o projeto já estiver linkado à Vercel (integração Neon instalada), você pode puxar as variáveis direto:
+
+```bash
+npx vercel link
+npx vercel env pull .env.local
+```
+
+### 3. Rodar o projeto
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse [http://localhost:3000](http://localhost:3000). Para conferir a conexão com o banco, acesse [http://localhost:3000/api/health](http://localhost:3000/api/health) — deve retornar `{ "status": "ok", "db": "connected" }`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Banco de dados (Drizzle + Neon)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Schema em `src/db/schema.ts`, cliente de conexão em `src/db/index.ts`.
+- `npm run db:generate` — gera migrations a partir do schema.
+- `npm run db:migrate` — aplica migrations pendentes no banco.
+- `npm run db:studio` — abre o Drizzle Studio para inspecionar o banco.
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
+O projeto está linkado ao time `cavallin` na Vercel (projeto `viagente-crm`), com o banco Neon conectado via integração do Marketplace (variáveis de ambiente já configuradas em Production/Preview/Development).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx vercel deploy --prod
+```
