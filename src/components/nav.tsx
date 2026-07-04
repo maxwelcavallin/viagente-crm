@@ -12,6 +12,12 @@ export async function Nav() {
         <Link href="/" className="font-semibold">
           CRM Viagente
         </Link>
+        <Link
+          href="/atendimento"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          Atendimento
+        </Link>
         {session.user.role === "admin" && (
           <>
             <Link
@@ -25,6 +31,12 @@ export async function Nav() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               Pipelines
+            </Link>
+            <Link
+              href="/admin/whatsapp"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              WhatsApp
             </Link>
           </>
         )}

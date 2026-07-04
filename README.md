@@ -79,6 +79,51 @@ Depois disso, o próprio admin pode criar os demais usuários pela tela `/admin/
 
 A tabela `messages` é particionada por mês (`created_at`) via SQL raw editado manualmente na migration `drizzle/0000_schema_completo_mvp.sql` (drizzle-kit não gera `PARTITION BY` a partir do schema). As partições cobrem 2026-07 a 2026-09, mais uma partição `DEFAULT` como rede de segurança. Antes de 2026-10, criar a próxima partição mensal manualmente (ou via job agendado) para manter o benefício de performance do particionamento — ver comentário no topo da migration.
 
+## Atendimento via WhatsApp (Z-API)
+
+- Cada número WhatsApp conectado é um **canal** (`whatsapp_channels`), configurado direto na tela `/admin/whatsapp` — não em variável de ambiente. O sistema suporta múltiplos canais simultâneos (ex: comercial + suporte).
+- `zapi_token` e `zapi_client_token` são criptografados (AES-256-GCM) antes de gravar no banco, usando `CREDENTIALS_ENCRYPTION_KEY`. Depois de salvos, aparecem mascarados na tela (`••••••1234`).
+
+### 1. Adicionar um canal
+
+Em `/admin/whatsapp` (só `role = admin`), clique em "Adicionar canal" e informe:
+
+- **Nome do canal** (label livre, ex: "Comercial")
+- **Z-API Instance ID** e **Token** — da instância específica (painel Z-API → sua instância)
+- **Z-API Client-Token** — o "Account Security Token" da conta (painel Z-API → Segurança → Token de Conta), o mesmo para todas as instâncias da conta
+
+Depois de salvo, clique em **"Testar conexão"** pra confirmar que a instância está conectada ao WhatsApp. Marque um canal como **"Tornar padrão"** — é o canal sugerido ao responder um contato que ainda não tem conversa em nenhum canal permitido.
+
+### 2. Gerenciar acesso por atendente
+
+Dentro de cada canal (`/admin/whatsapp/[id]`), a lista de usuários `atendente` aparece com um toggle "tem acesso" — **marcado por padrão** (todo atendente vê todos os canais). Desmarcar bloqueia aquele atendente especificamente daquele canal (fica registrado em `whatsapp_channel_restrictions`). Usuários `admin` não aparecem na lista porque sempre têm acesso a tudo.
+
+### 3. Configurar o webhook na Z-API
+
+Cada canal tem sua própria URL de webhook:
+
+```
+https://<seu-dominio>/api/whatsapp/webhook/<channelId>
+```
+
+O `channelId` é o `id` do canal (visível na URL de `/admin/whatsapp/[id]`). Configure essa URL no painel da Z-API, na aba **Webhooks** daquela instância, tanto para "Ao receber" (mensagens) quanto para "Status da mensagem" (entregue/lido) — a Z-API envia os dois tipos de evento para a mesma URL, e o endpoint diferencia pelo formato do payload.
+
+**Testando localmente com ngrok:** como a Z-API precisa alcançar sua máquina publicamente, rode um túnel:
+
+```bash
+npx ngrok http 3000
+```
+
+Use a URL HTTPS gerada pelo ngrok (ex: `https://abcd1234.ngrok-free.app/api/whatsapp/webhook/<channelId>`) no painel da Z-API enquanto testa. Troque para a URL de produção (`https://<seu-dominio-vercel>/...`) antes do cutover final.
+
+⚠️ **Recomendação da spec:** configure primeiro um canal apontando pra uma instância de teste (número que não seja o de produção da Viagente) antes de testar o fluxo — evita risco de mandar mensagem pra um lead real durante os testes.
+
+### 4. Armazenamento de mídia (Cloudflare R2)
+
+Mídia recebida (imagem, áudio, vídeo, documento) é baixada do link temporário da Z-API e enviada para um bucket R2 — nunca fica dependente do link da Z-API, que expira. O bucket tem uma **lifecycle rule**: objetos no prefixo `media/` (imagem, vídeo, documento) expiram em 120 dias; objetos no prefixo `audio/` nunca expiram. Um cron diário (`/api/cron/cleanup-media`, agendado em `vercel.json`) zera o `media_url` no banco das mensagens cuja mídia já expirou, evitando link morto.
+
+O acesso à mídia sempre passa por `/api/media/[messageId]` (nunca uma URL pública direta do R2) — essa rota confere se o usuário logado tem acesso ao canal da mensagem antes de gerar uma URL assinada de curta duração.
+
 ## Deploy
 
 O projeto está linkado ao time `cavallin` na Vercel (projeto `viagente-crm`), com o banco Neon conectado via integração do Marketplace (variáveis de ambiente já configuradas em Production/Preview/Development).

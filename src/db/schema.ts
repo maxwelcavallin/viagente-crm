@@ -274,9 +274,10 @@ export const customFieldDefinitions = pgTable(
 );
 
 // ---------- Canais WhatsApp (Z-API, configurados via UI) ----------
-// zapi_token e zapi_client_token são armazenados em texto puro por enquanto;
-// a criptografia em repouso é implementada na Etapa 5, junto com a tela de
-// administração (ver seção 7 da spec).
+// zapi_token e zapi_client_token são gravados criptografados (AES-256-GCM,
+// ver src/lib/credentials-crypto.ts) — nunca em texto puro. zapi_instance_id
+// fica em texto puro de propósito: é comparado contra o campo "instanceId"
+// do payload do webhook pra validar a origem da chamada (ver seção 7 da spec).
 
 export const whatsappChannels = pgTable("whatsapp_channels", {
   id: uuid("id").defaultRandom().primaryKey(),
