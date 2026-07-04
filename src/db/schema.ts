@@ -112,7 +112,10 @@ export const stages = pgTable(
     order: integer("order").notNull().default(0),
     color: text("color"),
   },
-  (t) => [index("stages_pipeline_id_idx").on(t.pipelineId)]
+  (t) => [
+    index("stages_pipeline_id_idx").on(t.pipelineId),
+    uniqueIndex("stages_pipeline_id_name_idx").on(t.pipelineId, t.name),
+  ]
 );
 
 // ---------- Templates de mensagem (referenciado por stage_tasks) ----------

@@ -13,12 +13,20 @@ export async function Nav() {
           CRM Viagente
         </Link>
         {session.user.role === "admin" && (
-          <Link
-            href="/admin/usuarios"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Usuários
-          </Link>
+          <>
+            <Link
+              href="/admin/usuarios"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Usuários
+            </Link>
+            <Link
+              href="/admin/pipelines"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Pipelines
+            </Link>
+          </>
         )}
       </div>
       <div className="flex items-center gap-3">

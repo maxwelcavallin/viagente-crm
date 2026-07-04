@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "stages_pipeline_id_name_idx" ON "stages" USING btree ("pipeline_id","name");

@@ -22,6 +22,13 @@
       "when": 1783113407993,
       "tag": "0002_users_auth_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783176028325,
+      "tag": "0003_red_infant_terrible",
+      "breakpoints": true
     }
   ]
 }
