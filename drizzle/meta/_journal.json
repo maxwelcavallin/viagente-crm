@@ -8,6 +8,20 @@
       "when": 1783110256452,
       "tag": "0000_schema_completo_mvp",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783111723798,
+      "tag": "0001_whatsapp_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783113407993,
+      "tag": "0002_users_auth_fields",
+      "breakpoints": true
     }
   ]
 }

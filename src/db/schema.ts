@@ -64,6 +64,11 @@ export const webhookLogStatusEnum = pgEnum("webhook_log_status", [
   "sucesso",
   "erro",
 ]);
+export const whatsappChannelStatusEnum = pgEnum("whatsapp_channel_status", [
+  "conectado",
+  "desconectado",
+  "pendente",
+]);
 
 // ---------- Usuários ----------
 
@@ -74,6 +79,10 @@ export const users = pgTable(
     name: text("name").notNull(),
     email: text("email").notNull(),
     role: userRoleEnum("role").notNull().default("atendente"),
+    passwordHash: text("password_hash").notNull(),
+    mustChangePassword: boolean("must_change_password")
+      .notNull()
+      .default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -261,6 +270,51 @@ export const customFieldDefinitions = pgTable(
   ]
 );
 
+// ---------- Canais WhatsApp (Z-API, configurados via UI) ----------
+// zapi_token e zapi_client_token são armazenados em texto puro por enquanto;
+// a criptografia em repouso é implementada na Etapa 5, junto com a tela de
+// administração (ver seção 7 da spec).
+
+export const whatsappChannels = pgTable("whatsapp_channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: text("label").notNull(),
+  zapiInstanceId: text("zapi_instance_id").notNull(),
+  zapiToken: text("zapi_token").notNull(),
+  zapiClientToken: text("zapi_client_token").notNull(),
+  phoneNumber: text("phone_number"),
+  status: whatsappChannelStatusEnum("status").notNull().default("pendente"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Controle de acesso por canal — modelo de bloqueio, não de liberação: por
+// padrão todo atendente vê todos os canais; uma linha aqui BLOQUEIA o
+// usuário daquele canal específico. role='admin' sempre vê tudo, independente
+// desta tabela (ver seção 7 da spec).
+export const whatsappChannelRestrictions = pgTable(
+  "whatsapp_channel_restrictions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => whatsappChannels.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("whatsapp_channel_restrictions_user_channel_idx").on(
+      t.userId,
+      t.channelId
+    ),
+  ]
+);
+
 // ---------- Mensagens ----------
 // Particionada por mês (created_at). drizzle-kit não gera "PARTITION BY"
 // nativamente, então a migration gerada é ajustada manualmente para
@@ -279,6 +333,9 @@ export const messages = pgTable(
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id").references(() => whatsappChannels.id, {
+      onDelete: "set null",
+    }),
     direction: messageDirectionEnum("direction").notNull(),
     type: messageTypeEnum("type").notNull(),
     content: text("content"),

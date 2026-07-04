@@ -1,0 +1,62 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "atendente";
+  mustChangePassword: boolean;
+};
+
+export function UsersTable({ users }: { users: UserRow[] }) {
+  if (users.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Nenhum usuário cadastrado ainda.
+      </p>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nome</TableHead>
+          <TableHead>Email</TableHead>
+          <TableHead>Role</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {users.map((user) => (
+          <TableRow key={user.id}>
+            <TableCell>{user.name}</TableCell>
+            <TableCell>{user.email}</TableCell>
+            <TableCell>
+              <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                {user.role}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              {user.mustChangePassword ? (
+                <span className="text-muted-foreground">
+                  Aguardando primeiro login
+                </span>
+              ) : (
+                "Ativo"
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}

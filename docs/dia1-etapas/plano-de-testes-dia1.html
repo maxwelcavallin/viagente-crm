@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Viagente — Plano de Testes · Dia 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F8FA;
+    --surface:#FFFFFF;
+    --ink:#14213D;
+    --ink-soft:#5B6478;
+    --border:#E2E5EA;
+    --accent:#0F766E;
+    --accent-soft:#E6F6F4;
+    --fail:#B91C1C;
+    --fail-soft:#FDECEC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    max-width:920px;
+    margin:0 auto;
+    padding:56px 24px 80px;
+  }
+  header.top{
+    margin-bottom:40px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:600;
+    margin-bottom:10px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:32px;
+    font-weight:700;
+    margin:0 0 8px;
+    letter-spacing:-0.01em;
+  }
+  .sub{
+    color:var(--ink-soft);
+    font-size:15px;
+    max-width:640px;
+    line-height:1.5;
+    margin:0 0 28px;
+  }
+  .overall{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px 24px;
+    display:flex;
+    align-items:center;
+    gap:20px;
+  }
+  .overall .ring{
+    position:relative;
+    width:56px;
+    height:56px;
+    flex:none;
+  }
+  .overall .ring svg{ transform:rotate(-90deg); }
+  .overall .ring text{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    font-weight:600;
+    fill:var(--ink);
+  }
+  .overall .label{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    font-size:15px;
+  }
+  .overall .count{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+    margin-top:2px;
+  }
+
+  .rail{
+    position:relative;
+    padding-left:40px;
+  }
+  .rail::before{
+    content:"";
+    position:absolute;
+    left:15px;
+    top:14px;
+    bottom:14px;
+    width:2px;
+    background:var(--border);
+  }
+
+  .step{
+    position:relative;
+    margin-bottom:28px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    overflow:hidden;
+  }
+  .step-marker{
+    position:absolute;
+    left:-40px;
+    top:22px;
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    background:var(--surface);
+    border:2px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    transition:all .2s ease;
+    z-index:1;
+  }
+  .step.complete .step-marker{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
+  .step-head{
+    padding:20px 24px 16px;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    border-bottom:1px solid var(--border);
+  }
+  .step-title{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:18px;
+    font-weight:600;
+  }
+  .step-desc{
+    color:var(--ink-soft);
+    font-size:13.5px;
+    margin-top:4px;
+    line-height:1.5;
+  }
+  .step-count{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    white-space:nowrap;
+    padding-top:2px;
+  }
+  .step-count b{ color:var(--ink); }
+
+  .bar-track{
+    height:4px;
+    background:var(--border);
+    border-radius:2px;
+    overflow:hidden;
+    margin-top:10px;
+  }
+  .bar-fill{
+    height:100%;
+    background:var(--accent);
+    width:0%;
+    transition:width .25s ease;
+  }
+
+  ul.tests{
+    list-style:none;
+    margin:0;
+    padding:8px 12px 14px;
+  }
+  ul.tests li{
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    padding:10px 12px;
+    border-radius:9px;
+  }
+  ul.tests li:hover{ background:var(--bg); }
+  ul.tests input[type="checkbox"]{
+    appearance:none;
+    -webkit-appearance:none;
+    width:19px;
+    height:19px;
+    border-radius:6px;
+    border:1.5px solid var(--border);
+    margin-top:1px;
+    flex:none;
+    cursor:pointer;
+    position:relative;
+    transition:all .15s ease;
+  }
+  ul.tests input[type="checkbox"]:checked{
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  ul.tests input[type="checkbox"]:checked::after{
+    content:"";
+    position:absolute;
+    left:6px; top:2px;
+    width:5px; height:9px;
+    border:solid #fff;
+    border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
+  ul.tests label{
+    font-size:14.5px;
+    line-height:1.5;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  ul.tests input[type="checkbox"]:checked ~ label{
+    color:var(--ink-soft);
+    text-decoration:line-through;
+    text-decoration-color:var(--border);
+  }
+
+  .prompt-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--accent);
+    background:var(--accent-soft);
+    padding:4px 9px;
+    border-radius:999px;
+    margin:0 24px 16px;
+  }
+
+  footer{
+    margin-top:44px;
+    padding-top:24px;
+    border-top:1px solid var(--border);
+    color:var(--ink-soft);
+    font-size:13px;
+    line-height:1.6;
+  }
+  footer b{ color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">CRM Viagente · Dia 1</div>
+    <h1>Plano de testes — cutover da Clint</h1>
+    <p class="sub">Checklist de validação das etapas do Dia 1. A Etapa 5 (WhatsApp) foi antecipada do Dia 4 do plano original, por ser obrigatória desde já. Marque cada item conforme testar no ambiente local ou em produção antes de seguir pra próxima etapa.</p>
+
+    <div class="overall">
+      <div class="ring">
+        <svg width="56" height="56" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="#E2E5EA" stroke-width="6"/>
+          <circle id="overallArc" cx="28" cy="28" r="24" fill="none" stroke="#0F766E" stroke-width="6"
+            stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8"/>
+          <text x="28" y="32" text-anchor="middle" id="overallPct">0%</text>
+        </svg>
+      </div>
+      <div>
+        <div class="label">Progresso geral do Dia 1</div>
+        <div class="count" id="overallCount">0 / 0 testes concluídos</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="rail" id="rail"></div>
+
+  <footer>
+    <b>Como usar:</b> valide cada etapa com esse checklist antes de colar o prompt da próxima no Claude Code — as etapas têm dependência entre si (ex: a Etapa 3 assume que as tabelas da Etapa 2 já existem). Este checklist não salva progresso entre sessões; é feito pra usar durante a validação de cada etapa, não como registro permanente.
+  </footer>
+</div>
+
+<script>
+const data = [
+  {
+    title: "Etapa 1 — Setup & Infraestrutura",
+    desc: "Projeto Next.js + Neon + deploy no Vercel funcionando de ponta a ponta.",
+    promptFile: "etapa-1-setup-infra.md",
+    tests: [
+      "npm run dev sobe o projeto localmente sem erro",
+      "/api/health retorna 200 localmente e confirma conexão real com o Neon",
+      "/api/health retorna 200 em produção (Vercel)",
+      ".env.example existe e cobre todas as variáveis usadas no projeto",
+      "README permite rodar o projeto do zero só seguindo o passo a passo",
+      "Banco Neon configurado com autoscaling baixo (1-2 CU) e scale-to-zero ativado"
+    ]
+  },
+  {
+    title: "Etapa 2 — Schema do Banco + Seed",
+    desc: "Todas as 16 tabelas do MVP criadas, seed da pipeline e regras de temperatura.",
+    promptFile: "etapa-2-schema-banco.md",
+    tests: [
+      "Migration roda do zero (banco vazio) sem erro",
+      "Todas as 16 tabelas existem no banco com os tipos corretos (inclui whatsapp_channels)",
+      "custom_fields em contacts/deals está como jsonb",
+      "messages tem índice em (contact_id, created_at)",
+      "Seed cria a pipeline \"Funil Viagente\" com as 7 etapas na ordem certa",
+      "Seed cria os 6 campos customizados do diagnóstico",
+      "Seed cria as 3 regras de temperatura (quente/morno/frio) com as condições certas",
+      "Rodar migration/seed duas vezes não duplica dados (ou reset está documentado)"
+    ]
+  },
+  {
+    title: "Etapa 2b — Complemento: Restrição de Acesso a Canal",
+    desc: "Migration incremental adicionando whatsapp_channel_restrictions.",
+    promptFile: "etapa-2b-complemento-whatsapp-channels.md",
+    tests: [
+      "Tabela whatsapp_channels existe (se ainda não existia)",
+      "Coluna messages.channel_id existe como FK nullable (se ainda não existia)",
+      "Tabela whatsapp_channel_restrictions existe com constraint única em (user_id, channel_id)",
+      "Migration rodou sem apagar dados existentes (pipeline, etapas, campos e regras do seed continuam lá)",
+      "Projeto continua rodando normalmente (npm run dev) depois da migration"
+    ]
+  },
+  {
+    title: "Etapa 3 — Autenticação & Usuários",
+    desc: "Login funcional, controle de acesso por role, convite simplificado de usuário.",
+    promptFile: "etapa-3-auth-usuarios.md",
+    tests: [
+      "Login com email/senha funciona e cria sessão válida",
+      "Rota protegida redireciona para /login se não autenticado",
+      "Admin consegue criar novo usuário (nome, email, role)",
+      "Senha temporária gerada é exibida uma única vez na criação do usuário",
+      "Novo usuário consegue logar com a senha temporária",
+      "Primeiro login força troca de senha antes de liberar o sistema",
+      "Role atendente não acessa /admin/usuarios nem vê o link no menu",
+      "Role admin acessa /admin/usuarios normalmente",
+      "Logout invalida a sessão de fato"
+    ]
+  },
+  {
+    title: "Etapa 4 — CRUD de Pipelines e Etapas",
+    desc: "Tela de administração de pipelines, com a Funil Viagente do seed como validação.",
+    promptFile: "etapa-4-pipelines-etapas.md",
+    tests: [
+      "Admin cria uma nova pipeline do zero",
+      "Admin cria uma nova etapa dentro de uma pipeline",
+      "Reordenar etapas persiste após recarregar a página",
+      "Editar nome/cor de uma etapa funciona",
+      "Excluir etapa sem negócios vinculados funciona",
+      "Excluir etapa com negócios vinculados é bloqueado com mensagem explicativa",
+      "Pipeline \"Funil Viagente\" aparece com as 7 etapas na ordem certa",
+      "Role atendente não acessa /admin/pipelines"
+    ]
+  },
+  {
+    title: "Etapa 5 — Atendimento via WhatsApp (Z-API, multi-canal)",
+    desc: "Antecipada do Dia 4: canais configuráveis no CRM, recebimento, envio, histórico e status.",
+    promptFile: "etapa-5-whatsapp-zapi.md",
+    tests: [
+      "Admin consegue adicionar um canal em /admin/whatsapp com as credenciais da instância Z-API",
+      "Tokens do canal ficam criptografados no banco e mascarados na tela após salvar",
+      "Botão \"Testar conexão\" reflete corretamente se a instância está conectada",
+      "Admin consegue bloquear um atendente específico de um canal específico",
+      "Atendente bloqueado não vê aquele canal em /atendimento nem consegue enviar mensagem por ele (nem via API)",
+      "Atendente sem bloqueio continua vendo todos os canais normalmente (padrão é acesso liberado)",
+      "Admin sempre vê todos os canais, mesmo sem estar na lista de acesso",
+      "Mensagem de teste enviada pro número do canal aparece em /atendimento em poucos segundos",
+      "Contato novo é criado automaticamente ao receber mensagem de um número desconhecido",
+      "Responder pela UI chega de verdade no WhatsApp, usando o canal certo",
+      "Status da mensagem evolui de enviado para entregue/lido conforme webhook chega",
+      "Mensagem com imagem recebida fica acessível por URL do storage próprio (não da Z-API)",
+      "Mensagem com áudio recebido fica acessível por URL do storage próprio (não da Z-API)",
+      "Histórico de conversa persiste após recarregar a página",
+      "Webhook por canal (/api/whatsapp/webhook/[channelId]) valida token antes de processar",
+      "Com um segundo canal de teste configurado, mensagens de cada número aparecem separadas, sem se misturar",
+      "Mensagens de contato com negócio aberto ficam com deal_id preenchido automaticamente",
+      "Botão \"Exportar conversa (.md)\" baixa arquivo com histórico completo, timestamps e remetente identificado, respeitando o acesso do usuário",
+      "Arquivo .md exportado abre corretamente em um leitor de Markdown (ex: VS Code)"
+    ]
+  }
+];
+
+const rail = document.getElementById('rail');
+
+data.forEach((step, si) => {
+  const stepEl = document.createElement('div');
+  stepEl.className = 'step';
+  stepEl.id = 'step-' + si;
+
+  stepEl.innerHTML = `
+    <div class="step-marker">${si + 1}</div>
+    <div class="step-head">
+      <div>
+        <div class="step-title">${step.title}</div>
+        <div class="step-desc">${step.desc}</div>
+      </div>
+      <div class="step-count" id="count-${si}"><b>0</b>/${step.tests.length}</div>
+    </div>
+    <div style="padding:0 24px;">
+      <div class="bar-track"><div class="bar-fill" id="bar-${si}"></div></div>
+    </div>
+    <div class="prompt-tag">↳ prompt: ${step.promptFile}</div>
+    <ul class="tests" id="list-${si}"></ul>
+  `;
+  rail.appendChild(stepEl);
+
+  const list = stepEl.querySelector('#list-' + si);
+  step.tests.forEach((testLabel, ti) => {
+    const li = document.createElement('li');
+    const cbId = `t-${si}-${ti}`;
+    li.innerHTML = `<input type="checkbox" id="${cbId}"><label for="${cbId}">${testLabel}</label>`;
+    list.appendChild(li);
+    li.querySelector('input').addEventListener('change', updateAll);
+  });
+});
+
+function updateAll(){
+  let totalAll = 0, doneAll = 0;
+  data.forEach((step, si) => {
+    const boxes = document.querySelectorAll(`#list-${si} input[type="checkbox"]`);
+    const done = Array.from(boxes).filter(b => b.checked).length;
+    const total = boxes.length;
+    totalAll += total; doneAll += done;
+
+    document.getElementById(`count-${si}`).innerHTML = `<b>${done}</b>/${total}`;
+    document.getElementById(`bar-${si}`).style.width = (done/total*100) + '%';
+    document.getElementById('step-' + si).classList.toggle('complete', done === total);
+  });
+
+  const pct = totalAll ? Math.round(doneAll/totalAll*100) : 0;
+  document.getElementById('overallPct').textContent = pct + '%';
+  document.getElementById('overallCount').textContent = `${doneAll} / ${totalAll} testes concluídos`;
+  const circumference = 150.8;
+  document.getElementById('overallArc').style.strokeDashoffset = circumference - (circumference * pct / 100);
+}
+
+updateAll();
+</script>
+</body>
+</html>
