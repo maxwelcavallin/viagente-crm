@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -157,19 +167,38 @@ function StageRow({
           </Button>
         </form>
 
-        <form action={deleteAction}>
-          <input type="hidden" name="id" value={stage.id} />
-          <input type="hidden" name="pipelineId" value={pipelineId} />
-          <Button type="submit" variant="destructive" disabled={deletePending}>
-            {deletePending ? "Excluindo..." : "Excluir"}
-          </Button>
-        </form>
+        <Dialog>
+          <DialogTrigger render={<Button type="button" variant="destructive" />}>
+            Excluir
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Excluir a etapa &quot;{stage.name}&quot;?</DialogTitle>
+              <DialogDescription>
+                Essa ação não pode ser desfeita. Se houver negócios nesta
+                etapa, a exclusão será bloqueada.
+              </DialogDescription>
+            </DialogHeader>
+            {deleteState.status === "error" && (
+              <p className="text-sm text-destructive">{deleteState.message}</p>
+            )}
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                Cancelar
+              </DialogClose>
+              <form action={deleteAction}>
+                <input type="hidden" name="id" value={stage.id} />
+                <input type="hidden" name="pipelineId" value={pipelineId} />
+                <Button type="submit" variant="destructive" disabled={deletePending}>
+                  {deletePending ? "Excluindo..." : "Confirmar exclusão"}
+                </Button>
+              </form>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
       {updateState.status === "error" && (
         <p className="text-sm text-destructive">{updateState.message}</p>
-      )}
-      {deleteState.status === "error" && (
-        <p className="text-sm text-destructive">{deleteState.message}</p>
       )}
     </div>
   );
@@ -201,7 +230,7 @@ export function StagesList({
         newOrder.map((s) => s.id)
       );
     });
-    toast("Ordem das etapas atualizada", {
+    toast.success("Ordem das etapas atualizada", {
       duration: 5000,
       action: {
         label: "Desfazer",

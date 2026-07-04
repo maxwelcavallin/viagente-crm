@@ -37,8 +37,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        // Borda esquerda de destaque 3px na cor semântica conforme o tipo
+        // (seção 5 do design system) — nunca cor sozinha, o ícone do
+        // sonner (configurado acima) já diferencia sucesso/erro/aviso.
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast rounded-xl! border-l-[3px]!",
+          success: "border-l-status-success!",
+          error: "border-l-status-danger!",
+          warning: "border-l-status-warning!",
+          info: "border-l-status-info!",
         },
       }}
       {...props}
