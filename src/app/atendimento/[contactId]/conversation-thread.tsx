@@ -152,7 +152,11 @@ export function ConversationThread({
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <Select value={channelId} onValueChange={(value) => setChannelId(value ?? "")}>
+              <Select
+                items={Object.fromEntries(channels.map((c) => [c.id, c.label]))}
+                value={channelId}
+                onValueChange={(value) => setChannelId(value ?? "")}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Canal" />
                 </SelectTrigger>

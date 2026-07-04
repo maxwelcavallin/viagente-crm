@@ -69,7 +69,11 @@ export function CreateUserForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="role">Role</Label>
-        <Select name="role" defaultValue="atendente">
+        <Select
+          name="role"
+          defaultValue="atendente"
+          items={{ atendente: "Atendente", admin: "Admin" }}
+        >
           <SelectTrigger id="role" className="w-full">
             <SelectValue />
           </SelectTrigger>
