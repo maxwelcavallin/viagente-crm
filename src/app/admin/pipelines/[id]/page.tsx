@@ -37,15 +37,19 @@ export default async function PipelineDetailPage({
         >
           ← Pipelines
         </Link>
-        <h1 className="text-2xl font-semibold">{pipeline.name}</h1>
+        <h1 className="text-2xl font-bold">{pipeline.name}</h1>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Etapas</CardTitle>
           </CardHeader>
           <CardContent>
-            <StagesList stages={pipelineStages} pipelineId={pipeline.id} />
+            <StagesList
+              key={pipelineStages.map((s) => s.id).join(",")}
+              stages={pipelineStages}
+              pipelineId={pipeline.id}
+            />
           </CardContent>
         </Card>
         <Card>

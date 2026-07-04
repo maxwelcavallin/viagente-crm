@@ -194,3 +194,21 @@ export async function moveStageAction(formData: FormData): Promise<void> {
 
   revalidatePath(`/admin/pipelines/${pipelineId}`);
 }
+
+// Usado pelo drag-and-drop (seção 4 do design system): recebe a ordem final
+// completa (lista de ids) e regrava o campo "order" de todas de uma vez.
+export async function reorderStagesAction(
+  pipelineId: string,
+  orderedIds: string[]
+): Promise<{ ok: boolean }> {
+  if (!(await requireAdmin())) return { ok: false };
+  if (orderedIds.length === 0) return { ok: true };
+
+  const updates = orderedIds.map((id, index) =>
+    db.update(stages).set({ order: index }).where(eq(stages.id, id))
+  );
+  await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
+
+  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  return { ok: true };
+}

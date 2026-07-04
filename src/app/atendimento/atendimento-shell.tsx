@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { MessagesSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils";
 import type { ConversationSummary } from "@/lib/conversations";
 
 const POLL_INTERVAL_MS = 4000;
@@ -27,6 +30,9 @@ export function AtendimentoShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  // Abaixo de `lg`, navegação de duas telas (lista ↔ conversa em tela
+  // cheia), no padrão do WhatsApp mobile — ver seção 6 do design system.
+  const isListRoute = pathname === "/atendimento";
 
   useEffect(() => {
     const interval = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
@@ -34,12 +40,19 @@ export function AtendimentoShell({
   }, [router]);
 
   return (
-    <div className="flex h-[calc(100vh-65px)]">
-      <aside className="w-80 shrink-0 overflow-y-auto border-r">
+    <div className="flex h-full">
+      <aside
+        className={cn(
+          "w-full shrink-0 flex-col overflow-y-auto border-r border-border lg:flex lg:w-80",
+          isListRoute ? "flex" : "hidden"
+        )}
+      >
         {conversations.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            Nenhuma conversa ainda.
-          </p>
+          <EmptyState
+            icon={MessagesSquare}
+            title="Nenhuma conversa ainda"
+            description="Mensagens recebidas via WhatsApp aparecem aqui."
+          />
         ) : (
           <ul>
             {conversations.map((conversation) => {
@@ -48,9 +61,10 @@ export function AtendimentoShell({
                 <li key={conversation.contactId}>
                   <Link
                     href={`/atendimento/${conversation.contactId}`}
-                    className={`block border-b p-3 hover:bg-muted ${
-                      isActive ? "bg-muted" : ""
-                    }`}
+                    className={cn(
+                      "block border-b border-border p-3 hover:bg-accent",
+                      isActive && "bg-accent"
+                    )}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium">
@@ -76,7 +90,14 @@ export function AtendimentoShell({
           </ul>
         )}
       </aside>
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main
+        className={cn(
+          "flex-1 overflow-y-auto",
+          isListRoute ? "hidden lg:block" : "block"
+        )}
+      >
+        {children}
+      </main>
     </div>
   );
 }

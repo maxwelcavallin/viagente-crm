@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { count, eq } from "drizzle-orm";
+import { Workflow } from "lucide-react";
 import { db } from "@/db";
 import { pipelines, stages } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -27,17 +29,19 @@ export default async function PipelinesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Pipelines</h1>
-      <div className="grid gap-6 md:grid-cols-2">
+      <h1 className="text-2xl font-bold">Pipelines</h1>
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Pipelines cadastradas</CardTitle>
           </CardHeader>
           <CardContent>
             {allPipelines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhuma pipeline cadastrada ainda.
-              </p>
+              <EmptyState
+                icon={Workflow}
+                title="Nenhuma pipeline cadastrada"
+                description="Crie a primeira pipeline pelo formulário ao lado."
+              />
             ) : (
               <Table>
                 <TableHeader>

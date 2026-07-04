@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useTransition } from "react";
+import { Switch } from "@/components/ui/switch";
 import { setChannelAccessAction } from "./actions";
 
 export function AccessToggle({
@@ -28,12 +29,10 @@ export function AccessToggle({
         name="hasAccess"
         value={defaultChecked ? "false" : "true"}
       />
-      <input
-        type="checkbox"
+      <Switch
         defaultChecked={defaultChecked}
         disabled={isPending}
-        onChange={() => formRef.current?.requestSubmit()}
-        className="size-4"
+        onCheckedChange={() => formRef.current?.requestSubmit()}
         aria-label="Tem acesso a este canal"
       />
       <span className="text-sm text-muted-foreground">

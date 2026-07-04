@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Check, CheckCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -12,13 +14,6 @@ import {
 } from "@/components/ui/select";
 import type { ThreadMessage } from "@/lib/conversations";
 
-const STATUS_LABEL: Record<ThreadMessage["status"], string> = {
-  enviado: "Enviado",
-  entregue: "Entregue",
-  lido: "Lido",
-  falhou: "Falhou",
-};
-
 function formatTimestamp(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
@@ -27,6 +22,27 @@ function formatTimestamp(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+// Ticks de status no estilo WhatsApp (seção 3 do design system): cinza
+// (enviado) → cinza duplo (entregue) → azul --status-info duplo (lido).
+// Nunca só a cor — o ícone (check simples/duplo) já diferencia o estado.
+function StatusTick({ status }: { status: ThreadMessage["status"] }) {
+  if (status === "falhou") {
+    return (
+      <span className="flex items-center gap-1 text-status-danger">
+        <TriangleAlert size={12} strokeWidth={1.75} />
+        Falhou
+      </span>
+    );
+  }
+  if (status === "lido") {
+    return <CheckCheck size={14} strokeWidth={1.75} className="text-status-info" />;
+  }
+  if (status === "entregue") {
+    return <CheckCheck size={14} strokeWidth={1.75} className="opacity-70" />;
+  }
+  return <Check size={14} strokeWidth={1.75} className="opacity-70" />;
 }
 
 function MessageMedia({ message }: { message: ThreadMessage }) {
@@ -95,10 +111,19 @@ export function ConversationThread({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b p-4">
-        <div>
-          <div className="font-semibold">{contactName}</div>
-          <div className="text-xs text-muted-foreground">{contactPhone}</div>
+      <div className="flex items-center justify-between border-b border-border p-4">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/atendimento"
+            className="-ml-1 rounded-md p-1 text-muted-foreground hover:bg-muted lg:hidden"
+            aria-label="Voltar pra lista de conversas"
+          >
+            <ArrowLeft size={20} strokeWidth={1.75} />
+          </Link>
+          <div>
+            <div className="font-semibold">{contactName}</div>
+            <div className="text-xs text-muted-foreground">{contactPhone}</div>
+          </div>
         </div>
         <a
           href={`/api/conversations/${contactId}/export`}
@@ -121,9 +146,7 @@ export function ConversationThread({
             >
               <div
                 className={`max-w-md rounded-lg px-3 py-2 text-sm ${
-                  message.direction === "saida"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                  message.direction === "saida" ? "bg-accent" : "bg-muted"
                 }`}
               >
                 {message.type === "texto" ? (
@@ -131,11 +154,11 @@ export function ConversationThread({
                 ) : (
                   <MessageMedia message={message} />
                 )}
-                <div className="mt-1 flex items-center gap-2 text-xs opacity-70">
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   {message.channelLabel && <span>{message.channelLabel}</span>}
                   <span>{formatTimestamp(message.createdAt)}</span>
                   {message.direction === "saida" && (
-                    <span>{STATUS_LABEL[message.status]}</span>
+                    <StatusTick status={message.status} />
                   )}
                 </div>
               </div>
@@ -144,7 +167,7 @@ export function ConversationThread({
         )}
       </div>
 
-      <div className="space-y-2 border-t p-4">
+      <div className="space-y-2 border-t border-border p-4">
         {channels.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Você não tem acesso a nenhum canal pra responder este contato.
@@ -182,7 +205,7 @@ export function ConversationThread({
                 }}
                 placeholder="Escreva uma mensagem..."
                 rows={2}
-                className="flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="min-h-[40px] flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
               />
               <Button onClick={handleSend} disabled={isSending || !text.trim()}>
                 {isSending ? "Enviando..." : "Enviar"}

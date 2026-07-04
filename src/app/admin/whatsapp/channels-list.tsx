@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -30,10 +32,11 @@ export type ChannelRow = {
 
 const idleState: ChannelFormState = { status: "idle" };
 
+// Nunca usar --primary (dourado) pra status — seção 1 do design system.
 function statusVariant(status: ChannelRow["status"]) {
-  if (status === "conectado") return "default" as const;
+  if (status === "conectado") return "success" as const;
   if (status === "desconectado") return "destructive" as const;
-  return "secondary" as const;
+  return "warning" as const;
 }
 
 function ChannelRowItem({ channel }: { channel: ChannelRow }) {
@@ -54,7 +57,9 @@ function ChannelRowItem({ channel }: { channel: ChannelRow }) {
       </TableCell>
       <TableCell>{channel.phoneNumber ?? "—"}</TableCell>
       <TableCell>
-        <Badge variant={statusVariant(channel.status)}>{channel.status}</Badge>
+        <Badge variant={statusVariant(channel.status)} dot>
+          {channel.status}
+        </Badge>
         {testState.status === "error" && (
           <p className="mt-1 text-xs text-destructive">{testState.message}</p>
         )}
@@ -86,7 +91,11 @@ function ChannelRowItem({ channel }: { channel: ChannelRow }) {
 export function ChannelsList({ channels }: { channels: ChannelRow[] }) {
   if (channels.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">Nenhum canal configurado ainda.</p>
+      <EmptyState
+        icon={MessageSquare}
+        title="Nenhum canal configurado"
+        description="Adicione o primeiro canal WhatsApp pelo formulário ao lado."
+      />
     );
   }
 

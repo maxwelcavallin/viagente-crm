@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { Nav } from "@/components/nav";
+import { AppShell } from "@/components/app-shell";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { listConversations } from "@/lib/conversations";
 import { AtendimentoShell } from "./atendimento-shell";
@@ -22,9 +22,8 @@ export default async function AtendimentoLayout({
   const conversations = await listConversations(allowedChannelIds);
 
   return (
-    <>
-      <Nav />
+    <AppShell>
       <AtendimentoShell conversations={conversations}>{children}</AtendimentoShell>
-    </>
+    </AppShell>
   );
 }

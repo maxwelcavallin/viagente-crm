@@ -1,3 +1,4 @@
+import { Users } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -7,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type UserRow = {
   id: string;
@@ -19,9 +21,11 @@ type UserRow = {
 export function UsersTable({ users }: { users: UserRow[] }) {
   if (users.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Nenhum usuário cadastrado ainda.
-      </p>
+      <EmptyState
+        icon={Users}
+        title="Nenhum usuário cadastrado"
+        description="Crie o primeiro usuário pelo formulário ao lado."
+      />
     );
   }
 

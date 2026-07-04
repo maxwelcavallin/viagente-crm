@@ -2,6 +2,7 @@
 
 import { useActionState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,10 +27,17 @@ export function CreateUserForm() {
 
   if (state.status === "success") {
     return (
-      <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950">
-        <p className="font-medium">
-          Usuário {state.name} criado. Copie a senha temporária agora — ela
-          não será mostrada de novo.
+      <div className="space-y-3 rounded-lg border-l-[3px] border-status-warning bg-status-warning/10 p-4 text-sm">
+        <p className="flex items-start gap-2 font-medium">
+          <TriangleAlert
+            size={16}
+            strokeWidth={1.75}
+            className="mt-0.5 shrink-0 text-status-warning"
+          />
+          <span>
+            Usuário {state.name} criado. Copie a senha temporária agora — ela
+            não será mostrada de novo.
+          </span>
         </p>
         <div className="space-y-1">
           <p>

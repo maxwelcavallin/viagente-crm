@@ -33,8 +33,8 @@ export default async function WhatsappChannelsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Canais WhatsApp</h1>
-      <div className="grid gap-6 md:grid-cols-2">
+      <h1 className="text-2xl font-bold">Canais WhatsApp</h1>
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Canais configurados</CardTitle>

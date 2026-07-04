@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
+import { Users } from "lucide-react";
 import { db } from "@/db";
 import { users, whatsappChannelRestrictions, whatsappChannels } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { AccessToggle } from "./access-toggle";
 
 export default async function ChannelAccessPage({
@@ -41,7 +43,7 @@ export default async function ChannelAccessPage({
         >
           ← Canais WhatsApp
         </Link>
-        <h1 className="text-2xl font-semibold">{channel.label}</h1>
+        <h1 className="text-2xl font-bold">{channel.label}</h1>
       </div>
       <Card>
         <CardHeader>
@@ -54,9 +56,11 @@ export default async function ChannelAccessPage({
             todos os canais e por isso não aparecem aqui.
           </p>
           {atendentes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum usuário atendente cadastrado ainda.
-            </p>
+            <EmptyState
+              icon={Users}
+              title="Nenhum atendente cadastrado"
+              description="Crie usuários com role atendente em /admin/usuarios."
+            />
           ) : (
             <div className="space-y-2">
               {atendentes.map((atendente) => (

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { Nav } from "@/components/nav";
+import { AppShell } from "@/components/app-shell";
 
 export default async function AdminLayout({
   children,
@@ -12,9 +12,8 @@ export default async function AdminLayout({
   if (session.user.role !== "admin") redirect("/acesso-negado");
 
   return (
-    <>
-      <Nav />
-      <main className="p-6">{children}</main>
-    </>
+    <AppShell>
+      <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+    </AppShell>
   );
 }
