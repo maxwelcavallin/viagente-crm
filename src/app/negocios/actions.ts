@@ -5,7 +5,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { contacts, customFieldDefinitions, dealTags, deals, stages } from "@/db/schema";
+import {
+  contacts,
+  customFieldDefinitions,
+  dealTags,
+  deals,
+  stages,
+  stageTasks,
+  tasks,
+} from "@/db/schema";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
 
 async function requireSession() {
@@ -221,7 +229,32 @@ export async function moveDealStageAction(
     .set({ stageId, updatedAt: new Date() })
     .where(eq(deals.id, dealId));
 
+  // Cria as tarefas automáticas da etapa de destino (Etapa 9). Se o negócio
+  // já visitou essa etapa antes, cria de novo — não reaproveita tarefas
+  // antigas já concluídas (regra explícita do critério de aceite).
+  const tasksForStage = await db
+    .select({
+      id: stageTasks.id,
+      title: stageTasks.title,
+      type: stageTasks.type,
+    })
+    .from(stageTasks)
+    .where(eq(stageTasks.stageId, stageId));
+
+  if (tasksForStage.length > 0) {
+    await db.insert(tasks).values(
+      tasksForStage.map((st) => ({
+        dealId,
+        stageTaskId: st.id,
+        title: st.title,
+        type: st.type,
+        status: "pendente" as const,
+      }))
+    );
+  }
+
   revalidatePath("/negocios");
+  revalidatePath(`/negocios/${dealId}`);
   return { ok: true };
 }
 
@@ -239,5 +272,22 @@ export async function setDealStatusAction(
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
+  return { ok: true };
+}
+
+export async function completeTaskAction(
+  taskId: string,
+  dealId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user) return { ok: false };
+
+  await db
+    .update(tasks)
+    .set({ status: "concluida", completedAt: new Date(), completedBy: user.id })
+    .where(eq(tasks.id, taskId));
+
+  revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
   return { ok: true };
 }

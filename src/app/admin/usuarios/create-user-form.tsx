@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ export function CreateUserForm() {
   );
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
+  const [role, setRole] = useState("atendente");
 
   if (state.status === "success") {
     return (
@@ -77,9 +78,10 @@ export function CreateUserForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="role">Role</Label>
+        <input type="hidden" name="role" value={role} />
         <Select
-          name="role"
-          defaultValue="atendente"
+          value={role}
+          onValueChange={(v) => setRole(v ?? "atendente")}
           items={{ atendente: "Atendente", admin: "Admin" }}
         >
           <SelectTrigger id="role" className="w-full">

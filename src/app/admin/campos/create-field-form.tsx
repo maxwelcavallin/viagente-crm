@@ -48,6 +48,7 @@ export function CreateFieldForm() {
   const [label, setLabel] = useState("");
   const [key, setKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
+  const [entity, setEntity] = useState("contact");
   const [type, setType] = useState<string>("texto");
   const [options, setOptions] = useState<
     { value: string; label: string; valueTouched: boolean }[]
@@ -79,7 +80,12 @@ export function CreateFieldForm() {
     <form action={formAction} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="entity">Entidade</Label>
-        <Select name="entity" defaultValue="contact" items={ENTITY_LABELS}>
+        <input type="hidden" name="entity" value={entity} />
+        <Select
+          value={entity}
+          onValueChange={(v) => setEntity(v ?? "contact")}
+          items={ENTITY_LABELS}
+        >
           <SelectTrigger id="entity" className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -114,8 +120,8 @@ export function CreateFieldForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="type">Tipo</Label>
+        <input type="hidden" name="type" value={type} />
         <Select
-          name="type"
           value={type}
           onValueChange={(value) => setType(value ?? "texto")}
           items={TYPE_LABELS}

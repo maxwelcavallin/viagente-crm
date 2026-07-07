@@ -31,6 +31,7 @@ import {
   reorderStagesAction,
   type StageFormState,
 } from "./actions";
+import { StageTasksPanel, type StageTask } from "./stage-tasks-panel";
 
 type Stage = { id: string; name: string; color: string | null };
 
@@ -41,6 +42,8 @@ function StageRow({
   pipelineId,
   index,
   total,
+  stageTasks,
+  templates,
   isDragging,
   isDropTarget,
   isGrabbed,
@@ -54,6 +57,8 @@ function StageRow({
   pipelineId: string;
   index: number;
   total: number;
+  stageTasks: StageTask[];
+  templates: { id: string; name: string }[];
   isDragging: boolean;
   isDropTarget: boolean;
   isGrabbed: boolean;
@@ -200,6 +205,12 @@ function StageRow({
       {updateState.status === "error" && (
         <p className="text-sm text-destructive">{updateState.message}</p>
       )}
+      <StageTasksPanel
+        stageId={stage.id}
+        pipelineId={pipelineId}
+        tasks={stageTasks}
+        templates={templates}
+      />
     </div>
   );
 }
@@ -207,9 +218,13 @@ function StageRow({
 export function StagesList({
   stages,
   pipelineId,
+  stageTasksByStageId,
+  templates,
 }: {
   stages: Stage[];
   pipelineId: string;
+  stageTasksByStageId: Record<string, StageTask[]>;
+  templates: { id: string; name: string }[];
 }) {
   // O componente é remontado (via `key` no chamador) sempre que a ordem ou
   // o conjunto de etapas muda no servidor, então o estado local não precisa
@@ -309,6 +324,8 @@ export function StagesList({
           pipelineId={pipelineId}
           index={index}
           total={order.length}
+          stageTasks={stageTasksByStageId[stage.id] ?? []}
+          templates={templates}
           isDragging={draggedId === stage.id}
           isDropTarget={overIndex === index && draggedId !== stage.id}
           isGrabbed={grabbedId === stage.id}

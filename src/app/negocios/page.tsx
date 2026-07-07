@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
@@ -10,6 +10,7 @@ import {
   pipelines,
   stages,
   tags,
+  tasks,
   users,
 } from "@/db/schema";
 import { getLastMessagePreviewsByDealId } from "@/lib/deals";
@@ -93,7 +94,7 @@ export default async function NegociosPage({
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
   const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
 
-  const [dealTagRows, messagePreviewByDealId] = await Promise.all([
+  const [dealTagRows, messagePreviewByDealId, pendingTaskRows] = await Promise.all([
     dealIds.length > 0
       ? db
           .select({ dealId: dealTags.dealId, tagId: dealTags.tagId })
@@ -101,7 +102,18 @@ export default async function NegociosPage({
           .where(inArray(dealTags.dealId, dealIds))
       : Promise.resolve([]),
     getLastMessagePreviewsByDealId(dealIds),
+    dealIds.length > 0
+      ? db
+          .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
+          .from(tasks)
+          .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
+          .groupBy(tasks.dealId)
+      : Promise.resolve([]),
   ]);
+
+  const pendingTaskCountByDeal = new Map(
+    pendingTaskRows.map((row) => [row.dealId, row.pendingCount])
+  );
 
   const allTags: TagOption[] = allTagRows.map((tag) => ({
     id: tag.id,
@@ -141,6 +153,7 @@ export default async function NegociosPage({
       stageId: deal.stageId,
       pipelineId: deal.pipelineId,
       messagePreview: messagePreviewByDealId.get(deal.id) ?? null,
+      pendingTaskCount: pendingTaskCountByDeal.get(deal.id) ?? 0,
     };
   });
 

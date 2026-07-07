@@ -4,7 +4,7 @@ import { asc, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { deals, stages } from "@/db/schema";
+import { deals, stages, stageTasks } from "@/db/schema";
 
 async function requireAdmin() {
   const session = await auth();
@@ -211,4 +211,178 @@ export async function reorderStagesAction(
 
   revalidatePath(`/admin/pipelines/${pipelineId}`);
   return { ok: true };
+}
+
+// ---------- Tarefas automáticas por etapa (stage_tasks) ----------
+
+export type StageTaskFormState =
+  | { status: "idle" }
+  | { status: "error"; message: string };
+
+const stageTaskIdle: StageTaskFormState = { status: "idle" };
+
+export async function createStageTaskAction(
+  _prevState: StageTaskFormState,
+  formData: FormData
+): Promise<StageTaskFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const stageId = formData.get("stageId");
+  const pipelineId = formData.get("pipelineId");
+  const title = formData.get("title");
+  const type = formData.get("type");
+  const messageTemplateId = formData.get("messageTemplateId");
+
+  if (typeof stageId !== "string" || typeof pipelineId !== "string") {
+    return { status: "error", message: "Etapa inválida." };
+  }
+  if (typeof title !== "string" || !title.trim()) {
+    return { status: "error", message: "Título é obrigatório." };
+  }
+  if (
+    type !== "mensagem" &&
+    type !== "ligacao" &&
+    type !== "agendamento" &&
+    type !== "generica"
+  ) {
+    return { status: "error", message: "Tipo inválido." };
+  }
+  if (type === "mensagem" && (typeof messageTemplateId !== "string" || !messageTemplateId)) {
+    return {
+      status: "error",
+      message: "Selecione um template para tarefas do tipo mensagem.",
+    };
+  }
+
+  const existing = await db
+    .select({ order: stageTasks.order })
+    .from(stageTasks)
+    .where(eq(stageTasks.stageId, stageId));
+  const nextOrder =
+    existing.length > 0 ? Math.max(...existing.map((s) => s.order)) + 1 : 0;
+
+  await db.insert(stageTasks).values({
+    stageId,
+    title: title.trim(),
+    type,
+    messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
+    order: nextOrder,
+  });
+
+  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  return stageTaskIdle;
+}
+
+export async function updateStageTaskAction(
+  _prevState: StageTaskFormState,
+  formData: FormData
+): Promise<StageTaskFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  const pipelineId = formData.get("pipelineId");
+  const title = formData.get("title");
+  const messageTemplateId = formData.get("messageTemplateId");
+
+  if (typeof id !== "string" || typeof pipelineId !== "string") {
+    return { status: "error", message: "Tarefa inválida." };
+  }
+  if (typeof title !== "string" || !title.trim()) {
+    return { status: "error", message: "Título é obrigatório." };
+  }
+
+  const [current] = await db
+    .select({ type: stageTasks.type })
+    .from(stageTasks)
+    .where(eq(stageTasks.id, id))
+    .limit(1);
+  if (!current) return { status: "error", message: "Tarefa não encontrada." };
+
+  if (current.type === "mensagem" && (typeof messageTemplateId !== "string" || !messageTemplateId)) {
+    return {
+      status: "error",
+      message: "Selecione um template para tarefas do tipo mensagem.",
+    };
+  }
+
+  await db
+    .update(stageTasks)
+    .set({
+      title: title.trim(),
+      messageTemplateId:
+        current.type === "mensagem" ? (messageTemplateId as string) : null,
+    })
+    .where(eq(stageTasks.id, id));
+
+  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  return stageTaskIdle;
+}
+
+export async function deleteStageTaskAction(
+  _prevState: StageTaskFormState,
+  formData: FormData
+): Promise<StageTaskFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  const pipelineId = formData.get("pipelineId");
+  if (typeof id !== "string" || typeof pipelineId !== "string") {
+    return { status: "error", message: "Tarefa inválida." };
+  }
+
+  await db.delete(stageTasks).where(eq(stageTasks.id, id));
+
+  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  return stageTaskIdle;
+}
+
+export async function moveStageTaskAction(formData: FormData): Promise<void> {
+  if (!(await requireAdmin())) return;
+
+  const id = formData.get("id");
+  const stageId = formData.get("stageId");
+  const pipelineId = formData.get("pipelineId");
+  const direction = formData.get("direction");
+  if (
+    typeof id !== "string" ||
+    typeof stageId !== "string" ||
+    typeof pipelineId !== "string" ||
+    (direction !== "up" && direction !== "down")
+  ) {
+    return;
+  }
+
+  const tasksForStage = await db
+    .select({ id: stageTasks.id, order: stageTasks.order })
+    .from(stageTasks)
+    .where(eq(stageTasks.stageId, stageId))
+    .orderBy(asc(stageTasks.order));
+
+  const index = tasksForStage.findIndex((t) => t.id === id);
+  const neighborIndex = direction === "up" ? index - 1 : index + 1;
+  if (index === -1 || neighborIndex < 0 || neighborIndex >= tasksForStage.length) {
+    return;
+  }
+
+  const current = tasksForStage[index];
+  const neighbor = tasksForStage[neighborIndex];
+
+  await db.batch([
+    db
+      .update(stageTasks)
+      .set({ order: neighbor.order })
+      .where(eq(stageTasks.id, current.id)),
+    db
+      .update(stageTasks)
+      .set({ order: current.order })
+      .where(eq(stageTasks.id, neighbor.id)),
+  ]);
+
+  revalidatePath(`/admin/pipelines/${pipelineId}`);
 }

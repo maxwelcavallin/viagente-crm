@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Briefcase,
+  FileText,
   Home,
   ListChecks,
   MessagesSquare,
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/whatsapp", label: "WhatsApp", icon: Smartphone, adminOnly: true },
   { href: "/admin/campos", label: "Campos", icon: ListChecks, adminOnly: true },
   { href: "/admin/tags", label: "Tags", icon: Tag, adminOnly: true },
+  { href: "/admin/templates", label: "Templates", icon: FileText, adminOnly: true },
 ];
 
 export function SidebarNav({

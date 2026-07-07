@@ -93,7 +93,7 @@ export function KanbanBoard({
       )
     );
     startTransition(() => {
-      void moveDealStageAction(dealId, stageId);
+      void moveDealStageAction(dealId, stageId).then(() => router.refresh());
     });
 
     const stageName = stages.find((s) => s.id === stageId)?.name ?? "";
@@ -108,7 +108,9 @@ export function KanbanBoard({
             )
           );
           startTransition(() => {
-            void moveDealStageAction(dealId, previousStageId);
+            void moveDealStageAction(dealId, previousStageId).then(() =>
+              router.refresh()
+            );
           });
         },
       },

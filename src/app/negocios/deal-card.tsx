@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle, MoreVertical, Pencil } from "lucide-react";
+import { ListTodo, MessageCircle, MoreVertical, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +45,7 @@ export type DealCardData = {
   stageId: string;
   pipelineId: string;
   messagePreview: DealMessagePreview | null;
+  pendingTaskCount: number;
 };
 
 export function DealCard({
@@ -205,6 +206,12 @@ export function DealCard({
           </Badge>
         )}
         {value && <span className="text-xs font-medium">{value}</span>}
+        {deal.pendingTaskCount > 0 && (
+          <Badge variant="warning">
+            <ListTodo size={11} strokeWidth={1.75} />
+            {deal.pendingTaskCount}
+          </Badge>
+        )}
       </div>
 
       {deal.tags.length > 0 && (

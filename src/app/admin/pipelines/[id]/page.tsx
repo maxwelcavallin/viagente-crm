@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { pipelines, stages } from "@/db/schema";
+import { messageTemplates, pipelines, stages, stageTasks } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
+import type { StageTask } from "./stage-tasks-panel";
 
 export default async function PipelineDetailPage({
   params,
@@ -28,6 +29,37 @@ export default async function PipelineDetailPage({
     .where(eq(stages.pipelineId, id))
     .orderBy(asc(stages.order));
 
+  const stageIds = pipelineStages.map((s) => s.id);
+  const [stageTaskRows, templates] = await Promise.all([
+    stageIds.length > 0
+      ? db
+          .select({
+            id: stageTasks.id,
+            stageId: stageTasks.stageId,
+            title: stageTasks.title,
+            type: stageTasks.type,
+            messageTemplateId: stageTasks.messageTemplateId,
+            order: stageTasks.order,
+          })
+          .from(stageTasks)
+          .where(inArray(stageTasks.stageId, stageIds))
+          .orderBy(asc(stageTasks.order))
+      : Promise.resolve([]),
+    db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
+  ]);
+
+  const stageTasksByStageId: Record<string, StageTask[]> = {};
+  for (const row of stageTaskRows) {
+    const list = stageTasksByStageId[row.stageId] ?? [];
+    list.push({
+      id: row.id,
+      title: row.title,
+      type: row.type,
+      messageTemplateId: row.messageTemplateId,
+    });
+    stageTasksByStageId[row.stageId] = list;
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -49,6 +81,8 @@ export default async function PipelineDetailPage({
               key={pipelineStages.map((s) => s.id).join(",")}
               stages={pipelineStages}
               pipelineId={pipeline.id}
+              stageTasksByStageId={stageTasksByStageId}
+              templates={templates}
             />
           </CardContent>
         </Card>

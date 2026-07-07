@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
-import { ArrowLeft, ListTodo } from "lucide-react";
+import { asc, eq, inArray } from "drizzle-orm";
+import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
@@ -9,25 +9,30 @@ import {
   customFieldDefinitions,
   dealTags,
   deals,
+  messageTemplates,
   pipelines,
   stages,
+  stageTasks,
   tags,
+  tasks,
   users,
+  whatsappChannels,
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread } from "@/lib/conversations";
-import { formatCustomFieldValue } from "@/lib/custom-fields";
+import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
+import { substituteTemplate } from "@/lib/templates";
 import { TEMPERATURE_BADGE_VARIANT, TEMPERATURE_LABELS } from "@/lib/temperature";
 import type { TagOption } from "@/lib/tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { MessageList } from "@/components/message-list";
 import { DealFormDialog } from "../deal-form-dialog";
 import { DeleteDealDialog } from "../delete-deal-dialog";
 import { DealStatusActions } from "./deal-status-actions";
+import { DealTasksPanel, type DealTask } from "./deal-tasks-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -114,7 +119,36 @@ export default async function DealDetailPage({
 
   if (!contact) notFound();
 
-  const thread = await getThread(contact.id, allowedChannelIds);
+  const [thread, contactFieldDefRows, taskRows, allowedChannels] = await Promise.all([
+    getThread(contact.id, allowedChannelIds),
+    db
+      .select()
+      .from(customFieldDefinitions)
+      .where(eq(customFieldDefinitions.entity, "contact"))
+      .orderBy(asc(customFieldDefinitions.order)),
+    db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        type: tasks.type,
+        status: tasks.status,
+        templateContent: messageTemplates.content,
+      })
+      .from(tasks)
+      .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
+      .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
+      .where(eq(tasks.dealId, id)),
+    allowedChannelIds.length > 0
+      ? db
+          .select({
+            id: whatsappChannels.id,
+            label: whatsappChannels.label,
+            isDefault: whatsappChannels.isDefault,
+          })
+          .from(whatsappChannels)
+          .where(inArray(whatsappChannels.id, allowedChannelIds))
+      : Promise.resolve([]),
+  ]);
 
   const allTags: TagOption[] = allTagRows.map((tag) => ({
     id: tag.id,
@@ -137,6 +171,50 @@ export default async function DealDetailPage({
 
   const customFields = (deal.customFields as Record<string, unknown>) ?? {};
   const value = formatCurrencyBRL(deal.value);
+
+  const contactFieldDefinitions: FieldDef[] = contactFieldDefRows.map((row) => ({
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    type: row.type,
+    options: (row.options as { value: string; label: string }[] | null) ?? null,
+  }));
+  const contactCustomFields = (contact.customFields as Record<string, unknown>) ?? {};
+
+  const variableValues: Record<string, string> = {
+    nome_contato: contact.name,
+    valor: value ?? "",
+  };
+  for (const def of fieldDefinitions) {
+    if (customFields[def.key] != null) {
+      variableValues[def.key] = formatCustomFieldValue(def, customFields[def.key]);
+    }
+  }
+  for (const def of contactFieldDefinitions) {
+    if (contactCustomFields[def.key] != null) {
+      variableValues[def.key] = formatCustomFieldValue(def, contactCustomFields[def.key]);
+    }
+  }
+
+  const dealTasks: DealTask[] = taskRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    type: row.type,
+    status: row.status,
+    messagePreview: row.templateContent
+      ? substituteTemplate(row.templateContent, variableValues)
+      : null,
+  }));
+
+  const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
+  const defaultChannel = allowedChannels.find((c) => c.isDefault);
+  const preselectedChannelId =
+    (lastChannelId && allowedChannels.some((c) => c.id === lastChannelId)
+      ? lastChannelId
+      : null) ??
+    defaultChannel?.id ??
+    allowedChannels[0]?.id ??
+    null;
 
   const formProps = {
     pipelines: allPipelines.map((p) => ({ id: p.id, name: p.name })),
@@ -247,10 +325,12 @@ export default async function DealDetailPage({
           <CardTitle>Tarefas</CardTitle>
         </CardHeader>
         <CardContent>
-          <EmptyState
-            icon={ListTodo}
-            title="Nenhuma tarefa ainda"
-            description="A automação de tarefas por etapa chega na próxima etapa do produto."
+          <DealTasksPanel
+            dealId={deal.id}
+            contactId={contact.id}
+            tasks={dealTasks}
+            channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
+            preselectedChannelId={preselectedChannelId}
           />
         </CardContent>
       </Card>
