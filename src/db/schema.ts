@@ -65,6 +65,10 @@ export const webhookLogStatusEnum = pgEnum("webhook_log_status", [
   "sucesso",
   "erro",
 ]);
+export const webhookDirectionEnum = pgEnum("webhook_direction", [
+  "entrada",
+  "saida",
+]);
 export const whatsappChannelStatusEnum = pgEnum("whatsapp_channel_status", [
   "conectado",
   "desconectado",
@@ -384,14 +388,17 @@ export const messages = pgTable(
   ]
 );
 
-// ---------- Motor de webhook de entrada ----------
+// ---------- Motor de webhook (entrada e saída) ----------
 
 export const webhookConfigs = pgTable("webhook_configs", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  sourcePlatform: text("source_platform").notNull(),
+  direction: webhookDirectionEnum("direction").notNull().default("entrada"),
+  // Entrada: nome da plataforma de origem (ex: "Calculadora") + token de
+  // autenticação da URL única. Nulos quando direction='saida'.
+  sourcePlatform: text("source_platform"),
   active: boolean("active").notNull().default(true),
-  secretToken: text("secret_token").notNull(),
+  secretToken: text("secret_token"),
   fieldMapping: jsonb("field_mapping").notNull().default({}),
   // Não listados na tabela de referência da seção 5, mas necessários para o
   // fluxo descrito na seção 6 ("cria negócio na pipeline/etapa padrão
@@ -403,6 +410,21 @@ export const webhookConfigs = pgTable("webhook_configs", {
   ),
   defaultStageId: uuid("default_stage_id").references(() => stages.id, {
     onDelete: "set null",
+  }),
+  // Saída: URL de destino + eventos que disparam o POST. Nulos quando
+  // direction='entrada'.
+  targetUrl: text("target_url"),
+  events: jsonb("events"),
+  // Escopo opcional do webhook de saída (Etapa 10): sem pipelineId, dispara
+  // pra qualquer pipeline; com pipelineId mas sem stageId, dispara pra
+  // qualquer etapa dentro daquela pipeline; com os dois, só dispara quando o
+  // negócio entra exatamente naquela etapa (só relevante junto do evento
+  // 'etapa_alterada' — os demais eventos ignoram stageId).
+  pipelineId: uuid("pipeline_id").references(() => pipelines.id, {
+    onDelete: "cascade",
+  }),
+  stageId: uuid("stage_id").references(() => stages.id, {
+    onDelete: "cascade",
   }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -416,6 +438,7 @@ export const webhookLogs = pgTable(
     webhookConfigId: uuid("webhook_config_id")
       .notNull()
       .references(() => webhookConfigs.id, { onDelete: "cascade" }),
+    direction: webhookDirectionEnum("direction").notNull().default("entrada"),
     payload: jsonb("payload").notNull(),
     status: webhookLogStatusEnum("status").notNull(),
     errorMessage: text("error_message"),

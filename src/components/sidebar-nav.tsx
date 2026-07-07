@@ -11,6 +11,7 @@ import {
   Smartphone,
   Tag,
   Users,
+  Webhook,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/campos", label: "Campos", icon: ListChecks, adminOnly: true },
   { href: "/admin/tags", label: "Tags", icon: Tag, adminOnly: true },
   { href: "/admin/templates", label: "Templates", icon: FileText, adminOnly: true },
+  { href: "/admin/webhooks", label: "Webhooks", icon: Webhook, adminOnly: true },
 ];
 
 export function SidebarNav({

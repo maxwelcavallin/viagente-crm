@@ -80,12 +80,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         pathname === "/login" ||
         pathname.startsWith("/api/auth") ||
         pathname === "/api/health" ||
-        // Chamadas externas (Z-API e Vercel Cron) não têm sessão — cada uma
-        // valida a origem por conta própria (instanceId do canal e
-        // CRON_SECRET, respectivamente). Ver src/app/api/whatsapp/webhook e
-        // src/app/api/cron/cleanup-media.
+        // Chamadas externas (Z-API, Vercel Cron e webhooks de entrada de
+        // terceiros) não têm sessão — cada uma valida a origem por conta
+        // própria (instanceId do canal, CRON_SECRET e secret_token do
+        // webhook_config, respectivamente). Ver src/app/api/whatsapp/webhook,
+        // src/app/api/cron/cleanup-media e src/app/api/webhooks/inbound.
         pathname.startsWith("/api/whatsapp/webhook") ||
-        pathname === "/api/cron/cleanup-media";
+        pathname === "/api/cron/cleanup-media" ||
+        pathname.startsWith("/api/webhooks/inbound");
 
       if (!auth) {
         return isPublic;

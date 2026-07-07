@@ -15,6 +15,7 @@ import {
   tasks,
 } from "@/db/schema";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
+import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 async function requireSession() {
   const session = await auth();
@@ -150,6 +151,7 @@ export async function createDealAction(
     .returning({ id: deals.id });
 
   await syncDealTags(created.id, fields.tagIds);
+  void dispatchOutboundWebhooks("negocio_criado", created.id);
 
   revalidatePath("/negocios");
   return { status: "success", dealId: created.id };
@@ -253,6 +255,8 @@ export async function moveDealStageAction(
     );
   }
 
+  void dispatchOutboundWebhooks("etapa_alterada", dealId);
+
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
   return { ok: true };
@@ -269,6 +273,9 @@ export async function setDealStatusAction(
     .update(deals)
     .set({ status, updatedAt: new Date() })
     .where(eq(deals.id, dealId));
+
+  if (status === "ganho") void dispatchOutboundWebhooks("negocio_ganho", dealId);
+  if (status === "perdido") void dispatchOutboundWebhooks("negocio_perdido", dealId);
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
