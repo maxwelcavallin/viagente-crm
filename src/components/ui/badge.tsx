@@ -25,6 +25,7 @@ const badgeVariants = cva(
         success: "bg-status-success/10 text-status-success",
         warning: "bg-status-warning/10 text-status-warning",
         info: "bg-status-info/10 text-status-info",
+        danger: "bg-status-danger/10 text-status-danger",
       },
     },
     defaultVariants: {
