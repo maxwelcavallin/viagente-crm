@@ -10,8 +10,15 @@ export const dynamic = "force-dynamic";
 // Redireciona pra uma URL assinada de curta duração no R2. Nunca expomos uma
 // URL pública permanente pra poder aplicar o mesmo controle de acesso por
 // canal que vale pro resto da conversa (ver seção 7 da spec).
+const EXTENSION_BY_TYPE: Record<string, string> = {
+  imagem: "jpg",
+  video: "mp4",
+  audio: "ogg",
+  documento: "pdf",
+};
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ messageId: string }> }
 ) {
   const session = await auth();
@@ -20,11 +27,13 @@ export async function GET(
   }
 
   const { messageId } = await params;
+  const wantsDownload = new URL(request.url).searchParams.has("download");
 
   const [message] = await db
     .select({
       channelId: messages.channelId,
       type: messages.type,
+      content: messages.content,
       mediaUrl: messages.mediaUrl,
     })
     .from(messages)
@@ -49,7 +58,12 @@ export async function GET(
   const key = `${mediaPrefix(message.type as MediaKind)}/${message.channelId}/${messageId}`;
 
   try {
-    const signedUrl = await getMediaSignedUrl(key);
+    const downloadFileName = wantsDownload
+      ? message.type === "documento" && message.content
+        ? message.content
+        : `${message.type}-${messageId}.${EXTENSION_BY_TYPE[message.type] ?? "bin"}`
+      : undefined;
+    const signedUrl = await getMediaSignedUrl(key, { downloadFileName });
     return Response.redirect(signedUrl, 302);
   } catch (error) {
     console.error("[media proxy] falha ao gerar URL assinada", error);

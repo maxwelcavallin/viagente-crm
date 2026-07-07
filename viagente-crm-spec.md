@@ -8,38 +8,26 @@
 
 ## 1. Contexto de negócio (resumo funcional pro modelo de dados)
 
-A Viagente é uma consultoria premium de otimização estratégica de viagens (ticket ~R$7.000/ano de gestão anual). NÃO é agência de viagens, curso de milhas ou conteúdo educativo — é uma consultoria que analisa, estrutura e executa, não ensina. Proposta central: "Você não precisa gastar mais para viajar melhor — precisa usar melhor o que já tem."
-
-**Perfil de cliente ideal:** gasto mensal no cartão R$10k-30k+, viaja 3+ vezes/ano, tem capacidade financeira, valoriza tempo, prefere delegar ao invés de fazer sozinho.
-
-O funil oficial é:
+A Viagente é uma consultoria de otimização de viagens (ticket ~R$7.000/ano). O funil oficial é:
 
 ```
-Criativo (erro invisível / perda silenciosa)
-        ↓
-Calculadora (curiosidade + percepção de valor)
-        ↓
-Diagnóstico (qualificação + percepção de perda + valor personalizado)
-        ↓
-Agendamento (reunião estratégica)
-        ↓
-Venda (R$ 7.000/ano)
+Calculadora (topo) → Diagnóstico (qualificação) → Agendamento → Reunião → Venda
 ```
 
-O Diagnóstico (etapa principal de qualificação) coleta: frequência de viagens, gasto anual com viagens, gasto mensal no cartão, perfil profissional, mentalidade (delega vs. faz sozinho). Esses dados chegam via webhook e devem virar **campos customizados do negócio**, e a partir deles o sistema calcula automaticamente a **temperatura do lead**:
+O Diagnóstico coleta: frequência de viagens, gasto anual com viagens, gasto mensal no cartão, perfil profissional, mentalidade (delega vs. faz sozinho). Esses dados chegam via webhook e devem virar **campos customizados do negócio**, e a partir deles o sistema calcula automaticamente a **temperatura do lead**:
 
-| Temperatura | Critério | Economia estimada (sobre gasto anual declarado) |
-|---|---|---|
-| 🟢 Quente | cartão ≥ R$20k/mês **e** 3+ viagens/ano **e** prefere delegar | 25–40% |
-| 🟡 Morno | perfil intermediário | 15–25% |
-| 🔴 Frio | baixo gasto, não viaja, perfil "faz você mesmo" | 5–10% |
+| Temperatura | Critério |
+|---|---|
+| 🟢 Quente | cartão ≥ R$20k/mês **e** 3+ viagens/ano **e** prefere delegar |
+| 🟡 Morno | perfil intermediário |
+| 🔴 Frio | baixo gasto, não viaja, perfil "faz você mesmo" |
 
-Isso deve ser uma **regra de negócio configurável** (não hardcoded), pois os critérios podem mudar. O campo `economia_estimada` pode ser calculado a partir da faixa de temperatura sobre o gasto anual declarado.
+Isso deve ser uma **regra de negócio configurável** (não hardcoded), pois os critérios podem mudar.
 
 **Referência para as integrações futuras (webhook de entrada, seção 6):**
-- Calculadora (topo de funil — atração/curiosidade): `https://calculadora.viagt.com.br/`
-- Diagnóstico (qualificação — fonte principal de negócio): `https://diagnostico.viagt.com.br/`
-- Site institucional (credibilidade/apoio à decisão): `https://www.viagente.com.br/`
+- Calculadora (topo de funil): `https://calculadora.viagt.com.br/`
+- Diagnóstico (qualificação, fonte principal de negócio): `https://diagnostico.viagt.com.br/`
+- Site institucional: `https://www.viagente.com.br/`
 
 ---
 
@@ -57,7 +45,6 @@ Isso deve ser uma **regra de negócio configurável** (não hardcoded), pois os 
 
 ## 3. Fora do MVP (Fase 2 — logo em seguida, não bloqueia o cutover)
 
-- Webhook de saída (eventos pra fora)
 - API pública + servidor MCP (para agentes de IA)
 - Dashboards / indicadores
 - Automações condicionais avançadas
@@ -138,10 +125,14 @@ whatsapp_channel_restrictions (id, user_id, channel_id, created_at, UNIQUE(user_
 -- TEMPLATES DE MENSAGEM
 message_templates (id, name, content, variables jsonb)
 
--- MOTOR DE WEBHOOK GENÉRICO (ver seção 6)
-webhook_configs (id, name, source_platform, active,
-                  secret_token, field_mapping jsonb, created_at)
-webhook_logs (id, webhook_config_id, payload jsonb,
+-- MOTOR DE WEBHOOK GENÉRICO (ver seção 6) — suporta entrada e saída (Etapa 10)
+webhook_configs (id, name, direction ['entrada','saida'], active,
+                  source_platform,
+                  secret_token, field_mapping jsonb,           -- só entrada
+                  default_pipeline_id, default_stage_id,       -- só entrada
+                  target_url, events jsonb,                    -- só saida
+                  created_at)
+webhook_logs (id, webhook_config_id, direction ['entrada','saida'], payload jsonb,
               status ['sucesso','erro'], error_message, created_at)
 
 -- REGRA DE TEMPERATURA (configurável, não hardcoded)
@@ -169,6 +160,10 @@ Esse é o equivalente ao que a Clint chama de "criar integração via webhook ma
 
 **Integrações do dia 1:** Calculadora e Diagnóstico.
 **Integrações que entram depois usando a mesma engine, sem código novo:** Facebook, LeadDelta e as demais — só criar novo `webhook_config` e mapear campos.
+
+**Teste do motor sem integração real (Etapa 10):** antes de conectar a Calculadora e o Diagnóstico de verdade, a tela de cada webhook de entrada tem um botão "Enviar payload de teste" — cola um JSON de exemplo e valida a engine inteira (mapeamento, criação de contato/negócio, cálculo de temperatura) sem depender de nenhum formulário externo. A Calculadora e o Diagnóstico reais são conectados manualmente depois, cadastrando um webhook de entrada pra cada um e mapeando os campos deles.
+
+**Webhook de saída (Etapa 10, antecipado — não é mais Fase 2):** o mesmo `webhook_config` (com `direction='saida'`) dispara um POST assíncrono pra uma `target_url` quando um dos eventos configurados acontece (negócio criado, etapa alterada, negócio ganho, negócio perdido). Falha no disparo de saída nunca bloqueia a ação principal do CRM — é fire-and-forget, com log de erro.
 
 ---
 
@@ -219,12 +214,13 @@ Como não há confirmação de API de exportação da Clint neste documento, o c
 | 6 | Migração de negócios/contatos ativos da Clint + testes ponta a ponta |
 | 7 | QA, correção de bugs, cutover (desligar Clint, ligar CRM novo) |
 
+> **Nota:** esse é o plano original de 7 dias, mantido aqui como referência histórica. A sequência real de execução evoluiu (WhatsApp e Design System foram antecipados, e alguns dias viraram várias etapas menores) — a numeração e o conteúdo atualizados de cada etapa estão em `docs/dia1-etapas/`, junto com o prompt e o checklist de teste de cada uma.
+
 ---
 
 ## 11. Fase 2 (logo após o cutover)
 
 - **API pública + MCP**: expor `deals`, `contacts`, `messages`, `tasks` como recursos MCP — leitura (histórico de conversa, negócios por etapa) e ações (mover etapa, criar tarefa, enviar mensagem)
-- **Webhook de saída**: disparar evento HTTP quando negócio muda de etapa/é criado/ganho
 - **Dashboard**: visão geral por pipeline/dono, tempo médio por etapa
 - Conectar Facebook, LeadDelta e demais integrações via `webhook_configs`
 
@@ -242,3 +238,17 @@ Calculadora → Diagnóstico preenchido → Lead qualificado → Agendamento mar
 - 🟢 quente: `gasto_mensal_cartao >= 20000 AND frequencia_viagens_ano >= 3 AND mentalidade = 'delega'`
 - 🔴 frio: `gasto_mensal_cartao < 10000 OR frequencia_viagens_ano < 1 OR mentalidade = 'faz_sozinho'`
 - 🟡 morno: demais casos
+
+---
+
+## 13. Design System (referência oficial de UI, a partir da Etapa 6)
+
+Fonte única de verdade para toda estilização do produto — qualquer tela nova deve seguir isso, não os defaults do shadcn/Tailwind.
+
+- **Estrutura/UX de referência:** Clint (kanban de pipeline, sidebar de origens, painel de atendimento) — layout e comportamento, não cor.
+- **Cor/tipografia de referência:** marca Viagente (dourado `#E59501` sobre neutros quentes, fonte Inter única).
+- **Modo claro é o padrão**, com toggle pra escuro (preferência persistida).
+- **Dourado é exclusivo de marca/ação primária** (botões primários, links, foco, navegação ativa). **Cores semânticas (verde/amarelo/vermelho/azul)** são permitidas como exceção só para dado pontual (temperatura do lead, status de mensagem, sucesso/erro) — sempre como bolinha/badge pequeno + texto, nunca como fundo grande, banner ou gradiente, e nunca como cor de botão primário.
+- **Zero sombra, blur ou glow** — profundidade vem de contraste de borda.
+- **Raio de borda:** 12px em cards/painéis, 8px em botões/inputs, 999px em avatares/pills.
+- Tokens completos (variáveis CSS para os dois modos) estão no prompt da Etapa 6 (`etapa-6-design-system.md`).

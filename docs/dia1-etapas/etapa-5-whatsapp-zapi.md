@@ -90,4 +90,4 @@ Configure primeiro um canal apontando pra uma **instância de teste** (número q
 - Arquivo exportado abre corretamente em qualquer leitor de Markdown (testar abrindo no VS Code, por exemplo)
 
 ## Fora do escopo desta etapa
-Não implemente criação de instância nova diretamente na Z-API (isso é ação de conta/billing do lado da Z-API, fora do CRM). Não implemente envio de mídia pela UI ainda (só recebimento de mídia + envio de texto). Não implemente UI para escolher manualmente qual negócio vincular quando houver mais de um aberto — a heurística automática (mais recente) é suficiente por agora.
+Não implemente criação de instância nova diretamente na Z-API (isso é ação de conta/billing do lado da Z-API, fora do CRM). Não implemente envio de mídia pela UI ainda (só recebimento de mídia + envio de texto) — anexos, áudio, emoji, responder e favoritar mensagens são a **Etapa 5b** (`etapa-5b-atendimento-completo.md`), rodada logo em seguida a esta. Não implemente UI para escolher manualmente qual negócio vincular quando houver mais de um aberto — a heurística automática (mais recente) é suficiente por agora.

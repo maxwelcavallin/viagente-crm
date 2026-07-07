@@ -67,14 +67,44 @@ export async function uploadMediaToR2(params: {
   );
 }
 
+// URL assinada de upload direto (PUT) — usada pelo composer do atendimento
+// pra mandar anexos/áudio gravado direto do navegador pro R2, sem passar o
+// arquivo pela serverless function (evita o limite de payload do runtime).
+export async function getMediaUploadUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = 600
+): Promise<string> {
+  const client = getClient();
+  const command = new PutObjectCommand({
+    Bucket: bucketName(),
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+}
+
 // URL assinada de curta duração — nunca gravamos link público permanente do
 // R2 no banco, pra poder aplicar o controle de acesso por canal também na
 // mídia (ver /api/media/[messageId]).
+// `downloadFileName` força o header Content-Disposition: attachment — sem
+// isso o navegador abre imagem/vídeo inline em vez de baixar (o bucket R2
+// não expõe Content-Disposition próprio).
 export async function getMediaSignedUrl(
   key: string,
-  expiresInSeconds = 300
+  options?: { expiresInSeconds?: number; downloadFileName?: string }
 ): Promise<string> {
   const client = getClient();
-  const command = new GetObjectCommand({ Bucket: bucketName(), Key: key });
-  return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+  const command = new GetObjectCommand({
+    Bucket: bucketName(),
+    Key: key,
+    ...(options?.downloadFileName
+      ? {
+          ResponseContentDisposition: `attachment; filename="${options.downloadFileName.replace(/"/g, "")}"`,
+        }
+      : {}),
+  });
+  return getSignedUrl(client, command, {
+    expiresIn: options?.expiresInSeconds ?? 300,
+  });
 }

@@ -1,6 +1,9 @@
+import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, messages, whatsappChannels } from "@/db/schema";
+
+const replyToMessages = alias(messages, "reply_to_messages");
 
 export function buildChannelFilter(allowedChannelIds: string[]) {
   return allowedChannelIds.length > 0
@@ -87,10 +90,17 @@ export type ThreadMessage = {
   content: string | null;
   mediaUrl: string | null;
   status: "enviado" | "entregue" | "lido" | "falhou";
+  isFavorite: boolean;
   createdAt: Date;
   channelId: string | null;
   channelLabel: string | null;
   dealId: string | null;
+  replyToMessageId: string | null;
+  replyToCreatedAt: Date | null;
+  replyTo: {
+    type: "texto" | "imagem" | "audio" | "documento" | "video";
+    content: string | null;
+  } | null;
 };
 
 export async function getThread(
@@ -98,7 +108,7 @@ export async function getThread(
   allowedChannelIds: string[]
 ): Promise<ThreadMessage[]> {
   const channelFilter = buildChannelFilter(allowedChannelIds);
-  return db
+  const rows = await db
     .select({
       id: messages.id,
       direction: messages.direction,
@@ -106,13 +116,32 @@ export async function getThread(
       content: messages.content,
       mediaUrl: messages.mediaUrl,
       status: messages.status,
+      isFavorite: messages.isFavorite,
       createdAt: messages.createdAt,
       channelId: messages.channelId,
       channelLabel: whatsappChannels.label,
       dealId: messages.dealId,
+      replyToMessageId: messages.replyToMessageId,
+      replyToCreatedAt: messages.replyToCreatedAt,
+      replyToType: replyToMessages.type,
+      replyToContent: replyToMessages.content,
     })
     .from(messages)
     .leftJoin(whatsappChannels, eq(messages.channelId, whatsappChannels.id))
+    .leftJoin(
+      replyToMessages,
+      and(
+        eq(messages.replyToMessageId, replyToMessages.id),
+        eq(messages.replyToCreatedAt, replyToMessages.createdAt)
+      )
+    )
     .where(and(eq(messages.contactId, contactId), channelFilter))
     .orderBy(asc(messages.createdAt));
+
+  return rows.map(({ replyToType, replyToContent, ...row }) => ({
+    ...row,
+    replyTo: row.replyToMessageId
+      ? { type: replyToType!, content: replyToContent }
+      : null,
+  }));
 }

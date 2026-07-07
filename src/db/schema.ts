@@ -1,5 +1,6 @@
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -252,6 +253,23 @@ export const dealTags = pgTable(
   (t) => [primaryKey({ columns: [t.dealId, t.tagId] })]
 );
 
+// Não estava na tabela de referência original (spec só lista deal_tags),
+// mas a Etapa 7 pede atribuição de tags a contato — adicionada aqui pelo
+// mesmo formato de deal_tags, já que tags são compartilhadas entre as duas
+// entidades.
+export const contactTags = pgTable(
+  "contact_tags",
+  {
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.contactId, t.tagId] })]
+);
+
 // ---------- Campos customizados (definição dinâmica) ----------
 
 export const customFieldDefinitions = pgTable(
@@ -346,6 +364,12 @@ export const messages = pgTable(
     mediaUrl: text("media_url"),
     status: messageStatusEnum("status").notNull().default("enviado"),
     zApiMessageId: text("z_api_message_id"),
+    isFavorite: boolean("is_favorite").notNull().default(false),
+    // Par (id, created_at) em vez de só id: messages é particionada por
+    // created_at, então uma FK auto-referenciada só é possível apontando
+    // pra chave completa (id, created_at), igual à PK da tabela.
+    replyToMessageId: uuid("reply_to_message_id"),
+    replyToCreatedAt: timestamp("reply_to_created_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -353,6 +377,10 @@ export const messages = pgTable(
   (t) => [
     primaryKey({ columns: [t.id, t.createdAt] }),
     index("messages_contact_id_created_at_idx").on(t.contactId, t.createdAt),
+    foreignKey({
+      columns: [t.replyToMessageId, t.replyToCreatedAt],
+      foreignColumns: [t.id, t.createdAt],
+    }).onDelete("set null"),
   ]
 );
 

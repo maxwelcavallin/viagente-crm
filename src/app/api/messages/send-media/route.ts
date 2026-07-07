@@ -5,10 +5,48 @@ import { contacts, messages, whatsappChannels } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
 import { decryptCredential } from "@/lib/credentials-crypto";
 import { findOpenDealIdForContact } from "@/lib/messaging";
-import { sendZapiText } from "@/lib/zapi";
+import { getMediaSignedUrl, mediaPrefix, type MediaKind } from "@/lib/storage";
+import {
+  sendZapiAudio,
+  sendZapiDocument,
+  sendZapiImage,
+  sendZapiVideo,
+  type ZapiChannelCredentials,
+} from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 
+const VALID_TYPES: MediaKind[] = ["imagem", "audio", "documento", "video"];
+
+function extensionFromFileName(fileName: string): string {
+  const ext = fileName.split(".").pop();
+  return ext && ext !== fileName ? ext.toLowerCase() : "bin";
+}
+
+async function dispatchToZapi(
+  type: MediaKind,
+  creds: ZapiChannelCredentials,
+  phone: string,
+  mediaUrl: string,
+  caption: string | undefined,
+  fileName: string | undefined
+): Promise<{ messageId: string }> {
+  if (type === "imagem") return sendZapiImage(creds, phone, mediaUrl, caption);
+  if (type === "video") return sendZapiVideo(creds, phone, mediaUrl, caption);
+  if (type === "audio") return sendZapiAudio(creds, phone, mediaUrl);
+  return sendZapiDocument(
+    creds,
+    phone,
+    mediaUrl,
+    extensionFromFileName(fileName ?? "arquivo.bin"),
+    fileName
+  );
+}
+
+// Finaliza o envio de mídia: o arquivo já foi enviado pro R2 direto pelo
+// navegador via a URL assinada de /api/messages/upload-url. Aqui geramos uma
+// URL assinada de leitura (curta duração) pra Z-API buscar o arquivo,
+// disparamos o envio e só então gravamos a mensagem no banco.
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -16,16 +54,27 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
+    messageId?: string;
     channelId?: string;
     contactId?: string;
-    message?: string;
+    type?: string;
+    caption?: string;
+    fileName?: string;
     replyToMessageId?: string;
     replyToCreatedAt?: string;
   } | null;
 
-  if (!body?.channelId || !body?.contactId || !body?.message?.trim()) {
+  if (
+    !body?.messageId ||
+    !body?.channelId ||
+    !body?.contactId ||
+    !body?.type ||
+    !VALID_TYPES.includes(body.type as MediaKind)
+  ) {
     return Response.json(
-      { error: "channelId, contactId e message são obrigatórios" },
+      {
+        error: "messageId, channelId, contactId e type são obrigatórios",
+      },
       { status: 400 }
     );
   }
@@ -60,24 +109,29 @@ export async function POST(request: Request) {
     return Response.json({ error: "Contato não encontrado" }, { status: 404 });
   }
 
-  const messageText = body.message.trim();
+  const type = body.type as MediaKind;
+  const key = `${mediaPrefix(type)}/${channel.id}/${body.messageId}`;
 
   let zApiMessageId: string;
   try {
-    const { messageId } = await sendZapiText(
+    const signedUrl = await getMediaSignedUrl(key, { expiresInSeconds: 300 });
+    const { messageId } = await dispatchToZapi(
+      type,
       {
         zapiInstanceId: channel.zapiInstanceId,
         zapiToken: decryptCredential(channel.zapiToken),
         zapiClientToken: decryptCredential(channel.zapiClientToken),
       },
       contact.phone,
-      messageText
+      signedUrl,
+      body.caption?.trim() || undefined,
+      body.fileName || undefined
     );
     zApiMessageId = messageId;
   } catch (error) {
-    console.error("[messages/send] falha ao enviar via Z-API", error);
+    console.error("[messages/send-media] falha ao enviar via Z-API", error);
     return Response.json(
-      { error: "Falha ao enviar mensagem via WhatsApp" },
+      { error: "Falha ao enviar mídia via WhatsApp" },
       { status: 502 }
     );
   }
@@ -87,12 +141,14 @@ export async function POST(request: Request) {
   const [created] = await db
     .insert(messages)
     .values({
+      id: body.messageId,
       dealId,
       contactId: contact.id,
       channelId: channel.id,
       direction: "saida",
-      type: "texto",
-      content: messageText,
+      type,
+      content: body.caption?.trim() || body.fileName || null,
+      mediaUrl: `/api/media/${body.messageId}`,
       status: "enviado",
       zApiMessageId,
       replyToMessageId: body.replyToMessageId || null,

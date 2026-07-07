@@ -3,8 +3,9 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, CheckCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Paperclip, Reply, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -12,55 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MessageList, replyPreviewLabel } from "@/components/message-list";
+import { EmojiPicker } from "@/components/emoji-picker";
+import { AudioRecorderButton } from "@/components/audio-recorder-button";
+import { inferMediaKind, uploadAndSendMedia } from "@/lib/upload-media-client";
 import type { ThreadMessage } from "@/lib/conversations";
 
-function formatTimestamp(date: Date): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-// Ticks de status no estilo WhatsApp (seção 3 do design system): cinza
-// (enviado) → cinza duplo (entregue) → azul --status-info duplo (lido).
-// Nunca só a cor — o ícone (check simples/duplo) já diferencia o estado.
-function StatusTick({ status }: { status: ThreadMessage["status"] }) {
-  if (status === "falhou") {
-    return (
-      <span className="flex items-center gap-1 text-status-danger">
-        <TriangleAlert size={12} strokeWidth={1.75} />
-        Falhou
-      </span>
-    );
-  }
-  if (status === "lido") {
-    return <CheckCheck size={14} strokeWidth={1.75} className="text-status-info" />;
-  }
-  if (status === "entregue") {
-    return <CheckCheck size={14} strokeWidth={1.75} className="opacity-70" />;
-  }
-  return <Check size={14} strokeWidth={1.75} className="opacity-70" />;
-}
-
-function MessageMedia({ message }: { message: ThreadMessage }) {
-  if (!message.mediaUrl) return null;
-  if (message.type === "imagem") {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={message.mediaUrl} alt="Imagem recebida" className="max-w-xs rounded-lg" />;
-  }
-  if (message.type === "audio") {
-    return <audio controls src={message.mediaUrl} className="max-w-xs" />;
-  }
-  return (
-    <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="text-primary underline">
-      📎 {message.type === "video" ? "Vídeo" : "Documento"}
-      {message.content ? ` — ${message.content}` : ""}
-    </a>
-  );
-}
+const ATTACHMENT_ACCEPT =
+  "image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
 
 export function ConversationThread({
   contactId,
@@ -82,7 +42,12 @@ export function ConversationThread({
   const [channelId, setChannelId] = useState(preselectedChannelId ?? "");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ThreadMessage | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSend() {
     const message = text.trim();
@@ -94,19 +59,88 @@ export function ConversationThread({
       const res = await fetch("/api/messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channelId, contactId, message }),
+        body: JSON.stringify({
+          channelId,
+          contactId,
+          message,
+          replyToMessageId: replyingTo?.id,
+          replyToCreatedAt: replyingTo?.createdAt.toISOString(),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Falha ao enviar mensagem.");
       }
       setText("");
+      setReplyingTo(null);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao enviar mensagem.");
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function sendMediaFile(file: File | Blob, fileName?: string) {
+    if (!channelId) return;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      const contentType = file.type || "application/octet-stream";
+      await uploadAndSendMedia({
+        file,
+        contentType,
+        fileName,
+        kind: inferMediaKind(contentType),
+        channelId,
+        contactId,
+        replyToMessageId: replyingTo?.id,
+        replyToCreatedAt: replyingTo?.createdAt.toISOString(),
+      });
+      setReplyingTo(null);
+      router.refresh();
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Falha ao enviar arquivo.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    for (const file of files) void sendMediaFile(file, file.name);
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const fileItem = Array.from(e.clipboardData.items).find(
+      (item) => item.kind === "file"
+    );
+    if (!fileItem) return;
+    const file = fileItem.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    void sendMediaFile(file, file.name);
+  }
+
+  async function handleAudioRecorded(blob: Blob) {
+    await sendMediaFile(blob);
+  }
+
+  function insertEmoji(emoji: string) {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setText((t) => t + emoji);
+      return;
+    }
+    const start = textarea.selectionStart ?? text.length;
+    const end = textarea.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+    });
   }
 
   return (
@@ -125,46 +159,38 @@ export function ConversationThread({
             <div className="text-xs text-muted-foreground">{contactPhone}</div>
           </div>
         </div>
-        <a
-          href={`/api/conversations/${contactId}/export`}
-          className="text-sm text-primary hover:underline"
-        >
-          Exportar conversa (.md)
-        </a>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowFavoritesOnly((v) => !v)}
+            aria-pressed={showFavoritesOnly}
+            className={cn(
+              "flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground",
+              showFavoritesOnly && "text-status-warning hover:text-status-warning"
+            )}
+          >
+            <Star
+              size={14}
+              strokeWidth={1.75}
+              fill={showFavoritesOnly ? "currentColor" : "none"}
+            />
+            Favoritas
+          </button>
+          <a
+            href={`/api/conversations/${contactId}/export`}
+            className="text-sm text-primary hover:underline"
+          >
+            Exportar conversa (.md)
+          </a>
+        </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
-        {initialMessages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nenhuma mensagem visível para você neste contato.
-          </p>
-        ) : (
-          initialMessages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.direction === "saida" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-md rounded-lg px-3 py-2 text-sm ${
-                  message.direction === "saida" ? "bg-accent" : "bg-muted"
-                }`}
-              >
-                {message.type === "texto" ? (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
-                ) : (
-                  <MessageMedia message={message} />
-                )}
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  {message.channelLabel && <span>{message.channelLabel}</span>}
-                  <span>{formatTimestamp(message.createdAt)}</span>
-                  {message.direction === "saida" && (
-                    <StatusTick status={message.status} />
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+      <div className="flex-1 overflow-y-auto p-4">
+        <MessageList
+          messages={initialMessages}
+          favoritesOnly={showFavoritesOnly}
+          onReply={setReplyingTo}
+        />
       </div>
 
       <div className="space-y-2 border-t border-border p-4">
@@ -174,6 +200,22 @@ export function ConversationThread({
           </p>
         ) : (
           <>
+            {replyingTo && (
+              <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/60 bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                <Reply size={14} strokeWidth={1.75} className="shrink-0" />
+                <p className="line-clamp-1 flex-1">
+                  {replyPreviewLabel(replyingTo)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setReplyingTo(null)}
+                  aria-label="Cancelar citação"
+                  className="shrink-0 rounded-md p-0.5 hover:text-foreground"
+                >
+                  <X size={14} strokeWidth={1.75} />
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Select
                 items={Object.fromEntries(channels.map((c) => [c.id, c.label]))}
@@ -192,7 +234,30 @@ export function ConversationThread({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-end gap-1">
+              <EmojiPicker onSelect={insertEmoji} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Anexar arquivo"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip size={18} strokeWidth={1.75} />
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                accept={ATTACHMENT_ACCEPT}
+                onChange={handleFileChange}
+              />
+              <AudioRecorderButton
+                onRecorded={handleAudioRecorded}
+                disabled={isUploading}
+              />
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -203,7 +268,8 @@ export function ConversationThread({
                     handleSend();
                   }
                 }}
-                placeholder="Escreva uma mensagem..."
+                onPaste={handlePaste}
+                placeholder="Escreva uma mensagem... (Ctrl+V também cola imagens)"
                 rows={2}
                 className="min-h-[40px] flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
               />
@@ -211,7 +277,13 @@ export function ConversationThread({
                 {isSending ? "Enviando..." : "Enviar"}
               </Button>
             </div>
+            {isUploading && (
+              <p className="text-xs text-muted-foreground">Enviando anexo...</p>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {uploadError && (
+              <p className="text-sm text-destructive">{uploadError}</p>
+            )}
           </>
         )}
       </div>

@@ -384,6 +384,116 @@ const data = [
       "Botão \"Exportar conversa (.md)\" baixa arquivo com histórico completo, timestamps e remetente identificado, respeitando o acesso do usuário",
       "Arquivo .md exportado abre corretamente em um leitor de Markdown (ex: VS Code)"
     ]
+  },
+  {
+    title: "Etapa 5b — Atendimento Completo (Anexos, Áudio, Emoji, Responder, Favoritar)",
+    desc: "Paridade com a Clint: mídia pela UI, Ctrl+V, emoji picker, citar e favoritar mensagens.",
+    promptFile: "etapa-5b-atendimento-completo.md",
+    tests: [
+      "Enviar imagem pelo anexo chega de verdade no WhatsApp e aparece no histórico com preview",
+      "Gravar áudio, ouvir o preview e enviar funciona; o áudio chega no WhatsApp do destinatário",
+      "Colar uma imagem copiada (print) direto no composer mostra preview de anexo pronto pra enviar",
+      "Colar texto copiado continua funcionando normalmente no campo de texto",
+      "Emoji picker insere o emoji na posição correta do cursor",
+      "Responder uma mensagem mostra a citação no composer e a bolha exibe o card de citação clicável",
+      "Favoritar uma mensagem e filtrar por \"Favoritas\" mostra só as marcadas, na conversa certa",
+      "Toda a UI nova usa os tokens/componentes do design system da Etapa 6, sem cor ad-hoc"
+    ]
+  },
+  {
+    title: "Etapa 6 — Design System + Remodelação da UI",
+    desc: "Tokens, componentes, interação de kanban, referência Clint + marca Viagente, responsivo.",
+    promptFile: "etapa-6-design-system.md",
+    tests: [
+      "Todas as 5 telas (login, usuários, pipelines, whatsapp, atendimento) usam só variáveis de tema, sem cor hardcoded",
+      "Toggle claro/escuro funciona sem reload e persiste ao recarregar a página",
+      "Modo claro é o padrão ao abrir sem preferência salva",
+      "Badge de temperatura do lead mostra bolinha de cor + texto, nunca só a cor",
+      "Bolha de mensagem enviada usa --accent (dourado suave), não --primary sólido",
+      "Nenhum componente usa box-shadow, blur ou glow (exceto scrim de modal)",
+      "Cards têm 12px de raio, botões/inputs 8px, avatares/pills 999px",
+      "Ao arrastar um card, cursor muda pra grab/grabbing e a coluna de destino mostra borda tracejada dourada",
+      "Contador e soma de valor das colunas atualizam instantaneamente ao soltar um card",
+      "Toast de \"Desfazer\" aparece por ~5s após mover um card no kanban",
+      "Mover um card via teclado funciona (Tab, Espaço/Enter, setas, Esc)",
+      "No mobile, o kanban oferece \"Mover para...\" como alternativa ao arraste",
+      "Ícones usam lucide-react de forma consistente (sem segunda biblioteca de ícones)",
+      "Inputs mostram estado de foco, erro e desabilitado conforme especificado",
+      "Modal de confirmação (ex: excluir etapa) segue padrão de header/footer e ações",
+      "Dropdown/select abre com painel próprio, hover em --accent, item selecionado com check",
+      "Toast de sucesso/erro aparece com borda semântica correta e some sozinho",
+      "Empty state aparece em coluna de kanban sem negócios e em listas vazias de admin",
+      "Loading/skeleton usa pulso de opacidade, nunca shimmer ou glow",
+      "Sidebar vira drawer off-canvas abaixo de lg (1024px)",
+      "/atendimento vira navegação de duas telas (lista ↔ conversa) abaixo de lg",
+      "Kanban tem rolagem horizontal com snap por coluna em telas pequenas",
+      "As 5 telas funcionam corretamente nos dois modos (claro e escuro) e em mobile, sem quebra visual"
+    ]
+  },
+  {
+    title: "Etapa 7 — Contatos, Campos Customizados e Tags",
+    desc: "Base para os negócios: CRUD de contatos, campos dinâmicos e tags.",
+    promptFile: "etapa-7-contatos-campos-tags.md",
+    tests: [
+      "Admin cria campo customizado novo e ele aparece imediatamente no formulário de contato",
+      "Editar opções de um campo select reflete no formulário sem precisar de deploy",
+      "Excluir campo com dado preenchido pede confirmação explícita antes de apagar",
+      "Os 6 campos do seed aparecem em /admin/campos corretamente categorizados",
+      "Criar/editar/excluir tag funciona, incluindo aviso ao excluir tag em uso",
+      "Tabela de contatos carrega com header sticky e busca por nome/telefone/email funciona",
+      "Criar contato com campos customizados preenchidos salva corretamente em custom_fields (jsonb)",
+      "Cadastrar dois contatos com o mesmo telefone é bloqueado com mensagem clara",
+      "Página de detalhe do contato mostra histórico de conversa e o botão de exportar .md funciona ali também",
+      "Excluir contato com negócio vinculado é bloqueado com mensagem explicativa",
+      "Toda a tela usa exclusivamente os tokens/componentes do design system da Etapa 6, sem cor ad-hoc"
+    ]
+  },
+  {
+    title: "Etapa 8 — Negócios, Kanban Real e Filtros",
+    desc: "O coração do CRM: negócios de verdade, drag-and-drop completo, filtros combináveis.",
+    promptFile: "etapa-8-negocios-kanban.md",
+    tests: [
+      "Criar negócio novo pelo botão \"Negócio +\", vinculando contato existente ou criando um novo inline",
+      "Negócio aparece na coluna certa com card mostrando avatar, temperatura, valor e preview de mensagem",
+      "Arrastar card mostra affordance correta, contador/soma atualizam na hora, toast de desfazer aparece",
+      "Mover card via teclado funciona (Tab, Espaço/Enter, setas, Esc)",
+      "No mobile, \"Mover para...\" funciona como alternativa ao arraste",
+      "Marcar negócio como Ganho/Perdido remove ele da visão ativa do kanban",
+      "Detalhe do negócio mostra histórico de conversa vinculado e o botão de exportar .md funciona ali",
+      "Filtros combinados (ex: dono + tag) retornam só negócios que atendem todos os critérios",
+      "Busca por nome de contato/negócio funciona",
+      "Toda a tela usa exclusivamente os tokens/componentes do design system da Etapa 6"
+    ]
+  },
+  {
+    title: "Etapa 9 — Automação de Tarefa por Etapa + Templates",
+    desc: "Tarefa automática ao mudar de etapa, execução de mensagem em 1 clique.",
+    promptFile: "etapa-9-automacao-tarefas.md",
+    tests: [
+      "Criar template de mensagem com variáveis e ver o preview substituindo pelos dados de exemplo",
+      "Configurar stage_task tipo mensagem numa etapa, vinculada a um template",
+      "Mover negócio pra essa etapa no kanban cria a tarefa automaticamente, sem ação manual extra",
+      "Etapa sem stage_tasks configuradas não gera nenhuma tarefa ao receber um negócio",
+      "Executar tarefa de mensagem em 1 clique abre o WhatsApp com o texto certo e marca a tarefa como concluída ao enviar",
+      "Tarefas de ligação/agendamento/genérica são marcadas como concluídas manualmente",
+      "Card do kanban mostra contador de tarefas pendentes do negócio",
+      "Negócio que volta a uma etapa já visitada ganha tarefas novas, sem reaproveitar as antigas concluídas",
+      "Toda a UI nova usa exclusivamente os tokens/componentes do design system da Etapa 6"
+    ]
+  },
+  {
+    title: "Etapa 10 — Motor de Webhook (Entrada e Saída)",
+    desc: "Engine genérica de integração + mapeamento de campos + webhook de saída + teste via payload de exemplo.",
+    promptFile: "etapa-10-webhooks.md",
+    tests: [
+      "Criar webhook de entrada, mapear campos, e usar \"Enviar payload de teste\" cria contato+negócio corretamente",
+      "Temperatura é calculada automaticamente a partir do payload de teste",
+      "Payload de teste com campo mapeado ausente não derruba a requisição, fica logado como erro",
+      "Criar webhook de saída apontando pra URL de teste dispara de fato ao criar um negócio",
+      "URL de saída fora do ar não impede a criação do negócio (só o log registra erro)",
+      "Logs de entrada e saída aparecem separados por direção, com payload bruto visível",
+      "Tela usa exclusivamente os componentes do design system da Etapa 6"
+    ]
   }
 ];
 

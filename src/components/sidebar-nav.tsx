@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
+  ListChecks,
   MessagesSquare,
   Smartphone,
+  Tag,
   Users,
   Workflow,
   type LucideIcon,
@@ -22,9 +24,12 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Início", icon: Home },
   { href: "/atendimento", label: "Atendimento", icon: MessagesSquare },
+  { href: "/contatos", label: "Contatos", icon: Users },
   { href: "/admin/usuarios", label: "Usuários", icon: Users, adminOnly: true },
   { href: "/admin/pipelines", label: "Pipelines", icon: Workflow, adminOnly: true },
   { href: "/admin/whatsapp", label: "WhatsApp", icon: Smartphone, adminOnly: true },
+  { href: "/admin/campos", label: "Campos", icon: ListChecks, adminOnly: true },
+  { href: "/admin/tags", label: "Tags", icon: Tag, adminOnly: true },
 ];
 
 export function SidebarNav({
