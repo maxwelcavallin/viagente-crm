@@ -10,6 +10,7 @@ import {
   webhookConfigs,
   webhookLogs,
 } from "@/db/schema";
+import { getBaseUrl } from "@/lib/base-url";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FieldDef } from "@/lib/custom-fields";
@@ -35,6 +36,9 @@ export default async function WebhookDetailPage({
     .where(eq(webhookConfigs.id, id))
     .limit(1);
   if (!webhook) notFound();
+
+  const baseUrl = await getBaseUrl();
+  const inboundUrl = `${baseUrl}/api/webhooks/inbound/${webhook.id}`;
 
   const [allPipelines, allStages, contactFieldRows, dealFieldRows, logRows] =
     await Promise.all([
@@ -107,9 +111,7 @@ export default async function WebhookDetailPage({
               <div className="rounded-lg border border-border bg-muted p-3 text-sm">
                 <p>
                   <span className="text-muted-foreground">URL:</span>{" "}
-                  <code className="font-mono text-xs break-all">
-                    /api/webhooks/inbound/{webhook.id}
-                  </code>
+                  <code className="font-mono text-xs break-all">{inboundUrl}</code>
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Autentique com o header <code>x-webhook-secret</code> ou o

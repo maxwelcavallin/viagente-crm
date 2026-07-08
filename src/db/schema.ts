@@ -161,6 +161,15 @@ export const contacts = pgTable(
     name: text("name").notNull(),
     phone: text("phone").notNull(),
     email: text("email"),
+    // true quando "phone" é na verdade o id de um grupo do WhatsApp
+    // (formato Z-API: "<id>-group"), não um número de telefone real.
+    isGroup: boolean("is_group").notNull().default(false),
+    // Foto do contato ou do grupo (campo "photo"/"senderPhoto" da Z-API).
+    avatarUrl: text("avatar_url"),
+    // Marca de leitura compartilhada pela equipe (inbox único, não por
+    // usuário): zera o contador de não lidas quando qualquer atendente
+    // abre a conversa — ver markContactRead em src/lib/conversations.ts.
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
     customFields: jsonb("custom_fields").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -369,6 +378,12 @@ export const messages = pgTable(
     status: messageStatusEnum("status").notNull().default("enviado"),
     zApiMessageId: text("z_api_message_id"),
     isFavorite: boolean("is_favorite").notNull().default(false),
+    // Preenchidos só quando a mensagem vem de um grupo (isGroup=true no
+    // payload da Z-API): identifica qual participante enviou, já que
+    // contactId aponta pro grupo inteiro, não pra pessoa.
+    senderName: text("sender_name"),
+    senderPhone: text("sender_phone"),
+    senderAvatarUrl: text("sender_avatar_url"),
     // Par (id, created_at) em vez de só id: messages é particionada por
     // created_at, então uma FK auto-referenciada só é possível apontando
     // pra chave completa (id, created_at), igual à PK da tabela.

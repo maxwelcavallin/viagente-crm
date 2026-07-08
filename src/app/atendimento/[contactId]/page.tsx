@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { contacts, whatsappChannels } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
-import { getThread } from "@/lib/conversations";
+import { getThread, markContactRead } from "@/lib/conversations";
 import { ConversationThread } from "./conversation-thread";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,13 @@ export default async function ConversationPage({
   const { contactId } = await params;
 
   const [contact] = await db
-    .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      phone: contacts.phone,
+      isGroup: contacts.isGroup,
+      avatarUrl: contacts.avatarUrl,
+    })
     .from(contacts)
     .where(eq(contacts.id, contactId))
     .limit(1);
@@ -30,6 +36,12 @@ export default async function ConversationPage({
     session.user.id,
     session.user.role
   );
+
+  // Marca lida pra equipe inteira ao abrir a conversa (inbox compartilhado).
+  // Só reflete no contador da lista no próximo router.refresh() do polling
+  // em AtendimentoShell, não instantaneamente — mesmo comportamento de
+  // atraso já aceito hoje pra mensagens novas chegando.
+  await markContactRead(contactId);
 
   const [thread, allowedChannels] = await Promise.all([
     getThread(contactId, allowedChannelIds),
@@ -54,6 +66,8 @@ export default async function ConversationPage({
       contactId={contact.id}
       contactName={contact.name}
       contactPhone={contact.phone}
+      isGroup={contact.isGroup}
+      avatarUrl={contact.avatarUrl}
       initialMessages={thread}
       channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
       preselectedChannelId={preselectedChannelId}

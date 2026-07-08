@@ -12,8 +12,28 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { ThreadMessage } from "@/lib/conversations";
+
+// Paleta fixa pra distinguir participantes de um grupo pelo nome, no estilo
+// WhatsApp (cada remetente ganha uma cor consistente, sem exigir cadastro).
+const SENDER_COLORS = [
+  "text-emerald-600 dark:text-emerald-400",
+  "text-blue-600 dark:text-blue-400",
+  "text-fuchsia-600 dark:text-fuchsia-400",
+  "text-amber-600 dark:text-amber-400",
+  "text-cyan-600 dark:text-cyan-400",
+  "text-rose-600 dark:text-rose-400",
+  "text-indigo-600 dark:text-indigo-400",
+  "text-lime-600 dark:text-lime-400",
+];
+
+function senderColorClass(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return SENDER_COLORS[hash % SENDER_COLORS.length];
+}
 
 async function toggleFavoriteRequest(
   message: ThreadMessage,
@@ -300,11 +320,13 @@ export function MessageList({
   emptyMessage = "Nenhuma mensagem visível para você neste contato.",
   favoritesOnly = false,
   onReply,
+  isGroup = false,
 }: {
   messages: ThreadMessage[];
   emptyMessage?: string;
   favoritesOnly?: boolean;
   onReply?: (message: ThreadMessage) => void;
+  isGroup?: boolean;
 }) {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
@@ -332,17 +354,44 @@ export function MessageList({
 
   return (
     <div className="space-y-3">
-      {visibleMessages.map((message) => (
+      {visibleMessages.map((message, index) => {
+        const senderKey = message.senderPhone ?? message.senderName ?? "";
+        const previous = index > 0 ? visibleMessages[index - 1] : null;
+        const previousSenderKey = previous
+          ? (previous.senderPhone ?? previous.senderName ?? "")
+          : null;
+        const showGroupSender =
+          isGroup &&
+          message.direction === "entrada" &&
+          Boolean(message.senderName) &&
+          (previous?.direction !== "entrada" || previousSenderKey !== senderKey);
+
+        return (
         <div
           key={message.id}
           id={`message-${message.id}`}
-          className={`flex ${message.direction === "saida" ? "justify-end" : "justify-start"}`}
+          className={`flex items-end gap-2 ${message.direction === "saida" ? "justify-end" : "justify-start"}`}
         >
+          {isGroup && message.direction === "entrada" && (
+            <Avatar size="sm" className={showGroupSender ? "" : "invisible"}>
+              {message.senderAvatarUrl && (
+                <AvatarImage src={message.senderAvatarUrl} alt={message.senderName ?? ""} />
+              )}
+              <AvatarFallback>
+                {(message.senderName ?? "?").charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}
           <div
             className={`max-w-md rounded-lg px-3 py-2 text-sm ${
               message.direction === "saida" ? "bg-accent" : "bg-muted"
             }`}
           >
+            {showGroupSender && (
+              <p className={cn("mb-0.5 text-xs font-semibold", senderColorClass(senderKey))}>
+                {message.senderName}
+              </p>
+            )}
             {message.replyTo && message.replyToMessageId && (
               <ReplyQuoteCard
                 replyTo={message.replyTo}
@@ -369,7 +418,8 @@ export function MessageList({
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

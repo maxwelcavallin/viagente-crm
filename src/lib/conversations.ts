@@ -1,5 +1,5 @@
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, messages, whatsappChannels } from "@/db/schema";
 
@@ -15,11 +15,15 @@ export type ConversationSummary = {
   contactId: string;
   contactName: string;
   contactPhone: string;
+  isGroup: boolean;
+  avatarUrl: string | null;
   channelId: string | null;
   channelLabel: string | null;
   lastMessageAt: Date;
   lastMessagePreview: string;
   lastMessageDirection: "entrada" | "saida";
+  lastMessageSenderName: string | null;
+  unreadCount: number;
 };
 
 export async function listConversations(
@@ -38,6 +42,7 @@ export async function listConversations(
       type: messages.type,
       createdAt: messages.createdAt,
       direction: messages.direction,
+      senderName: messages.senderName,
     })
     .from(messages)
     .where(channelFilter)
@@ -47,7 +52,13 @@ export async function listConversations(
 
   const contactIds = latest.map((m) => m.contactId);
   const contactRows = await db
-    .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      phone: contacts.phone,
+      isGroup: contacts.isGroup,
+      avatarUrl: contacts.avatarUrl,
+    })
     .from(contacts)
     .where(inArray(contacts.id, contactIds));
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
@@ -64,6 +75,27 @@ export async function listConversations(
       : [];
   const channelById = new Map(channelRows.map((c) => [c.id, c]));
 
+  // Não lida = mensagem de entrada mais nova que a última leitura registrada
+  // pra aquele contato (contacts.lastReadAt) — marca compartilhada por toda a
+  // equipe, não por usuário (ver markContactRead).
+  const unreadRows = await db
+    .select({
+      contactId: messages.contactId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(messages)
+    .innerJoin(contacts, eq(contacts.id, messages.contactId))
+    .where(
+      and(
+        eq(messages.direction, "entrada"),
+        channelFilter,
+        inArray(messages.contactId, contactIds),
+        or(isNull(contacts.lastReadAt), gt(messages.createdAt, contacts.lastReadAt))
+      )
+    )
+    .groupBy(messages.contactId);
+  const unreadByContact = new Map(unreadRows.map((r) => [r.contactId, r.count]));
+
   const summaries: ConversationSummary[] = latest.map((m) => {
     const contact = contactById.get(m.contactId);
     const channel = m.channelId ? channelById.get(m.channelId) : undefined;
@@ -71,16 +103,29 @@ export async function listConversations(
       contactId: m.contactId,
       contactName: contact?.name ?? "Contato",
       contactPhone: contact?.phone ?? "",
+      isGroup: contact?.isGroup ?? false,
+      avatarUrl: contact?.avatarUrl ?? null,
       channelId: m.channelId,
       channelLabel: channel?.label ?? null,
       lastMessageAt: m.createdAt,
       lastMessagePreview: m.type === "texto" ? m.content ?? "" : `📎 ${m.type}`,
       lastMessageDirection: m.direction,
+      lastMessageSenderName: m.senderName,
+      unreadCount: unreadByContact.get(m.contactId) ?? 0,
     };
   });
 
   summaries.sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
   return summaries;
+}
+
+// Marca a conversa como lida pra equipe inteira (inbox compartilhado — ver
+// comentário acima). Chamado ao abrir a tela de uma conversa.
+export async function markContactRead(contactId: string): Promise<void> {
+  await db
+    .update(contacts)
+    .set({ lastReadAt: new Date() })
+    .where(eq(contacts.id, contactId));
 }
 
 export type ThreadMessage = {
@@ -101,6 +146,9 @@ export type ThreadMessage = {
     type: "texto" | "imagem" | "audio" | "documento" | "video";
     content: string | null;
   } | null;
+  senderName: string | null;
+  senderPhone: string | null;
+  senderAvatarUrl: string | null;
 };
 
 export async function getThread(
@@ -125,6 +173,9 @@ export async function getThread(
       replyToCreatedAt: messages.replyToCreatedAt,
       replyToType: replyToMessages.type,
       replyToContent: replyToMessages.content,
+      senderName: messages.senderName,
+      senderPhone: messages.senderPhone,
+      senderAvatarUrl: messages.senderAvatarUrl,
     })
     .from(messages)
     .leftJoin(whatsappChannels, eq(messages.channelId, whatsappChannels.id))

@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { users, whatsappChannelRestrictions, whatsappChannels } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getBaseUrl } from "@/lib/base-url";
 import { AccessToggle } from "./access-toggle";
 
 export default async function ChannelAccessPage({
@@ -21,6 +22,9 @@ export default async function ChannelAccessPage({
     .where(eq(whatsappChannels.id, id))
     .limit(1);
   if (!channel) notFound();
+
+  const baseUrl = await getBaseUrl();
+  const webhookUrl = `${baseUrl}/api/whatsapp/webhook/${channel.id}`;
 
   const atendentes = await db
     .select({ id: users.id, name: users.name, email: users.email })
@@ -45,6 +49,21 @@ export default async function ChannelAccessPage({
         </Link>
         <h1 className="text-2xl font-bold">{channel.label}</h1>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>URL do webhook (Z-API)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Cole esta URL no painel da Z-API dessa instância, na aba{" "}
+            <strong>Webhooks</strong>, tanto em &quot;Ao receber&quot; quanto
+            em &quot;Status da mensagem&quot;.
+          </p>
+          <div className="rounded-lg border border-border bg-muted p-3 text-sm">
+            <code className="font-mono text-xs break-all">{webhookUrl}</code>
+          </div>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Acesso por atendente</CardTitle>

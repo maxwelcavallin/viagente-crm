@@ -8,6 +8,13 @@
 //   caption?, fileName? }, resposta { zaapId, messageId, id } — usamos
 //   sempre URL (assinada de curta duração do R2), nunca base64, pra evitar
 //   o limite de payload das serverless functions com áudio/vídeo grandes.
+// - group-metadata: GET /instances/{id}/token/{token}/group-metadata/{phone},
+//   header Client-Token, resposta inclui "subject" (nome do grupo) —
+//   confirmado com chamada real contra a instância de produção.
+// - profile-picture: GET /instances/{id}/token/{token}/profile-picture?phone=,
+//   header Client-Token, resposta { link } — funciona tanto pra contato
+//   individual quanto pra grupo (o "phone" aceita ID de grupo também,
+//   igual ao parâmetro de send-text) — idem, confirmado ao vivo.
 
 export type ZapiChannelCredentials = {
   zapiInstanceId: string;
@@ -137,6 +144,46 @@ export function sendZapiAudio(
   waveform = true
 ) {
   return postZapiMedia(creds, "/send-audio", { phone, audio: audioUrl, waveform });
+}
+
+// Retorna null em qualquer falha (grupo saiu, instância desconectada etc.)
+// — uso sempre em contexto de melhor esforço (backfill), nunca bloqueia o
+// fluxo principal de recebimento/envio de mensagem.
+export async function getZapiGroupMetadata(
+  creds: ZapiChannelCredentials,
+  groupPhone: string
+): Promise<{ subject: string } | null> {
+  try {
+    const res = await fetch(`${baseUrl(creds)}/group-metadata/${groupPhone}`, {
+      headers: { "Client-Token": creds.zapiClientToken },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { subject?: string };
+    return data.subject ? { subject: data.subject } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getZapiProfilePicture(
+  creds: ZapiChannelCredentials,
+  phone: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${baseUrl(creds)}/profile-picture?phone=${phone}`, {
+      headers: { "Client-Token": creds.zapiClientToken },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { link?: string };
+    // Sem foto definida, a Z-API responde 200 com link: "null" (string
+    // literal, não JSON null) — trata como ausência de foto.
+    if (!data.link || !data.link.startsWith("http")) return null;
+    return data.link;
+  } catch {
+    return null;
+  }
 }
 
 export function sendZapiDocument(

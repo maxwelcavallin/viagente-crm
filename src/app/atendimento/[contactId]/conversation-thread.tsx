@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Paperclip, Reply, Star, X } from "lucide-react";
+import { ArrowLeft, Paperclip, Reply, Star, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageList, replyPreviewLabel } from "@/components/message-list";
 import { EmojiPicker } from "@/components/emoji-picker";
 import { AudioRecorderButton } from "@/components/audio-recorder-button";
@@ -26,6 +27,8 @@ export function ConversationThread({
   contactId,
   contactName,
   contactPhone,
+  isGroup,
+  avatarUrl,
   initialMessages,
   channels,
   preselectedChannelId,
@@ -33,6 +36,8 @@ export function ConversationThread({
   contactId: string;
   contactName: string;
   contactPhone: string;
+  isGroup: boolean;
+  avatarUrl: string | null;
   initialMessages: ThreadMessage[];
   channels: { id: string; label: string }[];
   preselectedChannelId: string | null;
@@ -154,9 +159,28 @@ export function ConversationThread({
           >
             <ArrowLeft size={20} strokeWidth={1.75} />
           </Link>
+          <Avatar>
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={contactName} />}
+            <AvatarFallback>
+              {isGroup ? (
+                <Users size={16} strokeWidth={1.75} />
+              ) : (
+                contactName.charAt(0).toUpperCase()
+              )}
+            </AvatarFallback>
+          </Avatar>
           <div>
             <div className="font-semibold">{contactName}</div>
-            <div className="text-xs text-muted-foreground">{contactPhone}</div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              {isGroup ? (
+                <>
+                  <Users size={12} strokeWidth={1.75} />
+                  Grupo
+                </>
+              ) : (
+                contactPhone
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -190,6 +214,7 @@ export function ConversationThread({
           messages={initialMessages}
           favoritesOnly={showFavoritesOnly}
           onReply={setReplyingTo}
+          isGroup={isGroup}
         />
       </div>
 

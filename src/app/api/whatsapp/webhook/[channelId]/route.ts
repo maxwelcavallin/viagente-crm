@@ -18,7 +18,16 @@ type ZapiIncomingMessage = {
   phone: string;
   instanceId: string;
   fromMe?: boolean;
+  // isGroup=true: "phone" é o id do grupo ("<id>-group"), "chatName" é o
+  // nome do grupo, "senderName"/"senderPhoto"/"participantPhone" identificam
+  // o participante que enviou. Em conversa individual, "photo" é a foto do
+  // próprio contato e não há participantPhone.
+  isGroup?: boolean;
+  chatName?: string;
+  photo?: string;
   senderName?: string;
+  senderPhoto?: string;
+  participantPhone?: string;
   momment?: number;
   text?: { message: string };
   image?: ZapiMediaPart & { imageUrl: string; caption?: string };
@@ -65,7 +74,8 @@ async function handleIncomingMessage(
 ) {
   const contact = await findOrCreateContactByPhone(
     payload.phone,
-    payload.senderName
+    payload.isGroup ? payload.chatName : payload.senderName,
+    { isGroup: payload.isGroup, avatarUrl: payload.photo }
   );
   const dealId = await findOpenDealIdForContact(contact.id);
   const messageId = randomUUID();
@@ -115,6 +125,9 @@ async function handleIncomingMessage(
     content,
     mediaUrl,
     zApiMessageId: payload.messageId,
+    senderName: payload.isGroup ? payload.senderName : null,
+    senderPhone: payload.isGroup ? payload.participantPhone : null,
+    senderAvatarUrl: payload.isGroup ? payload.senderPhoto : null,
     createdAt,
   });
 }

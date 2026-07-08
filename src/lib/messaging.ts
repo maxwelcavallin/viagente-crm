@@ -4,19 +4,52 @@ import { contacts, deals } from "@/db/schema";
 
 export async function findOrCreateContactByPhone(
   phone: string,
-  name?: string
+  name?: string,
+  info?: { isGroup?: boolean; avatarUrl?: string }
 ): Promise<{ id: string }> {
   const [existing] = await db
-    .select({ id: contacts.id })
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      avatarUrl: contacts.avatarUrl,
+      isGroup: contacts.isGroup,
+    })
     .from(contacts)
     .where(eq(contacts.phone, phone))
     .limit(1);
 
-  if (existing) return existing;
+  if (existing) {
+    // Nome/foto de contatos e grupos do WhatsApp mudam com o tempo — mantém
+    // atualizado sem exigir edição manual no CRM.
+    const trimmedName = name?.trim();
+    const nextName = trimmedName && trimmedName !== existing.name ? trimmedName : undefined;
+    const nextAvatar =
+      info?.avatarUrl && info.avatarUrl !== existing.avatarUrl ? info.avatarUrl : undefined;
+    const nextIsGroup =
+      info?.isGroup !== undefined && info.isGroup !== existing.isGroup
+        ? info.isGroup
+        : undefined;
+    if (nextName || nextAvatar || nextIsGroup !== undefined) {
+      await db
+        .update(contacts)
+        .set({
+          ...(nextName ? { name: nextName } : {}),
+          ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
+          ...(nextIsGroup !== undefined ? { isGroup: nextIsGroup } : {}),
+        })
+        .where(eq(contacts.id, existing.id));
+    }
+    return existing;
+  }
 
   const [created] = await db
     .insert(contacts)
-    .values({ phone, name: name?.trim() || phone })
+    .values({
+      phone,
+      name: name?.trim() || phone,
+      isGroup: info?.isGroup ?? false,
+      avatarUrl: info?.avatarUrl,
+    })
     .returning({ id: contacts.id });
 
   return created;
