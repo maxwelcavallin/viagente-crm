@@ -115,7 +115,7 @@ export async function createFieldAction(
     order: nextOrder,
   });
 
-  revalidatePath("/admin/campos");
+  revalidatePath("/configuracoes/campos");
   return idle;
 }
 
@@ -163,7 +163,7 @@ export async function updateFieldAction(
     .set({ label: label.trim(), options })
     .where(eq(customFieldDefinitions.id, id));
 
-  revalidatePath("/admin/campos");
+  revalidatePath("/configuracoes/campos");
   return idle;
 }
 
@@ -182,7 +182,7 @@ export async function deleteFieldAction(
 
   await db.delete(customFieldDefinitions).where(eq(customFieldDefinitions.id, id));
 
-  revalidatePath("/admin/campos");
+  revalidatePath("/configuracoes/campos");
   return idle;
 }
 
@@ -224,7 +224,7 @@ export async function moveFieldAction(formData: FormData): Promise<void> {
       .where(eq(customFieldDefinitions.id, neighbor.id)),
   ]);
 
-  revalidatePath("/admin/campos");
+  revalidatePath("/configuracoes/campos");
 }
 
 export async function reorderFieldsAction(
@@ -244,6 +244,6 @@ export async function reorderFieldsAction(
     updates as [(typeof updates)[number], ...(typeof updates)[number][]]
   );
 
-  revalidatePath("/admin/campos");
+  revalidatePath("/configuracoes/campos");
   return { ok: true };
 }

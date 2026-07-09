@@ -35,7 +35,7 @@ export async function createPipelineAction(
 
   await db.insert(pipelines).values({ name: trimmedName, order: nextOrder });
 
-  revalidatePath("/admin/pipelines");
+  revalidatePath("/configuracoes/pipelines");
 
   return { status: "success", name: trimmedName };
 }

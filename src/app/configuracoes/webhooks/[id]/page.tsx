@@ -84,7 +84,7 @@ export default async function WebhookDetailPage({
   return (
     <div className="space-y-6">
       <Link
-        href="/admin/webhooks"
+        href="/configuracoes/webhooks"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={16} strokeWidth={1.75} />
@@ -98,7 +98,7 @@ export default async function WebhookDetailPage({
             {webhook.direction === "entrada" ? "Entrada" : "Saída"}
           </Badge>
         </div>
-        <DeleteWebhookDialog webhook={webhook} redirectTo="/admin/webhooks" />
+        <DeleteWebhookDialog webhook={webhook} redirectTo="/configuracoes/webhooks" />
       </div>
 
       {webhook.direction === "entrada" ? (

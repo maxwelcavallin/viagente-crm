@@ -74,7 +74,7 @@ export async function createStageAction(
     order: nextOrder,
   });
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return initialIdle;
 }
 
@@ -113,7 +113,7 @@ export async function updateStageAction(
     })
     .where(eq(stages.id, id));
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return initialIdle;
 }
 
@@ -145,7 +145,7 @@ export async function deleteStageAction(
 
   await db.delete(stages).where(eq(stages.id, id));
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return initialIdle;
 }
 
@@ -192,7 +192,7 @@ export async function moveStageAction(formData: FormData): Promise<void> {
       .where(eq(stages.id, neighbor.id)),
   ]);
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
 }
 
 // Usado pelo drag-and-drop (seção 4 do design system): recebe a ordem final
@@ -209,7 +209,7 @@ export async function reorderStagesAction(
   );
   await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return { ok: true };
 }
 
@@ -220,6 +220,13 @@ export type StageTaskFormState =
   | { status: "error"; message: string };
 
 const stageTaskIdle: StageTaskFormState = { status: "idle" };
+
+function parseDaysToComplete(raw: FormDataEntryValue | null): number | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const days = Number(raw);
+  if (!Number.isFinite(days) || days < 0) return null;
+  return Math.floor(days);
+}
 
 export async function createStageTaskAction(
   _prevState: StageTaskFormState,
@@ -234,6 +241,8 @@ export async function createStageTaskAction(
   const title = formData.get("title");
   const type = formData.get("type");
   const messageTemplateId = formData.get("messageTemplateId");
+  const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
+  const isAutomatic = formData.get("isAutomatic") === "true";
 
   if (typeof stageId !== "string" || typeof pipelineId !== "string") {
     return { status: "error", message: "Etapa inválida." };
@@ -269,9 +278,11 @@ export async function createStageTaskAction(
     type,
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
     order: nextOrder,
+    daysToComplete,
+    isAutomatic,
   });
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return stageTaskIdle;
 }
 
@@ -287,6 +298,8 @@ export async function updateStageTaskAction(
   const pipelineId = formData.get("pipelineId");
   const title = formData.get("title");
   const messageTemplateId = formData.get("messageTemplateId");
+  const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
+  const isAutomatic = formData.get("isAutomatic") === "true";
 
   if (typeof id !== "string" || typeof pipelineId !== "string") {
     return { status: "error", message: "Tarefa inválida." };
@@ -315,10 +328,12 @@ export async function updateStageTaskAction(
       title: title.trim(),
       messageTemplateId:
         current.type === "mensagem" ? (messageTemplateId as string) : null,
+      daysToComplete,
+      isAutomatic,
     })
     .where(eq(stageTasks.id, id));
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return stageTaskIdle;
 }
 
@@ -338,7 +353,7 @@ export async function deleteStageTaskAction(
 
   await db.delete(stageTasks).where(eq(stageTasks.id, id));
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return stageTaskIdle;
 }
 
@@ -384,5 +399,5 @@ export async function moveStageTaskAction(formData: FormData): Promise<void> {
       .where(eq(stageTasks.id, neighbor.id)),
   ]);
 
-  revalidatePath(`/admin/pipelines/${pipelineId}`);
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
 }

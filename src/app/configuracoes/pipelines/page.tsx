@@ -58,7 +58,7 @@ export default async function PipelinesPage() {
                       <TableCell>{pipeline.stageCount}</TableCell>
                       <TableCell>
                         <Link
-                          href={`/admin/pipelines/${pipeline.id}`}
+                          href={`/configuracoes/pipelines/${pipeline.id}`}
                           className="text-sm text-primary hover:underline"
                         >
                           Ver etapas

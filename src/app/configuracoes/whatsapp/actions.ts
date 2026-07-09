@@ -57,7 +57,7 @@ export async function createChannelAction(
     phoneNumber: typeof phoneNumber === "string" && phoneNumber.trim() ? phoneNumber.trim() : null,
   });
 
-  revalidatePath("/admin/whatsapp");
+  revalidatePath("/configuracoes/whatsapp");
   return idle;
 }
 
@@ -94,7 +94,7 @@ export async function testConnectionAction(
     .set({ status: result.connected ? "conectado" : "desconectado" })
     .where(eq(whatsappChannels.id, channelId));
 
-  revalidatePath("/admin/whatsapp");
+  revalidatePath("/configuracoes/whatsapp");
 
   if (!result.connected) {
     return {
@@ -123,5 +123,5 @@ export async function setDefaultChannelAction(formData: FormData): Promise<void>
       .where(eq(whatsappChannels.id, channelId)),
   ]);
 
-  revalidatePath("/admin/whatsapp");
+  revalidatePath("/configuracoes/whatsapp");
 }

@@ -40,6 +40,8 @@ export default async function PipelineDetailPage({
             type: stageTasks.type,
             messageTemplateId: stageTasks.messageTemplateId,
             order: stageTasks.order,
+            daysToComplete: stageTasks.daysToComplete,
+            isAutomatic: stageTasks.isAutomatic,
           })
           .from(stageTasks)
           .where(inArray(stageTasks.stageId, stageIds))
@@ -56,6 +58,8 @@ export default async function PipelineDetailPage({
       title: row.title,
       type: row.type,
       messageTemplateId: row.messageTemplateId,
+      daysToComplete: row.daysToComplete,
+      isAutomatic: row.isAutomatic,
     });
     stageTasksByStageId[row.stageId] = list;
   }
@@ -64,7 +68,7 @@ export default async function PipelineDetailPage({
     <div className="space-y-6">
       <div>
         <Link
-          href="/admin/pipelines"
+          href="/configuracoes/pipelines"
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← Pipelines

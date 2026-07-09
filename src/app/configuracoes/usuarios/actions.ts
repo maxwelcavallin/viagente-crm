@@ -60,7 +60,7 @@ export async function createUserAction(
     mustChangePassword: true,
   });
 
-  revalidatePath("/admin/usuarios");
+  revalidatePath("/configuracoes/usuarios");
 
   return {
     status: "success",

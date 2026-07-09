@@ -87,6 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // src/app/api/cron/cleanup-media e src/app/api/webhooks/inbound.
         pathname.startsWith("/api/whatsapp/webhook") ||
         pathname === "/api/cron/cleanup-media" ||
+        pathname === "/api/cron/send-scheduled-messages" ||
         pathname.startsWith("/api/webhooks/inbound");
 
       if (!auth) {
@@ -101,7 +102,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return Response.redirect(new URL("/trocar-senha", request.url));
       }
 
-      if (pathname.startsWith("/admin") && auth.user.role !== "admin") {
+      if (pathname.startsWith("/configuracoes") && auth.user.role !== "admin") {
         return Response.redirect(new URL("/acesso-negado", request.url));
       }
 

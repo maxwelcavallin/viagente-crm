@@ -48,7 +48,7 @@ export async function createTagAction(
     color: typeof color === "string" && color ? color : null,
   });
 
-  revalidatePath("/admin/tags");
+  revalidatePath("/configuracoes/tags");
   return idle;
 }
 
@@ -82,7 +82,7 @@ export async function updateTagAction(
     })
     .where(eq(tags.id, id));
 
-  revalidatePath("/admin/tags");
+  revalidatePath("/configuracoes/tags");
   return idle;
 }
 
@@ -103,6 +103,6 @@ export async function deleteTagAction(
   // junto, o aviso no modal (contagem de uso) já é a confirmação exigida.
   await db.delete(tags).where(eq(tags.id, id));
 
-  revalidatePath("/admin/tags");
+  revalidatePath("/configuracoes/tags");
   return idle;
 }

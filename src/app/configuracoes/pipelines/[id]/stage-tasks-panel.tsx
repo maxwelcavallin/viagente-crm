@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   createStageTaskAction,
   deleteStageTaskAction,
@@ -42,6 +43,8 @@ export type StageTask = {
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica";
   messageTemplateId: string | null;
+  daysToComplete: number | null;
+  isAutomatic: boolean;
 };
 
 const TYPE_LABELS: Record<StageTask["type"], string> = {
@@ -66,6 +69,7 @@ function EditStageTaskDialog({
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     task.messageTemplateId
   );
+  const [isAutomatic, setIsAutomatic] = useState(task.isAutomatic);
   const [state, formAction, isPending] = useActionState(
     updateStageTaskAction,
     idleState
@@ -87,9 +91,34 @@ function EditStageTaskDialog({
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="id" value={task.id} />
           <input type="hidden" name="pipelineId" value={pipelineId} />
+          <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
           <div className="space-y-2">
             <Label htmlFor={`title-${task.id}`}>Título</Label>
             <Input id={`title-${task.id}`} name="title" defaultValue={task.title} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`days-${task.id}`}>Prazo (dias após entrar na etapa)</Label>
+            <Input
+              id={`days-${task.id}`}
+              name="daysToComplete"
+              type="number"
+              min={0}
+              placeholder="Ex: 2 — deixe vazio pra sem prazo"
+              defaultValue={task.daysToComplete ?? ""}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor={`auto-${task.id}`}>Criar automaticamente</Label>
+              <p className="text-xs text-muted-foreground">
+                Se desligado, fica disponível pra adicionar manualmente no negócio.
+              </p>
+            </div>
+            <Switch
+              id={`auto-${task.id}`}
+              checked={isAutomatic}
+              onCheckedChange={setIsAutomatic}
+            />
           </div>
           {task.type === "mensagem" && (
             <div className="space-y-2">
@@ -196,12 +225,14 @@ function CreateStageTaskForm({
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     null
   );
+  const [isAutomatic, setIsAutomatic] = useState(true);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="stageId" value={stageId} />
       <input type="hidden" name="pipelineId" value={pipelineId} />
       <input type="hidden" name="type" value={type} />
+      <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
       <div className="space-y-1">
         <Label htmlFor={`new-title-${stageId}`} className="text-xs">
           Título
@@ -259,6 +290,30 @@ function CreateStageTaskForm({
           </Select>
         </div>
       )}
+      <div className="space-y-1">
+        <Label htmlFor={`new-days-${stageId}`} className="text-xs">
+          Prazo (dias)
+        </Label>
+        <Input
+          id={`new-days-${stageId}`}
+          name="daysToComplete"
+          type="number"
+          min={0}
+          placeholder="Sem prazo"
+          className="h-8 w-24 text-sm"
+        />
+      </div>
+      <div className="flex items-center gap-1.5 pb-1.5">
+        <Switch
+          id={`new-auto-${stageId}`}
+          size="sm"
+          checked={isAutomatic}
+          onCheckedChange={setIsAutomatic}
+        />
+        <Label htmlFor={`new-auto-${stageId}`} className="text-xs">
+          Automática
+        </Label>
+      </div>
       <Button type="submit" size="sm" disabled={isPending}>
         {isPending ? "Adicionando..." : "Adicionar tarefa"}
       </Button>
@@ -290,14 +345,14 @@ export function StageTasksPanel({
         className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
         <ListTodo size={13} strokeWidth={1.75} />
-        Tarefas automáticas desta etapa ({tasks.length})
+        Tarefas desta etapa ({tasks.length})
       </button>
       {open && (
         <div className="mt-2 space-y-2">
           {tasks.length === 0 ? (
             <EmptyState
               icon={ListTodo}
-              title="Nenhuma tarefa automática"
+              title="Nenhuma tarefa configurada"
               description="Adicione uma tarefa pelo formulário abaixo."
             />
           ) : (
@@ -352,6 +407,16 @@ export function StageTasksPanel({
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {TYPE_LABELS[task.type]}
                 </span>
+                {task.daysToComplete != null && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Prazo: {task.daysToComplete}d
+                  </span>
+                )}
+                {!task.isAutomatic && (
+                  <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+                    Manual
+                  </span>
+                )}
                 <div className="flex shrink-0 items-center gap-1.5">
                   <EditStageTaskDialog
                     task={task}

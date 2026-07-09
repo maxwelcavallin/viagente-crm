@@ -4,15 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Briefcase,
-  FileText,
   Home,
-  ListChecks,
   MessagesSquare,
-  Smartphone,
-  Tag,
+  Settings,
+  UserCircle,
   Users,
-  Webhook,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,13 +25,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/negocios", label: "Negócios", icon: Briefcase },
   { href: "/atendimento", label: "Atendimento", icon: MessagesSquare },
   { href: "/contatos", label: "Contatos", icon: Users },
-  { href: "/admin/usuarios", label: "Usuários", icon: Users, adminOnly: true },
-  { href: "/admin/pipelines", label: "Pipelines", icon: Workflow, adminOnly: true },
-  { href: "/admin/whatsapp", label: "WhatsApp", icon: Smartphone, adminOnly: true },
-  { href: "/admin/campos", label: "Campos", icon: ListChecks, adminOnly: true },
-  { href: "/admin/tags", label: "Tags", icon: Tag, adminOnly: true },
-  { href: "/admin/templates", label: "Templates", icon: FileText, adminOnly: true },
-  { href: "/admin/webhooks", label: "Webhooks", icon: Webhook, adminOnly: true },
+  { href: "/perfil", label: "Meu Perfil", icon: UserCircle },
+  { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
 export function SidebarNav({

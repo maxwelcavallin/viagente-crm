@@ -31,5 +31,5 @@ export async function setChannelAccessAction(formData: FormData): Promise<void> 
       .onConflictDoNothing();
   }
 
-  revalidatePath(`/admin/whatsapp/${channelId}`);
+  revalidatePath(`/configuracoes/whatsapp/${channelId}`);
 }

@@ -58,7 +58,7 @@ export async function createInboundWebhookAction(
     })
     .returning({ id: webhookConfigs.id });
 
-  revalidatePath("/admin/webhooks");
+  revalidatePath("/configuracoes/webhooks");
   return { status: "success", webhookId: created.id, secretToken };
 }
 
@@ -102,7 +102,7 @@ export async function createOutboundWebhookAction(
     })
     .returning({ id: webhookConfigs.id });
 
-  revalidatePath("/admin/webhooks");
+  revalidatePath("/configuracoes/webhooks");
   return { status: "success", webhookId: created.id };
 }
 
@@ -148,8 +148,8 @@ export async function updateOutboundWebhookAction(
     })
     .where(eq(webhookConfigs.id, id));
 
-  revalidatePath("/admin/webhooks");
-  revalidatePath(`/admin/webhooks/${id}`);
+  revalidatePath("/configuracoes/webhooks");
+  revalidatePath(`/configuracoes/webhooks/${id}`);
   return { status: "success", webhookId: id };
 }
 
@@ -182,8 +182,8 @@ export async function updateInboundWebhookAction(
     .set({ name: name.trim(), defaultPipelineId, defaultStageId })
     .where(eq(webhookConfigs.id, id));
 
-  revalidatePath("/admin/webhooks");
-  revalidatePath(`/admin/webhooks/${id}`);
+  revalidatePath("/configuracoes/webhooks");
+  revalidatePath(`/configuracoes/webhooks/${id}`);
   return { status: "success", webhookId: id };
 }
 
@@ -198,7 +198,7 @@ export async function updateFieldMappingAction(
     .set({ fieldMapping: mapping })
     .where(eq(webhookConfigs.id, webhookId));
 
-  revalidatePath(`/admin/webhooks/${webhookId}`);
+  revalidatePath(`/configuracoes/webhooks/${webhookId}`);
   return { ok: true };
 }
 
@@ -210,8 +210,8 @@ export async function toggleWebhookActiveAction(
 
   await db.update(webhookConfigs).set({ active }).where(eq(webhookConfigs.id, id));
 
-  revalidatePath("/admin/webhooks");
-  revalidatePath(`/admin/webhooks/${id}`);
+  revalidatePath("/configuracoes/webhooks");
+  revalidatePath(`/configuracoes/webhooks/${id}`);
   return { ok: true };
 }
 
@@ -233,7 +233,7 @@ export async function deleteWebhookAction(
 
   await db.delete(webhookConfigs).where(eq(webhookConfigs.id, id));
 
-  revalidatePath("/admin/webhooks");
+  revalidatePath("/configuracoes/webhooks");
   if (typeof redirectTo === "string" && redirectTo) {
     redirect(redirectTo);
   }
@@ -268,6 +268,6 @@ export async function testInboundWebhookAction(
   const result = await processInboundPayload(config, payload);
   await logInboundWebhook(config.id, payload, result);
 
-  revalidatePath(`/admin/webhooks/${webhookId}`);
+  revalidatePath(`/configuracoes/webhooks/${webhookId}`);
   return { status: "result", result };
 }

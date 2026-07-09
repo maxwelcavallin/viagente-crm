@@ -48,7 +48,7 @@ function ChannelRowItem({ channel }: { channel: ChannelRow }) {
   return (
     <TableRow>
       <TableCell>
-        <Link href={`/admin/whatsapp/${channel.id}`} className="text-primary hover:underline">
+        <Link href={`/configuracoes/whatsapp/${channel.id}`} className="text-primary hover:underline">
           {channel.label}
         </Link>
         <div className="text-xs text-muted-foreground">

@@ -41,7 +41,7 @@ export async function createTemplateAction(
     variables: extractVariables(content),
   });
 
-  revalidatePath("/admin/templates");
+  revalidatePath("/configuracoes/templates");
   return idle;
 }
 
@@ -75,7 +75,7 @@ export async function updateTemplateAction(
     })
     .where(eq(messageTemplates.id, id));
 
-  revalidatePath("/admin/templates");
+  revalidatePath("/configuracoes/templates");
   return idle;
 }
 
@@ -98,7 +98,7 @@ export async function deleteTemplateAction(
     .where(eq(stageTasks.messageTemplateId, id));
   await db.delete(messageTemplates).where(eq(messageTemplates.id, id));
 
-  revalidatePath("/admin/templates");
-  revalidatePath("/admin/pipelines");
+  revalidatePath("/configuracoes/templates");
+  revalidatePath("/configuracoes/pipelines");
   return idle;
 }

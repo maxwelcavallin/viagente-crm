@@ -42,7 +42,7 @@ export default async function ChannelAccessPage({
     <div className="space-y-6">
       <div>
         <Link
-          href="/admin/whatsapp"
+          href="/configuracoes/whatsapp"
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← Canais WhatsApp
@@ -78,7 +78,7 @@ export default async function ChannelAccessPage({
             <EmptyState
               icon={Users}
               title="Nenhum atendente cadastrado"
-              description="Crie usuários com role atendente em /admin/usuarios."
+              description="Crie usuários com role atendente em /configuracoes/usuarios."
             />
           ) : (
             <div className="space-y-2">

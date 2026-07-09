@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CONTACT_SYSTEM_FIELDS } from "@/lib/webhook-fields";
+import { CONTACT_SYSTEM_FIELDS, DEAL_SYSTEM_FIELDS } from "@/lib/webhook-fields";
 import type { FieldDef } from "@/lib/custom-fields";
 import { updateFieldMappingAction } from "../actions";
 
@@ -43,8 +43,16 @@ export function FieldMappingEditor({
     }
   }
 
+  // Só "deal.tags" de DEAL_SYSTEM_FIELDS entra aqui — título/valor do
+  // negócio não são expostos porque o webhook de entrada não os lê (o
+  // título sempre vem do nome do contato); mapeá-los seria uma opção morta
+  // na UI. A importação de CSV (Etapa 11) usa a lista completa.
   const rows = [
     ...CONTACT_SYSTEM_FIELDS.map((f) => ({ key: f.key, label: f.label })),
+    ...DEAL_SYSTEM_FIELDS.filter((f) => f.key === "deal.tags").map((f) => ({
+      key: f.key,
+      label: f.label,
+    })),
     ...contactFieldDefs.map((f) => ({
       key: `contact.custom.${f.key}`,
       label: `${f.label} (contato)`,

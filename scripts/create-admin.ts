@@ -26,7 +26,7 @@ async function main() {
       `Já existe um usuário com o email ${email} (role: ${existing.role}). Nada foi alterado.`
     );
     console.log(
-      "Se precisar resetar a senha dele, use a tela /admin/usuarios (login como outro admin) ou rode este script com um email diferente."
+      "Se precisar resetar a senha dele, use a tela /configuracoes/usuarios (login como outro admin) ou rode este script com um email diferente."
     );
     process.exit(0);
   }

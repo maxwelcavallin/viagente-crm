@@ -97,7 +97,7 @@ export function WebhooksList({
             </TableCell>
             <TableCell>
               <Link
-                href={`/admin/webhooks/${webhook.id}`}
+                href={`/configuracoes/webhooks/${webhook.id}`}
                 className="font-medium text-primary hover:underline"
               >
                 {webhook.name}
@@ -131,7 +131,7 @@ export function WebhooksList({
             </TableCell>
             <TableCell>
               <Link
-                href={`/admin/webhooks/${webhook.id}`}
+                href={`/configuracoes/webhooks/${webhook.id}`}
                 className="text-sm text-primary hover:underline"
               >
                 Ver detalhes
