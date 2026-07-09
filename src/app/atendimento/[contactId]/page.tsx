@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { contacts, whatsappChannels } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread, markContactRead } from "@/lib/conversations";
+import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
 import { ConversationThread } from "./conversation-thread";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function ConversationPage({
   // atraso já aceito hoje pra mensagens novas chegando.
   await markContactRead(contactId);
 
-  const [thread, allowedChannels] = await Promise.all([
+  const [thread, allowedChannels, pendingScheduled] = await Promise.all([
     getThread(contactId, allowedChannelIds),
     allowedChannelIds.length > 0
       ? db
@@ -51,6 +52,7 @@ export default async function ConversationPage({
           .from(whatsappChannels)
           .where(inArray(whatsappChannels.id, allowedChannelIds))
       : Promise.resolve([]),
+    getPendingScheduledMessages(contactId),
   ]);
 
   const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
@@ -71,6 +73,11 @@ export default async function ConversationPage({
       initialMessages={thread}
       channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
       preselectedChannelId={preselectedChannelId}
+      scheduledMessages={pendingScheduled.map((m) => ({
+        id: m.id,
+        content: m.content,
+        scheduledAt: m.scheduledAt.toISOString(),
+      }))}
     />
   );
 }

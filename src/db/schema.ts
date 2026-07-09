@@ -74,6 +74,12 @@ export const whatsappChannelStatusEnum = pgEnum("whatsapp_channel_status", [
   "desconectado",
   "pendente",
 ]);
+export const scheduledMessageStatusEnum = pgEnum("scheduled_message_status", [
+  "pendente",
+  "enviada",
+  "cancelada",
+  "erro",
+]);
 
 // ---------- Usuários ----------
 
@@ -148,6 +154,13 @@ export const stageTasks = pgTable(
       { onDelete: "set null" }
     ),
     order: integer("order").notNull().default(0),
+    // Prazo em dias a partir da entrada na etapa — usado pra calcular
+    // tasks.due_at quando a tarefa é (auto-)criada. Null = sem prazo.
+    daysToComplete: integer("days_to_complete"),
+    // false = a tarefa fica só como "modelo" disponível pra adicionar
+    // manualmente ao negócio (ver addStageTaskToDealAction); não é criada
+    // sozinha quando o negócio entra na etapa.
+    isAutomatic: boolean("is_automatic").notNull().default(true),
   },
   (t) => [index("stage_tasks_stage_id_idx").on(t.stageId)]
 );
@@ -237,6 +250,10 @@ export const tasks = pgTable(
     completedBy: uuid("completed_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Preenchido quando a tarefa tipo "agendamento" cria um evento real no
+    // Google Agenda (Etapa 12) — permite editar/cancelar o evento depois,
+    // ainda que essa etapa não implemente essa ação ainda.
+    googleEventId: text("google_event_id"),
   },
   (t) => [index("tasks_deal_id_idx").on(t.dealId)]
 );
@@ -403,6 +420,60 @@ export const messages = pgTable(
   ]
 );
 
+// ---------- Importação de CSV (Etapa 11) ----------
+// Um registro por arquivo importado — resumo pra auditoria, não linha a
+// linha (os erros de linha individuais ficam no jsonb "errors").
+export const csvImports = pgTable("csv_imports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fileName: text("file_name").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  pipelineId: uuid("pipeline_id").references(() => pipelines.id, { onDelete: "set null" }),
+  contactsCreated: integer("contacts_created").notNull().default(0),
+  contactsUpdated: integer("contacts_updated").notNull().default(0),
+  dealsCreated: integer("deals_created").notNull().default(0),
+  errorCount: integer("error_count").notNull().default(0),
+  errors: jsonb("errors").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ---------- Mensagens agendadas ----------
+// Disparadas pelo cron /api/cron/send-scheduled-messages (ver vercel.json).
+// Ao enviar com sucesso, cria a linha correspondente em "messages" — igual
+// ao fluxo de envio imediato de /api/messages/send.
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => whatsappChannels.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    status: scheduledMessageStatusEnum("status").notNull().default("pendente"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    errorMessage: text("error_message"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("scheduled_messages_contact_id_idx").on(t.contactId),
+    index("scheduled_messages_status_scheduled_at_idx").on(
+      t.status,
+      t.scheduledAt
+    ),
+  ]
+);
+
 // ---------- Motor de webhook (entrada e saída) ----------
 
 export const webhookConfigs = pgTable("webhook_configs", {
@@ -473,3 +544,51 @@ export const temperatureRules = pgTable("temperature_rules", {
   result: temperatureEnum("result").notNull(),
   priority: integer("priority").notNull().default(0),
 });
+
+// ---------- Google Agenda (Etapa 12) ----------
+// Uma conexão por usuário (o dono da conta Google que autorizou o OAuth).
+// Tokens criptografados em repouso com a mesma chave da Etapa 5
+// (CREDENTIALS_ENCRYPTION_KEY) — ver src/lib/credentials-crypto.ts.
+export const googleCalendarConnections = pgTable(
+  "google_calendar_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    refreshToken: text("refresh_token").notNull(),
+    accessToken: text("access_token"),
+    tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+    calendarId: text("calendar_id").notNull().default("primary"),
+    connectedAt: timestamp("connected_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("google_calendar_connections_user_id_idx").on(t.userId)]
+);
+
+// Compartilhamento: um admin libera o uso da própria conexão (linha acima)
+// pra atendentes específicos agendarem em nome dela, sem cada um precisar
+// conectar a própria conta. "ownerUserId" é quem conectou (dono da agenda);
+// "sharedWithUserId" é quem ganhou permissão de usar.
+export const googleCalendarShares = pgTable(
+  "google_calendar_shares",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sharedWithUserId: uuid("shared_with_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("google_calendar_shares_owner_shared_idx").on(
+      t.ownerUserId,
+      t.sharedWithUserId
+    ),
+  ]
+);

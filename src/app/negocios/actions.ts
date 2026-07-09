@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -231,19 +231,23 @@ export async function moveDealStageAction(
     .set({ stageId, updatedAt: new Date() })
     .where(eq(deals.id, dealId));
 
-  // Cria as tarefas automáticas da etapa de destino (Etapa 9). Se o negócio
-  // já visitou essa etapa antes, cria de novo — não reaproveita tarefas
-  // antigas já concluídas (regra explícita do critério de aceite).
+  // Cria as tarefas automáticas da etapa de destino (Etapa 9). Só as
+  // marcadas isAutomatic=true — as demais ficam como modelo disponível pra
+  // adicionar manualmente (ver addStageTaskToDealAction). Se o negócio já
+  // visitou essa etapa antes, cria de novo — não reaproveita tarefas antigas
+  // já concluídas (regra explícita do critério de aceite).
   const tasksForStage = await db
     .select({
       id: stageTasks.id,
       title: stageTasks.title,
       type: stageTasks.type,
+      daysToComplete: stageTasks.daysToComplete,
     })
     .from(stageTasks)
-    .where(eq(stageTasks.stageId, stageId));
+    .where(and(eq(stageTasks.stageId, stageId), eq(stageTasks.isAutomatic, true)));
 
   if (tasksForStage.length > 0) {
+    const now = Date.now();
     await db.insert(tasks).values(
       tasksForStage.map((st) => ({
         dealId,
@@ -251,6 +255,10 @@ export async function moveDealStageAction(
         title: st.title,
         type: st.type,
         status: "pendente" as const,
+        dueAt:
+          st.daysToComplete != null
+            ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
+            : null,
       }))
     );
   }
@@ -295,6 +303,122 @@ export async function completeTaskAction(
     .where(eq(tasks.id, taskId));
 
   revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+// Adiciona manualmente uma tarefa "modelo" (stage_task com isAutomatic=false)
+// ao negócio — usada quando a etapa tem tarefas configuradas só como opção,
+// não pra criação automática ao entrar na etapa.
+export async function addStageTaskToDealAction(
+  dealId: string,
+  stageTaskId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user) return { ok: false };
+
+  const [stageTask] = await db
+    .select({
+      title: stageTasks.title,
+      type: stageTasks.type,
+      daysToComplete: stageTasks.daysToComplete,
+    })
+    .from(stageTasks)
+    .where(eq(stageTasks.id, stageTaskId))
+    .limit(1);
+  if (!stageTask) return { ok: false };
+
+  await db.insert(tasks).values({
+    dealId,
+    stageTaskId,
+    title: stageTask.title,
+    type: stageTask.type,
+    status: "pendente",
+    dueAt:
+      stageTask.daysToComplete != null
+        ? new Date(Date.now() + stageTask.daysToComplete * 24 * 60 * 60 * 1000)
+        : null,
+  });
+
+  revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+// ---------- Ações em massa (seleção múltipla no kanban) ----------
+
+export async function bulkMoveDealsAction(
+  dealIds: string[],
+  stageId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0) return { ok: false };
+
+  await db
+    .update(deals)
+    .set({ stageId, updatedAt: new Date() })
+    .where(inArray(deals.id, dealIds));
+
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+export async function bulkSetOwnerAction(
+  dealIds: string[],
+  ownerId: string | null
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0) return { ok: false };
+
+  await db
+    .update(deals)
+    .set({ ownerId, updatedAt: new Date() })
+    .where(inArray(deals.id, dealIds));
+
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+export async function bulkSetStatusAction(
+  dealIds: string[],
+  status: "aberto" | "ganho" | "perdido"
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0) return { ok: false };
+
+  await db
+    .update(deals)
+    .set({ status, updatedAt: new Date() })
+    .where(inArray(deals.id, dealIds));
+
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+export async function bulkAddTagAction(
+  dealIds: string[],
+  tagId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0) return { ok: false };
+
+  await db
+    .insert(dealTags)
+    .values(dealIds.map((dealId) => ({ dealId, tagId })))
+    .onConflictDoNothing();
+
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+export async function bulkDeleteDealsAction(
+  dealIds: string[]
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0) return { ok: false };
+
+  await db.delete(deals).where(inArray(deals.id, dealIds));
+
   revalidatePath("/negocios");
   return { ok: true };
 }

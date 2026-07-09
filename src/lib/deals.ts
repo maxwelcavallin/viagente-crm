@@ -14,6 +14,7 @@ export async function getLastMessagePreviewsByDealId(
       type: messages.type,
       content: messages.content,
       createdAt: messages.createdAt,
+      direction: messages.direction,
     })
     .from(messages)
     .where(inArray(messages.dealId, dealIds))
@@ -26,6 +27,7 @@ export async function getLastMessagePreviewsByDealId(
       type: row.type,
       content: row.content,
       createdAt: row.createdAt,
+      direction: row.direction,
     });
   }
   return previewByDealId;

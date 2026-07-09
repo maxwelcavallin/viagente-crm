@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
+  contactTags,
   contacts,
   customFieldDefinitions,
   dealTags,
@@ -22,6 +23,8 @@ import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
+import { resolveConnectionOwner } from "@/lib/google-calendar";
+import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
 import { substituteTemplate } from "@/lib/templates";
 import { TEMPERATURE_BADGE_VARIANT, TEMPERATURE_LABELS } from "@/lib/temperature";
 import type { TagOption } from "@/lib/tags";
@@ -29,10 +32,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageList } from "@/components/message-list";
+import { ScheduleMessageDialog } from "@/components/schedule-message-dialog";
+import { ScheduledMessagesList } from "@/components/scheduled-messages-list";
+import { ScheduleMeetingDialog } from "@/components/schedule-meeting-dialog";
+import { ContactFormDialog } from "@/app/contatos/contact-form-dialog";
 import { DealFormDialog } from "../deal-form-dialog";
 import { DeleteDealDialog } from "../delete-deal-dialog";
 import { DealStatusActions } from "./deal-status-actions";
-import { DealTasksPanel, type DealTask } from "./deal-tasks-panel";
+import { DealTasksPanel, type DealTask, type ManualStageTask } from "./deal-tasks-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -119,36 +126,67 @@ export default async function DealDetailPage({
 
   if (!contact) notFound();
 
-  const [thread, contactFieldDefRows, taskRows, allowedChannels] = await Promise.all([
-    getThread(contact.id, allowedChannelIds),
-    db
-      .select()
-      .from(customFieldDefinitions)
-      .where(eq(customFieldDefinitions.entity, "contact"))
-      .orderBy(asc(customFieldDefinitions.order)),
-    db
-      .select({
-        id: tasks.id,
-        title: tasks.title,
-        type: tasks.type,
-        status: tasks.status,
-        templateContent: messageTemplates.content,
-      })
-      .from(tasks)
-      .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
-      .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
-      .where(eq(tasks.dealId, id)),
-    allowedChannelIds.length > 0
-      ? db
-          .select({
-            id: whatsappChannels.id,
-            label: whatsappChannels.label,
-            isDefault: whatsappChannels.isDefault,
-          })
-          .from(whatsappChannels)
-          .where(inArray(whatsappChannels.id, allowedChannelIds))
-      : Promise.resolve([]),
-  ]);
+  const [
+    thread,
+    contactFieldDefRows,
+    contactTagRows,
+    taskRows,
+    manualStageTaskRows,
+    allowedChannels,
+    pendingScheduled,
+    googleConnectionOwner,
+  ] = await Promise.all([
+      getThread(contact.id, allowedChannelIds),
+      db
+        .select()
+        .from(customFieldDefinitions)
+        .where(eq(customFieldDefinitions.entity, "contact"))
+        .orderBy(asc(customFieldDefinitions.order)),
+      db
+        .select({ tagId: contactTags.tagId })
+        .from(contactTags)
+        .where(eq(contactTags.contactId, contact.id)),
+      db
+        .select({
+          id: tasks.id,
+          title: tasks.title,
+          type: tasks.type,
+          status: tasks.status,
+          dueAt: tasks.dueAt,
+          templateContent: messageTemplates.content,
+        })
+        .from(tasks)
+        .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
+        .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
+        .where(eq(tasks.dealId, id)),
+      db
+        .select({ id: stageTasks.id, title: stageTasks.title, type: stageTasks.type })
+        .from(stageTasks)
+        .where(
+          and(eq(stageTasks.stageId, deal.stageId), eq(stageTasks.isAutomatic, false))
+        )
+        .orderBy(asc(stageTasks.order)),
+      allowedChannelIds.length > 0
+        ? db
+            .select({
+              id: whatsappChannels.id,
+              label: whatsappChannels.label,
+              isDefault: whatsappChannels.isDefault,
+            })
+            .from(whatsappChannels)
+            .where(inArray(whatsappChannels.id, allowedChannelIds))
+        : Promise.resolve([]),
+      getPendingScheduledMessages(contact.id),
+      resolveConnectionOwner(session.user.id),
+    ]);
+
+  const isGoogleConnected = googleConnectionOwner != null;
+
+  const manualStageTasks: ManualStageTask[] = manualStageTaskRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    type: row.type,
+  }));
 
   const allTags: TagOption[] = allTagRows.map((tag) => ({
     id: tag.id,
@@ -158,6 +196,11 @@ export default async function DealDetailPage({
   const tagById = new Map(allTags.map((tag) => [tag.id, tag]));
   const dealTagIds = dealTagRows.map((row) => row.tagId);
   const dealTagsList = dealTagIds
+    .map((tagId) => tagById.get(tagId))
+    .filter((tag): tag is TagOption => Boolean(tag));
+
+  const contactTagIds = contactTagRows.map((row) => row.tagId);
+  const contactTagsList = contactTagIds
     .map((tagId) => tagById.get(tagId))
     .filter((tag): tag is TagOption => Boolean(tag));
 
@@ -201,6 +244,7 @@ export default async function DealDetailPage({
     title: row.title,
     type: row.type,
     status: row.status,
+    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
     messagePreview: row.templateContent
       ? substituteTemplate(row.templateContent, variableValues)
       : null,
@@ -254,26 +298,6 @@ export default async function DealDetailPage({
           <p className="text-sm text-muted-foreground">
             {pipeline?.name} → {stage?.name}
           </p>
-          <p className="text-sm text-muted-foreground">
-            Contato:{" "}
-            <Link href={`/contatos/${contact.id}`} className="text-primary hover:underline">
-              {contact.name}
-            </Link>{" "}
-            — {contact.phone}
-          </p>
-          {owner && (
-            <p className="text-sm text-muted-foreground">Dono: {owner.name}</p>
-          )}
-          {value && <p className="text-sm font-medium">{value}</p>}
-          {dealTagsList.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {dealTagsList.map((tag) => (
-                <Badge key={tag.id} variant="secondary" dot>
-                  {tag.name}
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <DealStatusActions dealId={deal.id} status={deal.status} />
@@ -298,13 +322,65 @@ export default async function DealDetailPage({
         </div>
       </div>
 
-      {fieldDefinitions.length > 0 && (
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Campos customizados</CardTitle>
+            <CardTitle>Dados do negócio</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Valor
+                </dt>
+                <dd className="text-sm">{value ?? "—"}</dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Dono
+                </dt>
+                <dd className="text-sm">{owner?.name ?? "—"}</dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Pipeline / Etapa
+                </dt>
+                <dd className="text-sm">
+                  {pipeline?.name} → {stage?.name}
+                </dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Status
+                </dt>
+                <dd className="text-sm capitalize">{deal.status}</dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Temperatura
+                </dt>
+                <dd className="text-sm">
+                  {deal.temperature ? TEMPERATURE_LABELS[deal.temperature] : "—"}
+                </dd>
+              </div>
+              <div className="space-y-0.5 sm:col-span-2">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Tags
+                </dt>
+                <dd className="pt-0.5">
+                  {dealTagsList.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {dealTagsList.map((tag) => (
+                        <Badge key={tag.id} variant="secondary" dot>
+                          {tag.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm">—</span>
+                  )}
+                </dd>
+              </div>
               {fieldDefinitions.map((field) => (
                 <div key={field.id} className="space-y-0.5">
                   <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
@@ -318,17 +394,124 @@ export default async function DealDetailPage({
             </dl>
           </CardContent>
         </Card>
-      )}
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Dados do contato</CardTitle>
+            <ContactFormDialog
+              mode="edit"
+              contact={{
+                id: contact.id,
+                name: contact.name,
+                phone: contact.phone,
+                email: contact.email,
+                customFields: contactCustomFields,
+                tagIds: contactTagIds,
+              }}
+              fieldDefinitions={contactFieldDefinitions}
+              allTags={allTags}
+              trigger={<Button type="button" variant="outline" size="sm" />}
+              triggerLabel="Editar contato"
+            />
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Nome
+                </dt>
+                <dd className="text-sm">
+                  <Link
+                    href={`/contatos/${contact.id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {contact.name}
+                  </Link>
+                </dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Telefone
+                </dt>
+                <dd className="text-sm">{contact.phone}</dd>
+              </div>
+              <div className="space-y-0.5">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Email
+                </dt>
+                <dd className="text-sm">{contact.email ?? "—"}</dd>
+              </div>
+              <div className="space-y-0.5 sm:col-span-2">
+                <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                  Tags
+                </dt>
+                <dd className="pt-0.5">
+                  {contactTagsList.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {contactTagsList.map((tag) => (
+                        <Badge key={tag.id} variant="secondary" dot>
+                          {tag.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm">—</span>
+                  )}
+                </dd>
+              </div>
+              {contactFieldDefinitions.map((field) => (
+                <div key={field.id} className="space-y-0.5">
+                  <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                    {field.label}
+                  </dt>
+                  <dd className="text-sm">
+                    {formatCustomFieldValue(field, contactCustomFields[field.key])}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Tarefas</CardTitle>
+          <div className="flex items-center gap-2">
+            <ScheduleMeetingDialog
+              dealId={deal.id}
+              contactEmail={contact.email}
+              isConnected={isGoogleConnected}
+              trigger={<Button type="button" variant="outline" size="sm" />}
+              triggerLabel="Agendar reunião"
+            />
+            <ScheduleMessageDialog
+              contactId={contact.id}
+              dealId={deal.id}
+              channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
+              defaultChannelId={preselectedChannelId}
+              trigger={<Button type="button" variant="outline" size="sm" />}
+              triggerLabel="Agendar mensagem"
+            />
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {pendingScheduled.length > 0 && (
+            <ScheduledMessagesList
+              messages={pendingScheduled.map((m) => ({
+                id: m.id,
+                content: m.content,
+                scheduledAt: m.scheduledAt.toISOString(),
+              }))}
+            />
+          )}
           <DealTasksPanel
             dealId={deal.id}
             contactId={contact.id}
+            contactEmail={contact.email}
+            isGoogleConnected={isGoogleConnected}
             tasks={dealTasks}
+            manualStageTasks={manualStageTasks}
             channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
             preselectedChannelId={preselectedChannelId}
           />

@@ -14,7 +14,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrencyBRL } from "@/lib/deal-format";
-import { moveDealStageAction, setDealStatusAction } from "./actions";
+import {
+  bulkAddTagAction,
+  bulkDeleteDealsAction,
+  bulkMoveDealsAction,
+  bulkSetOwnerAction,
+  bulkSetStatusAction,
+  moveDealStageAction,
+  setDealStatusAction,
+} from "./actions";
+import { BulkActionsBar } from "./bulk-actions-bar";
 import { DealCard, type DealCardData } from "./deal-card";
 import { DealFormDialog, type DealFormProps } from "./deal-form-dialog";
 import {
@@ -54,6 +63,7 @@ export function KanbanBoard({
   const [grabbedPreviewStageId, setGrabbedPreviewStageId] = useState<
     string | null
   >(null);
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
 
   const stagesForPipeline = useMemo(
     () =>
@@ -132,6 +142,80 @@ export function KanbanBoard({
         ? "Negócio reaberto"
         : `Negócio marcado como ${status === "ganho" ? "Ganho" : "Perdido"}`
     );
+  }
+
+  function toggleSelectDeal(dealId: string) {
+    setSelectedDealIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(dealId)) next.delete(dealId);
+      else next.add(dealId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedDealIds(new Set());
+  }
+
+  async function handleBulkMoveStage(stageId: string) {
+    const ids = Array.from(selectedDealIds);
+    setDeals((prev) =>
+      prev.map((d) => (ids.includes(d.id) ? { ...d, stageId, updatedAt: new Date() } : d))
+    );
+    clearSelection();
+    await bulkMoveDealsAction(ids, stageId);
+    router.refresh();
+    toast.success(`${ids.length} negócio(s) movido(s)`);
+  }
+
+  async function handleBulkSetOwner(ownerId: string | null) {
+    const ids = Array.from(selectedDealIds);
+    const owner = formProps.owners.find((o) => o.id === ownerId);
+    setDeals((prev) =>
+      prev.map((d) =>
+        ids.includes(d.id) ? { ...d, ownerId, ownerName: owner?.name ?? null } : d
+      )
+    );
+    clearSelection();
+    await bulkSetOwnerAction(ids, ownerId);
+    router.refresh();
+    toast.success(`Dono atualizado em ${ids.length} negócio(s)`);
+  }
+
+  async function handleBulkAddTag(tagId: string) {
+    const ids = Array.from(selectedDealIds);
+    const tag = formProps.allTags.find((t) => t.id === tagId);
+    if (tag) {
+      setDeals((prev) =>
+        prev.map((d) =>
+          ids.includes(d.id) && !d.tags.some((t) => t.id === tagId)
+            ? { ...d, tags: [...d.tags, tag] }
+            : d
+        )
+      );
+    }
+    clearSelection();
+    await bulkAddTagAction(ids, tagId);
+    router.refresh();
+    toast.success(`Tag adicionada a ${ids.length} negócio(s)`);
+  }
+
+  async function handleBulkSetStatus(status: "aberto" | "ganho" | "perdido") {
+    const ids = Array.from(selectedDealIds);
+    setDeals((prev) => prev.map((d) => (ids.includes(d.id) ? { ...d, status } : d)));
+    clearSelection();
+    await bulkSetStatusAction(ids, status);
+    router.refresh();
+    toast.success(`Status atualizado em ${ids.length} negócio(s)`);
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedDealIds);
+    setDeals((prev) => prev.filter((d) => !ids.includes(d.id)));
+    clearSelection();
+    await bulkDeleteDealsAction(ids);
+    router.refresh();
+    toast.success(`${ids.length} negócio(s) excluído(s)`);
   }
 
   function handleCardKeyDown(e: React.KeyboardEvent, deal: DealCardData) {
@@ -224,6 +308,21 @@ export function KanbanBoard({
         allTags={formProps.allTags}
       />
 
+      {selectedDealIds.size > 0 && (
+        <BulkActionsBar
+          count={selectedDealIds.size}
+          stages={stagesForPipeline}
+          owners={formProps.owners}
+          allTags={formProps.allTags}
+          onMoveStage={handleBulkMoveStage}
+          onSetOwner={handleBulkSetOwner}
+          onAddTag={handleBulkAddTag}
+          onSetStatus={handleBulkSetStatus}
+          onDelete={handleBulkDelete}
+          onClear={clearSelection}
+        />
+      )}
+
       {stagesForPipeline.length === 0 ? (
         <EmptyState
           icon={Workflow}
@@ -298,13 +397,15 @@ export function KanbanBoard({
                             )?.name ?? null)
                           : null
                       }
-                      draggable
+                      draggable={selectedDealIds.size === 0}
                       onDragStart={() => setDraggedDealId(deal.id)}
                       onDragEnd={() => {
                         setDraggedDealId(null);
                         setDragOverStageId(null);
                       }}
                       onKeyDown={(e) => handleCardKeyDown(e, deal)}
+                      selected={selectedDealIds.has(deal.id)}
+                      onToggleSelect={() => toggleSelectDeal(deal.id)}
                     />
                   ))
                 )}

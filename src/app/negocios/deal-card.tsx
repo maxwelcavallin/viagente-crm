@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListTodo, MessageCircle, MoreVertical, Pencil } from "lucide-react";
+import { Check, ListTodo, MessageCircle, MoreVertical, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatCurrencyBRL,
+  formatMessagePreviewDate,
   formatTimeInStage,
   messagePreviewLabel,
   type DealMessagePreview,
@@ -60,6 +61,8 @@ export function DealCard({
   onDragStart,
   onDragEnd,
   onKeyDown,
+  selected,
+  onToggleSelect,
 }: {
   deal: DealCardData;
   otherStages: { id: string; name: string }[];
@@ -72,6 +75,8 @@ export function DealCard({
   onDragStart: () => void;
   onDragEnd: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const isInactive = deal.status !== "aberto";
   const value = formatCurrencyBRL(deal.value);
@@ -93,6 +98,7 @@ export function DealCard({
         "cursor-grab space-y-2 rounded-xl border border-border bg-card p-3 text-sm transition-all active:cursor-grabbing",
         "hover:border-primary/60",
         isGrabbed && "scale-[1.02] border-primary ring-2 ring-ring/20",
+        selected && "border-primary ring-2 ring-primary/30",
         isInactive && "opacity-60"
       )}
     >
@@ -104,11 +110,33 @@ export function DealCard({
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect();
+            }}
+            aria-label={selected ? "Remover da seleção" : "Selecionar negócio"}
+            aria-pressed={selected}
+            className={cn(
+              "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+              selected
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-input hover:border-primary/60"
+            )}
+          >
+            {selected && <Check size={11} strokeWidth={2.5} />}
+          </button>
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
             {deal.contactName.charAt(0).toUpperCase()}
           </span>
           <div className="min-w-0">
-            <p className="truncate font-medium">{deal.title}</p>
+            <Link
+              href={`/negocios/${deal.id}`}
+              className="block truncate font-medium hover:underline"
+            >
+              {deal.title}
+            </Link>
             <p className="truncate text-xs text-muted-foreground">
               {deal.contactName}
             </p>
@@ -194,9 +222,17 @@ export function DealCard({
       </div>
 
       {deal.messagePreview && (
-        <p className="line-clamp-1 text-xs text-muted-foreground">
-          {messagePreviewLabel(deal.messagePreview)}
-        </p>
+        <div className="space-y-0.5 rounded-md bg-muted/50 px-2 py-1">
+          <p className="text-[10px] font-medium text-muted-foreground">
+            {deal.messagePreview.direction === "saida" ? "Você" : deal.contactName}
+          </p>
+          <p className="line-clamp-1 text-xs">
+            {messagePreviewLabel(deal.messagePreview)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {formatMessagePreviewDate(deal.messagePreview.createdAt)}
+          </p>
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">

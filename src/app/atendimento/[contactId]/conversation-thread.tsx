@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Paperclip, Reply, Star, Users, X } from "lucide-react";
+import { ArrowLeft, Clock, Paperclip, Reply, Star, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +17,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageList, replyPreviewLabel } from "@/components/message-list";
 import { EmojiPicker } from "@/components/emoji-picker";
 import { AudioRecorderButton } from "@/components/audio-recorder-button";
+import { ScheduleMessageDialog } from "@/components/schedule-message-dialog";
+import {
+  ScheduledMessagesList,
+  type ScheduledMessageItem,
+} from "@/components/scheduled-messages-list";
 import { inferMediaKind, uploadAndSendMedia } from "@/lib/upload-media-client";
 import type { ThreadMessage } from "@/lib/conversations";
 
@@ -32,6 +37,7 @@ export function ConversationThread({
   initialMessages,
   channels,
   preselectedChannelId,
+  scheduledMessages,
 }: {
   contactId: string;
   contactName: string;
@@ -41,6 +47,7 @@ export function ConversationThread({
   initialMessages: ThreadMessage[];
   channels: { id: string; label: string }[];
   preselectedChannelId: string | null;
+  scheduledMessages: ScheduledMessageItem[];
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -219,6 +226,9 @@ export function ConversationThread({
       </div>
 
       <div className="space-y-2 border-t border-border p-4">
+        {scheduledMessages.length > 0 && (
+          <ScheduledMessagesList messages={scheduledMessages} />
+        )}
         {channels.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Você não tem acesso a nenhum canal pra responder este contato.
@@ -282,6 +292,22 @@ export function ConversationThread({
               <AudioRecorderButton
                 onRecorded={handleAudioRecorded}
                 disabled={isUploading}
+              />
+              <ScheduleMessageDialog
+                contactId={contactId}
+                channels={channels}
+                defaultChannelId={channelId || preselectedChannelId}
+                defaultMessage={text}
+                onScheduled={() => setText("")}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Agendar envio"
+                  />
+                }
+                triggerLabel={<Clock size={18} strokeWidth={1.75} />}
               />
               <textarea
                 ref={textareaRef}

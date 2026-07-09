@@ -2,6 +2,7 @@ export type DealMessagePreview = {
   type: "texto" | "imagem" | "audio" | "documento" | "video";
   content: string | null;
   createdAt: Date;
+  direction: "entrada" | "saida";
 };
 
 export function messagePreviewLabel(preview: DealMessagePreview): string {
@@ -13,6 +14,17 @@ export function messagePreviewLabel(preview: DealMessagePreview): string {
     documento: "📎 Documento",
   };
   return labels[preview.type];
+}
+
+export function formatMessagePreviewDate(createdAt: Date, now: Date = new Date()): string {
+  const isSameDay =
+    createdAt.getFullYear() === now.getFullYear() &&
+    createdAt.getMonth() === now.getMonth() &&
+    createdAt.getDate() === now.getDate();
+  if (isSameDay) {
+    return createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+  return createdAt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
 export function formatCurrencyBRL(value: string | null): string | null {

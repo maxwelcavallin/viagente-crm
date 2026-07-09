@@ -1,11 +1,6 @@
-import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
-import { db } from "@/db";
-import { contacts, messages, whatsappChannels } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
-import { decryptCredential } from "@/lib/credentials-crypto";
-import { findOpenDealIdForContact } from "@/lib/messaging";
-import { sendZapiText } from "@/lib/zapi";
+import { sendTextMessage } from "@/lib/send-message";
 
 export const dynamic = "force-dynamic";
 
@@ -42,65 +37,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const [channel] = await db
-    .select()
-    .from(whatsappChannels)
-    .where(eq(whatsappChannels.id, body.channelId))
-    .limit(1);
-  if (!channel) {
-    return Response.json({ error: "Canal não encontrado" }, { status: 404 });
+  const result = await sendTextMessage({
+    channelId: body.channelId,
+    contactId: body.contactId,
+    message: body.message.trim(),
+    replyToMessageId: body.replyToMessageId || null,
+    replyToCreatedAt: body.replyToCreatedAt ? new Date(body.replyToCreatedAt) : null,
+  });
+
+  if (!result.ok) {
+    const status = result.error === "Canal não encontrado" || result.error === "Contato não encontrado" ? 404 : 502;
+    return Response.json({ error: result.error }, { status });
   }
 
-  const [contact] = await db
-    .select({ id: contacts.id, phone: contacts.phone })
-    .from(contacts)
-    .where(eq(contacts.id, body.contactId))
-    .limit(1);
-  if (!contact) {
-    return Response.json({ error: "Contato não encontrado" }, { status: 404 });
-  }
-
-  const messageText = body.message.trim();
-
-  let zApiMessageId: string;
-  try {
-    const { messageId } = await sendZapiText(
-      {
-        zapiInstanceId: channel.zapiInstanceId,
-        zapiToken: decryptCredential(channel.zapiToken),
-        zapiClientToken: decryptCredential(channel.zapiClientToken),
-      },
-      contact.phone,
-      messageText
-    );
-    zApiMessageId = messageId;
-  } catch (error) {
-    console.error("[messages/send] falha ao enviar via Z-API", error);
-    return Response.json(
-      { error: "Falha ao enviar mensagem via WhatsApp" },
-      { status: 502 }
-    );
-  }
-
-  const dealId = await findOpenDealIdForContact(contact.id);
-
-  const [created] = await db
-    .insert(messages)
-    .values({
-      dealId,
-      contactId: contact.id,
-      channelId: channel.id,
-      direction: "saida",
-      type: "texto",
-      content: messageText,
-      status: "enviado",
-      zApiMessageId,
-      replyToMessageId: body.replyToMessageId || null,
-      replyToCreatedAt: body.replyToCreatedAt
-        ? new Date(body.replyToCreatedAt)
-        : null,
-    })
-    .returning();
-
-  return Response.json({ message: created });
+  return Response.json({ message: result.message });
 }
