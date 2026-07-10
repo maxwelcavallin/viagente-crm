@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { EditUserDialog } from "./edit-user-dialog";
+import { DeleteUserDialog } from "./delete-user-dialog";
 
 type UserRow = {
   id: string;
@@ -18,7 +20,13 @@ type UserRow = {
   mustChangePassword: boolean;
 };
 
-export function UsersTable({ users }: { users: UserRow[] }) {
+export function UsersTable({
+  users,
+  currentUserId,
+}: {
+  users: UserRow[];
+  currentUserId: string;
+}) {
   if (users.length === 0) {
     return (
       <EmptyState
@@ -37,6 +45,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
           <TableHead>Email</TableHead>
           <TableHead>Role</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -57,6 +66,12 @@ export function UsersTable({ users }: { users: UserRow[] }) {
               ) : (
                 "Ativo"
               )}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center justify-end gap-1.5">
+                <EditUserDialog user={user} />
+                {user.id !== currentUserId && <DeleteUserDialog user={user} />}
+              </div>
             </TableCell>
           </TableRow>
         ))}

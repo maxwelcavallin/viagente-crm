@@ -494,6 +494,59 @@ const data = [
       "Logs de entrada e saída aparecem separados por direção, com payload bruto visível",
       "Tela usa exclusivamente os componentes do design system da Etapa 6"
     ]
+  },
+  {
+    title: "Ajuste — Correção do Erro de Fetch no Áudio",
+    desc: "Diagnosticar causa real (CORS, URL expirada, Content-Type, mimetype) antes de corrigir.",
+    promptFile: "correcao-audio-fetch.md",
+    tests: [
+      "Causa raiz do erro foi identificada com evidência (console, network, logs), não por suposição",
+      "Áudio gravado no navegador é enviado com sucesso e chega no WhatsApp do destinatário",
+      "Áudio recebido no WhatsApp é reproduzível no /atendimento sem erro no console",
+      "Testado em pelo menos dois navegadores diferentes (ex: Chrome e Safari)",
+      "Causa raiz e correção documentadas no README ou em comentário no código"
+    ]
+  },
+  {
+    title: "Ajuste — Consolidar Configurações numa Aba Única",
+    desc: "Mover usuários, pipelines, campos, tags, whatsapp e templates para /configuracoes.",
+    promptFile: "ajuste-configuracoes-consolidadas.md",
+    tests: [
+      "/configuracoes existe e lista todas as áreas numa sub-navegação consistente com o design system",
+      "Cada área (usuários, pipelines, campos, tags, whatsapp, templates, webhooks) funciona igual, só que na nova rota",
+      "Navegação principal mostra um único item \"Configurações\", sem links soltos de admin",
+      "Acessar uma rota antiga (/admin/usuarios) redireciona para a nova sem quebrar",
+      "Atendente continua sem acesso a /configuracoes nem a nenhuma sub-rota"
+    ]
+  },
+  {
+    title: "Etapa 11 — Importação de Contatos e Negócios da Clint",
+    desc: "CSV com mapeamento de campos e roteamento para pipeline/etapa específica.",
+    promptFile: "etapa-11-importacao-clint.md",
+    tests: [
+      "Upload de CSV mostra colunas e permite mapear cada uma para um campo do CRM",
+      "Destino único (pipeline/etapa fixa) importa todos os negócios corretamente nessa etapa",
+      "Destino por coluna com de-para de etapas roteia cada negócio para a etapa certa",
+      "Linha com etapa sem correspondência mapeada não é importada e aparece no relatório de erro",
+      "Contato com telefone já existente é atualizado, não duplicado",
+      "Preview mostra o resultado esperado antes de confirmar a importação",
+      "Relatório final mostra contagem de criados/atualizados/erros com detalhe suficiente"
+    ]
+  },
+  {
+    title: "Etapa 12 — Integração com Google Agenda (OAuth real, app Interno)",
+    desc: "OAuth via Workspace Interno — sem verificação do Google, sem expiração de 7 dias.",
+    promptFile: "etapa-12-google-agenda.md",
+    tests: [
+      "Atendente conecta a própria conta @viagente.com.br sem ver tela de \"app não verificado\"",
+      "Criar agendamento a partir de uma tarefa cria evento de verdade no Google Agenda do usuário",
+      "Evento tem título, horário correto, descrição com link pro negócio, e convida o contato se tiver email",
+      "Tarefa só é marcada como concluída após confirmação real da API do Google",
+      "Usuário sem conta conectada consegue usar o fallback de link simples, sem ficar travado",
+      "Reconectar/desconectar a conta funciona em /configuracoes",
+      "Erro da API do Google mostra toast claro, nunca falha silenciosamente",
+      "Nenhuma verificação do Google foi necessária (app configurado como Interno)"
+    ]
   }
 ];
 

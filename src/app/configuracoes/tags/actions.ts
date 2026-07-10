@@ -52,6 +52,36 @@ export async function createTagAction(
   return idle;
 }
 
+export type QuickCreateTagResult =
+  | { ok: true; tag: { id: string; name: string; color: string | null } }
+  | { ok: false; message: string };
+
+// Variante de createTagAction que devolve a tag criada (id incluso) em vez
+// de só um status — usada pela criação rápida embutida nas telas de
+// mapeamento (webhook/importação), que precisa selecionar a tag na hora.
+export async function createTagQuickAction(
+  name: string,
+  color: string | null
+): Promise<QuickCreateTagResult> {
+  if (!(await requireAdmin())) {
+    return { ok: false, message: "Acesso negado." };
+  }
+  if (!name.trim()) {
+    return { ok: false, message: "Nome é obrigatório." };
+  }
+  if (await nameConflicts(name)) {
+    return { ok: false, message: "Já existe uma tag com esse nome." };
+  }
+
+  const [created] = await db
+    .insert(tags)
+    .values({ name: name.trim(), color: color || null })
+    .returning({ id: tags.id, name: tags.name, color: tags.color });
+
+  revalidatePath("/configuracoes/tags");
+  return { ok: true, tag: created };
+}
+
 export async function updateTagAction(
   _prevState: TagFormState,
   formData: FormData

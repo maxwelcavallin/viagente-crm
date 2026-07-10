@@ -44,6 +44,7 @@ function StageRow({
   total,
   stageTasks,
   templates,
+  channels,
   isDragging,
   isDropTarget,
   isGrabbed,
@@ -59,6 +60,7 @@ function StageRow({
   total: number;
   stageTasks: StageTask[];
   templates: { id: string; name: string }[];
+  channels: { id: string; label: string }[];
   isDragging: boolean;
   isDropTarget: boolean;
   isGrabbed: boolean;
@@ -210,6 +212,7 @@ function StageRow({
         pipelineId={pipelineId}
         tasks={stageTasks}
         templates={templates}
+        channels={channels}
       />
     </div>
   );
@@ -220,11 +223,13 @@ export function StagesList({
   pipelineId,
   stageTasksByStageId,
   templates,
+  channels,
 }: {
   stages: Stage[];
   pipelineId: string;
   stageTasksByStageId: Record<string, StageTask[]>;
   templates: { id: string; name: string }[];
+  channels: { id: string; label: string }[];
 }) {
   // O componente é remontado (via `key` no chamador) sempre que a ordem ou
   // o conjunto de etapas muda no servidor, então o estado local não precisa
@@ -326,6 +331,7 @@ export function StagesList({
           total={order.length}
           stageTasks={stageTasksByStageId[stage.id] ?? []}
           templates={templates}
+          channels={channels}
           isDragging={draggedId === stage.id}
           isDropTarget={overIndex === index && draggedId !== stage.id}
           isGrabbed={grabbedId === stage.id}

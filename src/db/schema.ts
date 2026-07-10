@@ -34,6 +34,13 @@ export const stageTaskTypeEnum = pgEnum("stage_task_type", [
   "generica",
 ]);
 export const taskStatusEnum = pgEnum("task_status", ["pendente", "concluida"]);
+// Etapa de automação avançada: quando a task de uma tag_automation é criada.
+// "tag_adicionada" dispara na hora (evento síncrono); "dias_apos_tag" é
+// varrido pelo cron de automação usando deal_tags.created_at.
+export const tagAutomationTriggerEnum = pgEnum("tag_automation_trigger", [
+  "tag_adicionada",
+  "dias_apos_tag",
+]);
 export const customFieldEntityEnum = pgEnum("custom_field_entity", [
   "deal",
   "contact",
@@ -157,10 +164,25 @@ export const stageTasks = pgTable(
     // Prazo em dias a partir da entrada na etapa — usado pra calcular
     // tasks.due_at quando a tarefa é (auto-)criada. Null = sem prazo.
     daysToComplete: integer("days_to_complete"),
+    // Atraso, em dias, entre o negócio entrar na etapa e a task ser CRIADA
+    // (independente de daysToComplete, que é o prazo da task já criada).
+    // Null = cria na hora (comportamento original da Etapa 9). Setado = só
+    // cria quando o negócio estiver nesta etapa há esses dias, varrido pelo
+    // cron de automação via deals.stage_entered_at.
+    triggerDelayDays: integer("trigger_delay_days"),
     // false = a tarefa fica só como "modelo" disponível pra adicionar
     // manualmente ao negócio (ver addStageTaskToDealAction); não é criada
     // sozinha quando o negócio entra na etapa.
     isAutomatic: boolean("is_automatic").notNull().default(true),
+    // Automação sem revisão humana (só faz sentido pra type='mensagem' com
+    // messageTemplateId setado): o cron de send-automatic-tasks dispara a
+    // mensagem sozinho quando a task vence, sem esperar alguém clicar
+    // "Executar". autoSendChannelId é o canal usado nesse disparo.
+    autoSend: boolean("auto_send").notNull().default(false),
+    autoSendChannelId: uuid("auto_send_channel_id").references(
+      () => whatsappChannels.id,
+      { onDelete: "set null" }
+    ),
   },
   (t) => [index("stage_tasks_stage_id_idx").on(t.stageId)]
 );
@@ -206,6 +228,12 @@ export const deals = pgTable(
     stageId: uuid("stage_id")
       .notNull()
       .references(() => stages.id),
+    // Quando o negócio entrou na etapa atual — resetado toda vez que
+    // stage_id muda (ver moveDealStageAction). Base pro gatilho "X dias na
+    // etapa" (stageTasks.triggerDelayDays), não confundir com created_at.
+    stageEnteredAt: timestamp("stage_entered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     ownerId: uuid("owner_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -242,10 +270,23 @@ export const tasks = pgTable(
     stageTaskId: uuid("stage_task_id").references(() => stageTasks.id, {
       onDelete: "set null",
     }),
+    // Preenchido quando a task nasce de uma automação de tag (ver
+    // tag_automations) — usado pelo cron de automação pra dedupe do
+    // gatilho "dias_apos_tag" (não recriar a mesma task a cada varredura).
+    tagAutomationId: uuid("tag_automation_id").references(
+      () => tagAutomations.id,
+      { onDelete: "set null" }
+    ),
     title: text("title").notNull(),
     type: stageTaskTypeEnum("type").notNull(),
     status: taskStatusEnum("status").notNull().default("pendente"),
     dueAt: timestamp("due_at", { withTimezone: true }),
+    // Necessário pro dedupe do cron de automação (compara com
+    // deals.stage_entered_at / deal_tags.created_at pra saber se a task
+    // desta "visita"/"tag" já foi criada). Não existia antes desta etapa.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     completedBy: uuid("completed_by").references(() => users.id, {
       onDelete: "set null",
@@ -279,9 +320,45 @@ export const dealTags = pgTable(
     tagId: uuid("tag_id")
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
+    // Quando a tag foi anexada — base pro gatilho "X dias com a tag"
+    // (tag_automations.trigger = 'dias_apos_tag').
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.dealId, t.tagId] })]
 );
+
+// ---------- Automação por tag (negócio) ----------
+//
+// Restrita a tags de negócio (deal_tags), não de contato: toda task
+// pertence a um deal_id, e um contato pode ter zero ou vários negócios —
+// "tag no contato" não tem um negócio único pra receber a task.
+export const tagAutomations = pgTable("tag_automations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tagId: uuid("tag_id")
+    .notNull()
+    .references(() => tags.id, { onDelete: "cascade" }),
+  trigger: tagAutomationTriggerEnum("trigger")
+    .notNull()
+    .default("tag_adicionada"),
+  // Só usado quando trigger = 'dias_apos_tag'.
+  delayDays: integer("delay_days"),
+  title: text("title").notNull(),
+  type: stageTaskTypeEnum("type").notNull(),
+  messageTemplateId: uuid("message_template_id").references(
+    () => messageTemplates.id,
+    { onDelete: "set null" }
+  ),
+  autoSend: boolean("auto_send").notNull().default(false),
+  autoSendChannelId: uuid("auto_send_channel_id").references(
+    () => whatsappChannels.id,
+    { onDelete: "set null" }
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // Não estava na tabela de referência original (spec só lista deal_tags),
 // mas a Etapa 7 pede atribuição de tags a contato — adicionada aqui pelo
@@ -336,6 +413,12 @@ export const whatsappChannels = pgTable("whatsapp_channels", {
   phoneNumber: text("phone_number"),
   status: whatsappChannelStatusEnum("status").notNull().default("pendente"),
   isDefault: boolean("is_default").notNull().default(false),
+  // Repasse (fan-out) do payload cru recebido da Z-API pra outro sistema que
+  // também usa essa mesma instância — a Z-API só aceita uma URL cadastrada
+  // por evento, então quem precisa de mais de um consumidor tem que
+  // replicar por conta própria (ver /api/whatsapp/webhook/[channelId]).
+  // Null = não repassa. Cobre tanto "ao receber" quanto "status".
+  relayWebhookUrl: text("relay_webhook_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -486,6 +569,11 @@ export const webhookConfigs = pgTable("webhook_configs", {
   active: boolean("active").notNull().default(true),
   secretToken: text("secret_token"),
   fieldMapping: jsonb("field_mapping").notNull().default({}),
+  // Tags estáticas (Etapa 13): aplicadas a TODO contato/negócio criado por
+  // este webhook, pra identificar a origem — não vêm do payload (ver
+  // decisão em webhook-inbound.ts). Array de tags.id em texto puro.
+  contactTagIds: jsonb("contact_tag_ids").notNull().default([]),
+  dealTagIds: jsonb("deal_tag_ids").notNull().default([]),
   // Não listados na tabela de referência da seção 5, mas necessários para o
   // fluxo descrito na seção 6 ("cria negócio na pipeline/etapa padrão
   // configurada pra aquele webhook") — adicionados agora para não exigir

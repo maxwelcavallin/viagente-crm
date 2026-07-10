@@ -50,6 +50,33 @@ const STATUS_MAP: Record<ZapiStatusCallback["status"], "enviado" | "entregue" | 
   PLAYED: "lido",
 };
 
+// Repasse best-effort do payload cru pra outro sistema que usa a mesma
+// instância Z-API (ver whatsappChannels.relayWebhookUrl) — a Z-API só
+// aceita uma URL cadastrada por evento, então quem precisa de mais de um
+// consumidor tem que replicar por conta própria. Nunca lança e nunca
+// bloqueia/atrasa o processamento normal do webhook.
+async function relayZapiPayload(url: string, payload: unknown): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        console.error(`[webhook whatsapp] repasse pra ${url} respondeu ${res.status}`);
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.error(`[webhook whatsapp] falha ao repassar pra ${url}`, error);
+  }
+}
+
 async function downloadZapiMedia(url: string): Promise<Buffer> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -139,7 +166,11 @@ export async function POST(
   const { channelId } = await params;
 
   const [channel] = await db
-    .select({ id: whatsappChannels.id, zapiInstanceId: whatsappChannels.zapiInstanceId })
+    .select({
+      id: whatsappChannels.id,
+      zapiInstanceId: whatsappChannels.zapiInstanceId,
+      relayWebhookUrl: whatsappChannels.relayWebhookUrl,
+    })
     .from(whatsappChannels)
     .where(eq(whatsappChannels.id, channelId))
     .limit(1);
@@ -155,6 +186,10 @@ export async function POST(
 
   if (!payload || payload.instanceId !== channel.zapiInstanceId) {
     return Response.json({ error: "instanceId não confere com o canal" }, { status: 401 });
+  }
+
+  if (channel.relayWebhookUrl) {
+    void relayZapiPayload(channel.relayWebhookUrl, payload);
   }
 
   try {

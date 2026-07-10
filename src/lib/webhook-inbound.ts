@@ -7,7 +7,7 @@ import {
   temperatureRules,
   webhookLogs,
 } from "@/db/schema";
-import { attachTagsToContact, attachTagsToDeal, resolveOrCreateTagIds, splitTagNames } from "@/lib/tags";
+import { attachTagsToContact, attachTagsToDeal } from "@/lib/tags";
 
 // Resolve um caminho tipo "answers.gasto_cartao" ou "payload.nome" dentro de
 // um objeto JSON arbitrário recebido de fora. Suporta apenas notação de
@@ -100,10 +100,14 @@ export async function processInboundPayload(
     fieldMapping: unknown;
     defaultPipelineId: string | null;
     defaultStageId: string | null;
+    contactTagIds?: unknown;
+    dealTagIds?: unknown;
   },
   payload: unknown
 ): Promise<InboundProcessResult> {
   const fieldMapping = (webhookConfig.fieldMapping as FieldMapping) ?? {};
+  const contactTagIds = (webhookConfig.contactTagIds as string[] | null) ?? [];
+  const dealTagIds = (webhookConfig.dealTagIds as string[] | null) ?? [];
 
   if (!webhookConfig.defaultPipelineId || !webhookConfig.defaultStageId) {
     return {
@@ -117,8 +121,6 @@ export async function processInboundPayload(
   const contactFields: { name?: string; phone?: string; email?: string } = {};
   const contactCustomFields: Record<string, string> = {};
   const dealCustomFields: Record<string, string> = {};
-  let contactTagNames: string[] = [];
-  let dealTagNames: string[] = [];
 
   for (const [mappingKey, jsonPath] of Object.entries(fieldMapping)) {
     const value = getByPath(payload, jsonPath);
@@ -131,8 +133,6 @@ export async function processInboundPayload(
     if (mappingKey === "contact.name") contactFields.name = stringValue;
     else if (mappingKey === "contact.phone") contactFields.phone = stringValue;
     else if (mappingKey === "contact.email") contactFields.email = stringValue;
-    else if (mappingKey === "contact.tags") contactTagNames = splitTagNames(stringValue);
-    else if (mappingKey === "deal.tags") dealTagNames = splitTagNames(stringValue);
     else if (mappingKey.startsWith("contact.custom."))
       contactCustomFields[mappingKey.replace("contact.custom.", "")] = stringValue;
     else if (mappingKey.startsWith("deal.custom."))
@@ -193,11 +193,11 @@ export async function processInboundPayload(
     })
     .returning({ id: deals.id });
 
-  if (contactTagNames.length > 0) {
-    await attachTagsToContact(contactId, await resolveOrCreateTagIds(contactTagNames));
+  if (contactTagIds.length > 0) {
+    await attachTagsToContact(contactId, contactTagIds);
   }
-  if (dealTagNames.length > 0) {
-    await attachTagsToDeal(createdDeal.id, await resolveOrCreateTagIds(dealTagNames));
+  if (dealTagIds.length > 0) {
+    await attachTagsToDeal(createdDeal.id, dealTagIds);
   }
 
   return {

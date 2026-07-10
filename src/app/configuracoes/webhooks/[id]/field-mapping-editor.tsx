@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CONTACT_SYSTEM_FIELDS, DEAL_SYSTEM_FIELDS } from "@/lib/webhook-fields";
+import { FieldQuickCreate } from "@/components/field-quick-create";
+import { CONTACT_SYSTEM_FIELDS } from "@/lib/webhook-fields";
 import type { FieldDef } from "@/lib/custom-fields";
 import { updateFieldMappingAction } from "../actions";
 
@@ -22,6 +23,8 @@ export function FieldMappingEditor({
 }) {
   const router = useRouter();
   const [mapping, setMapping] = useState<Record<string, string>>(initialMapping);
+  const [contactFields, setContactFields] = useState(contactFieldDefs);
+  const [dealFields, setDealFields] = useState(dealFieldDefs);
   const [isPending, setIsPending] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -43,30 +46,12 @@ export function FieldMappingEditor({
     }
   }
 
-  // Só "deal.tags" de DEAL_SYSTEM_FIELDS entra aqui — título/valor do
-  // negócio não são expostos porque o webhook de entrada não os lê (o
-  // título sempre vem do nome do contato); mapeá-los seria uma opção morta
-  // na UI. A importação de CSV (Etapa 11) usa a lista completa.
-  const rows = [
-    ...CONTACT_SYSTEM_FIELDS.map((f) => ({ key: f.key, label: f.label })),
-    ...DEAL_SYSTEM_FIELDS.filter((f) => f.key === "deal.tags").map((f) => ({
-      key: f.key,
-      label: f.label,
-    })),
-    ...contactFieldDefs.map((f) => ({
-      key: `contact.custom.${f.key}`,
-      label: `${f.label} (contato)`,
-    })),
-    ...dealFieldDefs.map((f) => ({
-      key: `deal.custom.${f.key}`,
-      label: `${f.label} (negócio)`,
-    })),
-  ];
+  const systemRows = CONTACT_SYSTEM_FIELDS.map((f) => ({ key: f.key, label: f.label }));
 
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        {rows.map((row) => (
+        {systemRows.map((row) => (
           <div key={row.key} className="space-y-1">
             <Label htmlFor={`map-${row.key}`} className="text-xs">
               {row.label}
@@ -80,6 +65,50 @@ export function FieldMappingEditor({
             />
           </div>
         ))}
+        {contactFields.map((f) => {
+          const key = `contact.custom.${f.key}`;
+          return (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={`map-${key}`} className="text-xs">
+                {f.label} (contato)
+              </Label>
+              <Input
+                id={`map-${key}`}
+                value={mapping[key] ?? ""}
+                onChange={(e) => setPath(key, e.target.value)}
+                placeholder="ex: payload.nome"
+                className="font-mono text-xs"
+              />
+            </div>
+          );
+        })}
+        {dealFields.map((f) => {
+          const key = `deal.custom.${f.key}`;
+          return (
+            <div key={key} className="space-y-1">
+              <Label htmlFor={`map-${key}`} className="text-xs">
+                {f.label} (negócio)
+              </Label>
+              <Input
+                id={`map-${key}`}
+                value={mapping[key] ?? ""}
+                onChange={(e) => setPath(key, e.target.value)}
+                placeholder="ex: payload.nome"
+                className="font-mono text-xs"
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-4">
+        <FieldQuickCreate
+          entity="contact"
+          onFieldCreated={(field) => setContactFields((prev) => [...prev, field])}
+        />
+        <FieldQuickCreate
+          entity="deal"
+          onFieldCreated={(field) => setDealFields((prev) => [...prev, field])}
+        />
       </div>
       <div className="flex items-center gap-3">
         <Button type="button" onClick={handleSave} disabled={isPending}>

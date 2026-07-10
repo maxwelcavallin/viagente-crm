@@ -44,7 +44,10 @@ export type StageTask = {
   type: "mensagem" | "ligacao" | "agendamento" | "generica";
   messageTemplateId: string | null;
   daysToComplete: number | null;
+  triggerDelayDays: number | null;
   isAutomatic: boolean;
+  autoSend: boolean;
+  autoSendChannelId: string | null;
 };
 
 const TYPE_LABELS: Record<StageTask["type"], string> = {
@@ -60,16 +63,22 @@ function EditStageTaskDialog({
   task,
   pipelineId,
   templates,
+  channels,
 }: {
   task: StageTask;
   pipelineId: string;
   templates: { id: string; name: string }[];
+  channels: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     task.messageTemplateId
   );
   const [isAutomatic, setIsAutomatic] = useState(task.isAutomatic);
+  const [autoSend, setAutoSend] = useState(task.autoSend);
+  const [autoSendChannelId, setAutoSendChannelId] = useState<string | null>(
+    task.autoSendChannelId
+  );
   const [state, formAction, isPending] = useActionState(
     updateStageTaskAction,
     idleState
@@ -92,12 +101,27 @@ function EditStageTaskDialog({
           <input type="hidden" name="id" value={task.id} />
           <input type="hidden" name="pipelineId" value={pipelineId} />
           <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
+          <input type="hidden" name="autoSend" value={String(autoSend)} />
+          <input type="hidden" name="autoSendChannelId" value={autoSendChannelId ?? ""} />
           <div className="space-y-2">
             <Label htmlFor={`title-${task.id}`}>Título</Label>
             <Input id={`title-${task.id}`} name="title" defaultValue={task.title} required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`days-${task.id}`}>Prazo (dias após entrar na etapa)</Label>
+            <Label htmlFor={`trigger-days-${task.id}`}>
+              Disparar X dias após entrar na etapa
+            </Label>
+            <Input
+              id={`trigger-days-${task.id}`}
+              name="triggerDelayDays"
+              type="number"
+              min={0}
+              placeholder="Deixe vazio pra criar na hora"
+              defaultValue={task.triggerDelayDays ?? ""}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`days-${task.id}`}>Prazo (dias após a tarefa ser criada)</Label>
             <Input
               id={`days-${task.id}`}
               name="daysToComplete"
@@ -144,6 +168,47 @@ function EditStageTaskDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {task.type === "mensagem" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor={`autosend-${task.id}`}>
+                    Enviar automaticamente, sem clique
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    A mensagem sai sozinha assim que a tarefa é criada (ou quando o
+                    prazo vencer, se houver).
+                  </p>
+                </div>
+                <Switch
+                  id={`autosend-${task.id}`}
+                  checked={autoSend}
+                  onCheckedChange={setAutoSend}
+                />
+              </div>
+              {autoSend && (
+                <div className="space-y-2">
+                  <Label>Canal WhatsApp</Label>
+                  <Select
+                    items={Object.fromEntries(channels.map((c) => [c.id, c.label]))}
+                    value={autoSendChannelId}
+                    onValueChange={(v) => setAutoSendChannelId(v ?? null)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione um canal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
           {state.status === "error" && (
@@ -212,10 +277,12 @@ function CreateStageTaskForm({
   stageId,
   pipelineId,
   templates,
+  channels,
 }: {
   stageId: string;
   pipelineId: string;
   templates: { id: string; name: string }[];
+  channels: { id: string; label: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(
     createStageTaskAction,
@@ -226,6 +293,8 @@ function CreateStageTaskForm({
     null
   );
   const [isAutomatic, setIsAutomatic] = useState(true);
+  const [autoSend, setAutoSend] = useState(false);
+  const [autoSendChannelId, setAutoSendChannelId] = useState<string | null>(null);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
@@ -233,6 +302,8 @@ function CreateStageTaskForm({
       <input type="hidden" name="pipelineId" value={pipelineId} />
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
+      <input type="hidden" name="autoSend" value={String(autoSend)} />
+      <input type="hidden" name="autoSendChannelId" value={autoSendChannelId ?? ""} />
       <div className="space-y-1">
         <Label htmlFor={`new-title-${stageId}`} className="text-xs">
           Título
@@ -291,6 +362,19 @@ function CreateStageTaskForm({
         </div>
       )}
       <div className="space-y-1">
+        <Label htmlFor={`new-trigger-days-${stageId}`} className="text-xs">
+          Disparar após (dias)
+        </Label>
+        <Input
+          id={`new-trigger-days-${stageId}`}
+          name="triggerDelayDays"
+          type="number"
+          min={0}
+          placeholder="Na hora"
+          className="h-8 w-28 text-sm"
+        />
+      </div>
+      <div className="space-y-1">
         <Label htmlFor={`new-days-${stageId}`} className="text-xs">
           Prazo (dias)
         </Label>
@@ -314,6 +398,40 @@ function CreateStageTaskForm({
           Automática
         </Label>
       </div>
+      {type === "mensagem" && (
+        <div className="flex items-center gap-1.5 pb-1.5">
+          <Switch
+            id={`new-autosend-${stageId}`}
+            size="sm"
+            checked={autoSend}
+            onCheckedChange={setAutoSend}
+          />
+          <Label htmlFor={`new-autosend-${stageId}`} className="text-xs">
+            Enviar sozinha
+          </Label>
+        </div>
+      )}
+      {type === "mensagem" && autoSend && (
+        <div className="space-y-1">
+          <Label className="text-xs">Canal</Label>
+          <Select
+            items={Object.fromEntries(channels.map((c) => [c.id, c.label]))}
+            value={autoSendChannelId}
+            onValueChange={(v) => setAutoSendChannelId(v ?? null)}
+          >
+            <SelectTrigger className="h-8 w-40 text-sm">
+              <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+            <SelectContent>
+              {channels.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <Button type="submit" size="sm" disabled={isPending}>
         {isPending ? "Adicionando..." : "Adicionar tarefa"}
       </Button>
@@ -329,11 +447,13 @@ export function StageTasksPanel({
   pipelineId,
   tasks,
   templates,
+  channels,
 }: {
   stageId: string;
   pipelineId: string;
   tasks: StageTask[];
   templates: { id: string; name: string }[];
+  channels: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -407,6 +527,11 @@ export function StageTasksPanel({
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {TYPE_LABELS[task.type]}
                 </span>
+                {task.triggerDelayDays != null && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Disparo: +{task.triggerDelayDays}d
+                  </span>
+                )}
                 {task.daysToComplete != null && (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     Prazo: {task.daysToComplete}d
@@ -417,11 +542,17 @@ export function StageTasksPanel({
                     Manual
                   </span>
                 )}
+                {task.autoSend && (
+                  <span className="shrink-0 rounded-full bg-status-success/15 px-2 py-0.5 text-[11px] font-medium text-status-success">
+                    Envio automático
+                  </span>
+                )}
                 <div className="flex shrink-0 items-center gap-1.5">
                   <EditStageTaskDialog
                     task={task}
                     pipelineId={pipelineId}
                     templates={templates}
+                    channels={channels}
                   />
                   <DeleteStageTaskDialog task={task} pipelineId={pipelineId} />
                 </div>
@@ -432,6 +563,7 @@ export function StageTasksPanel({
             stageId={stageId}
             pipelineId={pipelineId}
             templates={templates}
+            channels={channels}
           />
         </div>
       )}

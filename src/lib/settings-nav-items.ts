@@ -8,6 +8,7 @@ import {
   Users,
   Webhook,
   Workflow,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/configuracoes/pipelines", label: "Pipelines e Etapas", icon: Workflow },
   { href: "/configuracoes/campos", label: "Campos Customizados", icon: ListChecks },
   { href: "/configuracoes/tags", label: "Tags", icon: Tag },
+  { href: "/configuracoes/automacoes", label: "Automações", icon: Zap },
   { href: "/configuracoes/whatsapp", label: "WhatsApp — Canais e Acesso", icon: Smartphone },
   { href: "/configuracoes/templates", label: "Templates de Mensagem", icon: FileText },
   { href: "/configuracoes/webhooks", label: "Webhooks", icon: Webhook },

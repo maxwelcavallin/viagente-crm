@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Briefcase,
   Home,
+  ListTodo,
   MessagesSquare,
   Settings,
   UserCircle,
@@ -23,6 +24,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Início", icon: Home },
   { href: "/negocios", label: "Negócios", icon: Briefcase },
+  { href: "/tarefas", label: "Tarefas", icon: ListTodo },
   { href: "/atendimento", label: "Atendimento", icon: MessagesSquare },
   { href: "/contatos", label: "Contatos", icon: Users },
   { href: "/perfil", label: "Meu Perfil", icon: UserCircle },

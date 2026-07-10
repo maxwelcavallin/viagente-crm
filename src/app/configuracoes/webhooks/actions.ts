@@ -202,6 +202,24 @@ export async function updateFieldMappingAction(
   return { ok: true };
 }
 
+// Tags separadas do mapeamento de campos (Etapa 13): aplicadas estaticamente
+// a todo contato/negócio criado por este webhook — não vêm do payload.
+export async function updateWebhookTagsAction(
+  webhookId: string,
+  contactTagIds: string[],
+  dealTagIds: string[]
+): Promise<{ ok: boolean }> {
+  if (!(await requireAdmin())) return { ok: false };
+
+  await db
+    .update(webhookConfigs)
+    .set({ contactTagIds, dealTagIds })
+    .where(eq(webhookConfigs.id, webhookId));
+
+  revalidatePath(`/configuracoes/webhooks/${webhookId}`);
+  return { ok: true };
+}
+
 export async function toggleWebhookActiveAction(
   id: string,
   active: boolean

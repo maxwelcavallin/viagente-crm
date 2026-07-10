@@ -29,6 +29,16 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!body.contactEmail?.trim()) {
+    return Response.json(
+      {
+        error: "invalid_input",
+        message: "O contato não tem email cadastrado — cadastre um email antes de agendar.",
+      },
+      { status: 400 }
+    );
+  }
+
   const startAt = new Date(body.startAt);
   const endAt = new Date(body.endAt);
   if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {

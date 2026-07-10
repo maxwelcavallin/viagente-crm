@@ -7,6 +7,7 @@ import {
   customFieldDefinitions,
   pipelines,
   stages,
+  tags,
   webhookConfigs,
   webhookLogs,
 } from "@/db/schema";
@@ -14,7 +15,9 @@ import { getBaseUrl } from "@/lib/base-url";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FieldDef } from "@/lib/custom-fields";
+import type { TagOption } from "@/lib/tags";
 import { FieldMappingEditor } from "./field-mapping-editor";
+import { WebhookTagsEditor } from "./webhook-tags-editor";
 import { TestPayloadPanel } from "./test-payload-panel";
 import { LogsList, type LogRow } from "./logs-list";
 import { EditOutboundForm } from "./edit-outbound-form";
@@ -40,7 +43,7 @@ export default async function WebhookDetailPage({
   const baseUrl = await getBaseUrl();
   const inboundUrl = `${baseUrl}/api/webhooks/inbound/${webhook.id}`;
 
-  const [allPipelines, allStages, contactFieldRows, dealFieldRows, logRows] =
+  const [allPipelines, allStages, contactFieldRows, dealFieldRows, logRows, allTagRows] =
     await Promise.all([
       db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
       db
@@ -63,7 +66,10 @@ export default async function WebhookDetailPage({
         .where(eq(webhookLogs.webhookConfigId, id))
         .orderBy(desc(webhookLogs.createdAt))
         .limit(50),
+      db.select().from(tags).orderBy(asc(tags.name)),
     ]);
+
+  const allTags: TagOption[] = allTagRows.map((t) => ({ id: t.id, name: t.name, color: t.color }));
 
   const toFieldDef = (row: (typeof contactFieldRows)[number]): FieldDef => ({
     id: row.id,
@@ -142,6 +148,20 @@ export default async function WebhookDetailPage({
                 initialMapping={(webhook.fieldMapping as Record<string, string>) ?? {}}
                 contactFieldDefs={contactFieldRows.map(toFieldDef)}
                 dealFieldDefs={dealFieldRows.map(toFieldDef)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tags</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WebhookTagsEditor
+                webhookId={webhook.id}
+                allTags={allTags}
+                initialContactTagIds={(webhook.contactTagIds as string[]) ?? []}
+                initialDealTagIds={(webhook.dealTagIds as string[]) ?? []}
               />
             </CardContent>
           </Card>

@@ -20,10 +20,14 @@ As tabelas `deals`, `tags`, `deal_tags` e `custom_field_definitions` (entity='de
 3. Marcar negócio como **Ganho** ou **Perdido**: ação disponível no card (menu) e no detalhe — atualiza `deals.status`; negócios ganhos/perdidos saem da visão ativa do kanban (ou ficam visualmente esmaecidos — usar o padrão de card "inativo" do design system)
 4. Excluir negócio: modal de confirmação (padrão destrutivo da Etapa 6)
 
-### B. Página/modal de detalhe do negócio
-5. Ao clicar num card, abrir detalhe completo: todos os campos, campos customizados, tags, dono, valor
-6. **Histórico de conversa vinculado**: como `messages.deal_id` já é preenchido automaticamente pela Etapa 5, mostrar aqui o histórico de WhatsApp daquele negócio, com o mesmo botão "Exportar conversa (.md)" já existente (reaproveitar o endpoint, não duplicar)
-7. Seção de tarefas do negócio: por enquanto só uma lista vazia com empty state — a lógica de criação/execução de tarefa é a Etapa 9, que vem em seguida
+### B. Página/modal de detalhe do negócio (visualização completa)
+5. Ao clicar num card, abrir uma visualização completa do negócio, organizada em seções claras:
+   - **Dados do negócio:** título, valor, dono, pipeline/etapa atual, status, temperatura, tags, todos os campos customizados de `entity='deal'`
+   - **Dados do contato:** nome, telefone, email, e todos os campos customizados de `entity='contato'` — exibidos diretamente aqui, **sem precisar navegar pra `/contatos/[id]`** (é um resumo completo do contato dentro do contexto do negócio)
+   - **Tarefas:** lista de tarefas do negócio (mensagem, ligação, agendamento, genérica) com status pendente/concluída — a criação automática e execução em 1 clique são implementadas na Etapa 9, mas o painel/seção já deve existir aqui com empty state até lá
+   - **Histórico de conversa:** mensagens vinculadas ao negócio (via `messages.deal_id`, já preenchido automaticamente desde a Etapa 5), com o botão "Exportar conversa (.md)" reaproveitando o endpoint existente
+6. Cada seção deve permitir edição inline ou por modal (reaproveitando os componentes de formulário do design system), sem precisar recarregar a página inteira
+7. Layout responsivo: em telas grandes, seções lado a lado ou em colunas; em mobile, empilhadas verticalmente (seguindo as regras de responsividade da Etapa 6)
 
 ### C. Kanban real (`/negocios`)
 8. Seletor de pipeline no topo (dropdown — pode haver mais de uma pipeline cadastrada desde a Etapa 4)
@@ -54,7 +58,7 @@ As tabelas `deals`, `tags`, `deal_tags` e `custom_field_definitions` (entity='de
 - Mover card via teclado funciona (Tab, Espaço/Enter, setas, Esc)
 - No mobile, "Mover para..." funciona como alternativa ao arraste
 - Marcar negócio como Ganho/Perdido remove ele da visão ativa do kanban
-- Abrir o detalhe do negócio mostra o histórico de conversa vinculado e o botão de exportar `.md` funciona ali
+- Abrir o detalhe do negócio mostra dados completos do negócio, dados do contato (sem precisar navegar pra outra tela), seção de tarefas (mesmo vazia até a Etapa 9) e o histórico de conversa vinculado, com o botão de exportar `.md` funcionando ali
 - Filtros combinados (ex: dono + tag) retornam só os negócios que atendem todos os critérios ao mesmo tempo
 - Busca por nome de contato/negócio funciona
 - Toda a tela usa exclusivamente os tokens/componentes do design system da Etapa 6

@@ -90,7 +90,7 @@ export function ScheduleMeetingDialog({
 
   async function handleSubmit() {
     const range = computeRange();
-    if (!title.trim() || !range) return;
+    if (!title.trim() || !range || !contactEmail) return;
 
     setIsPending(true);
     try {
@@ -166,6 +166,13 @@ export function ScheduleMeetingDialog({
             </div>
           )}
 
+          {connectionAvailable && !contactEmail && (
+            <div className="rounded-lg border border-status-danger/40 bg-status-danger/10 p-3 text-sm">
+              Este contato não tem email cadastrado. Cadastre um email no contato antes de
+              agendar — sem ele não é possível criar o evento no Google Agenda.
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="meeting-title">Título</Label>
             <Input
@@ -232,7 +239,7 @@ export function ScheduleMeetingDialog({
           {connectionAvailable && (
             <Button
               type="button"
-              disabled={isPending || !title.trim() || !range}
+              disabled={isPending || !title.trim() || !range || !contactEmail}
               onClick={handleSubmit}
             >
               {isPending ? "Agendando..." : "Agendar"}

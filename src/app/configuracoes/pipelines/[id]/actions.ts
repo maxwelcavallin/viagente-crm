@@ -242,7 +242,14 @@ export async function createStageTaskAction(
   const type = formData.get("type");
   const messageTemplateId = formData.get("messageTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
+  const triggerDelayDays = parseDaysToComplete(formData.get("triggerDelayDays"));
   const isAutomatic = formData.get("isAutomatic") === "true";
+  const autoSend = formData.get("autoSend") === "true";
+  const autoSendChannelIdRaw = formData.get("autoSendChannelId");
+  const autoSendChannelId =
+    typeof autoSendChannelIdRaw === "string" && autoSendChannelIdRaw
+      ? autoSendChannelIdRaw
+      : null;
 
   if (typeof stageId !== "string" || typeof pipelineId !== "string") {
     return { status: "error", message: "Etapa inválida." };
@@ -264,6 +271,12 @@ export async function createStageTaskAction(
       message: "Selecione um template para tarefas do tipo mensagem.",
     };
   }
+  if (type === "mensagem" && autoSend && !autoSendChannelId) {
+    return {
+      status: "error",
+      message: "Selecione um canal pra envio automático.",
+    };
+  }
 
   const existing = await db
     .select({ order: stageTasks.order })
@@ -279,7 +292,10 @@ export async function createStageTaskAction(
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
     order: nextOrder,
     daysToComplete,
+    triggerDelayDays,
     isAutomatic,
+    autoSend: type === "mensagem" ? autoSend : false,
+    autoSendChannelId: type === "mensagem" && autoSend ? autoSendChannelId : null,
   });
 
   revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
@@ -299,7 +315,14 @@ export async function updateStageTaskAction(
   const title = formData.get("title");
   const messageTemplateId = formData.get("messageTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
+  const triggerDelayDays = parseDaysToComplete(formData.get("triggerDelayDays"));
   const isAutomatic = formData.get("isAutomatic") === "true";
+  const autoSend = formData.get("autoSend") === "true";
+  const autoSendChannelIdRaw = formData.get("autoSendChannelId");
+  const autoSendChannelId =
+    typeof autoSendChannelIdRaw === "string" && autoSendChannelIdRaw
+      ? autoSendChannelIdRaw
+      : null;
 
   if (typeof id !== "string" || typeof pipelineId !== "string") {
     return { status: "error", message: "Tarefa inválida." };
@@ -321,6 +344,12 @@ export async function updateStageTaskAction(
       message: "Selecione um template para tarefas do tipo mensagem.",
     };
   }
+  if (current.type === "mensagem" && autoSend && !autoSendChannelId) {
+    return {
+      status: "error",
+      message: "Selecione um canal pra envio automático.",
+    };
+  }
 
   await db
     .update(stageTasks)
@@ -329,7 +358,10 @@ export async function updateStageTaskAction(
       messageTemplateId:
         current.type === "mensagem" ? (messageTemplateId as string) : null,
       daysToComplete,
+      triggerDelayDays,
       isAutomatic,
+      autoSend: current.type === "mensagem" ? autoSend : false,
+      autoSendChannelId: current.type === "mensagem" && autoSend ? autoSendChannelId : null,
     })
     .where(eq(stageTasks.id, id));
 

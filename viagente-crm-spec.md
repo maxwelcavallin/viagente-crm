@@ -110,6 +110,8 @@ messages (id, deal_id, contact_id, channel_id, direction ['entrada','saida'],
           type ['texto','imagem','audio','documento','video'],
           content text, media_url text,
           status ['enviado','entregue','lido','falhou'],
+          favorited boolean default false,             -- Etapa 5b
+          reply_to_message_id FK messages(id) nullable, -- Etapa 5b
           z_api_message_id text, created_at)
 
 -- CANAIS WHATSAPP (configurados via UI no CRM — suporta múltiplos números)
@@ -181,6 +183,7 @@ Esse é o equivalente ao que a Clint chama de "criar integração via webhook ma
 - **Vínculo garantido a contato e negócio:** toda mensagem (entrada ou saída) é sempre gravada com `contact_id` preenchido. Se o contato tiver um negócio com `status='aberto'`, a mensagem também recebe o `deal_id` correspondente automaticamente — assim o histórico aparece tanto na visão de atendimento quanto dentro do negócio. Se o contato tiver mais de um negócio aberto, usar o mais recentemente atualizado (heurística aceitável no MVP, com 1-3 atendentes).
 - **Exportação do histórico em `.md`:** botão "Exportar conversa" que gera um arquivo Markdown com o histórico completo (mensagens em ordem cronológica, identificando remetente, canal, timestamps, e links de mídia) e dispara o download em um clique. Endpoint reutilizável (`GET /api/conversations/{contactId}/export`) para ser usado tanto na tela de atendimento quanto, futuramente, na página do negócio.
 - **Controle de acesso por canal:** por padrão, **todo atendente enxerga todos os canais**. O admin pode restringir manualmente o acesso de um atendente a um canal específico (ex: só quem cuida de suporte vê o número de suporte) via `whatsapp_channel_restrictions` — a presença de uma linha ali bloqueia aquele usuário daquele canal. `role = 'admin'` sempre vê todos os canais, independente de restrição. Ao listar/exportar conversas, mensagens de canais restritos pro usuário atual não devem aparecer, mesmo que o contato tenha conversado por mais de um canal.
+- **Chat completo (Etapa 5b), paridade com a Clint:** envio de mídia pela UI (imagem, vídeo, documento, áudio gravado via `MediaRecorder`), colar (Ctrl+V) imagem da área de transferência direto no composer, emoji picker, responder/citar uma mensagem específica (`reply_to_message_id`), e favoritar mensagens (`favorited`) com filtro de "Favoritas" por conversa.
 
 ---
 
@@ -195,10 +198,10 @@ Esse é o equivalente ao que a Clint chama de "criar integração via webhook ma
 
 Como não há confirmação de API de exportação da Clint neste documento, o caminho mais confiável é:
 1. Exportar CSV de negócios ativos e contatos pela própria interface da Clint (a maioria dos CRMs tem exportação em Configurações ou na visão de lista).
-2. Script de importação (`scripts/import-clint.ts` ou `.py`) que lê o CSV, mapeia colunas pra `contacts` e `deals`, cria negócios na pipeline/etapa correspondente (mapear nome da etapa da Clint pra etapa nova).
+2. Importar via ferramenta própria do CRM (`/configuracoes/importacao`, ver **Etapa 11**), com mapeamento de colunas via UI e **roteamento pra pipeline/etapa específica** — destino único fixo, ou de-para de etapa por coluna do CSV, com preview antes de confirmar e relatório de erros ao final.
 3. Rodar em ambiente de staging primeiro, validar contagem e amostra antes de rodar em produção.
 
-> Antes de começar o Dia 6 (migração), confirme com a Clint se existe exportação nativa ou API — isso muda o esforço do script.
+> Antes de rodar a Etapa 11, confirme com a Clint se existe exportação nativa ou API — isso muda o esforço de preparar o CSV.
 
 ---
 
@@ -252,3 +255,5 @@ Fonte única de verdade para toda estilização do produto — qualquer tela nov
 - **Zero sombra, blur ou glow** — profundidade vem de contraste de borda.
 - **Raio de borda:** 12px em cards/painéis, 8px em botões/inputs, 999px em avatares/pills.
 - Tokens completos (variáveis CSS para os dois modos) estão no prompt da Etapa 6 (`etapa-6-design-system.md`).
+- **Navegação de configuração:** toda tela de administração (usuários, pipelines, campos, tags, WhatsApp, templates, webhooks, importação) mora dentro de uma única rota `/configuracoes` com sub-navegação — não ficam espalhadas na navegação principal (ver `ajuste-configuracoes-consolidadas.md`).
+- **Agendamento (Etapa 12):** integração via OAuth real com o Google Calendar API, com o app configurado como **Interno** no Google Cloud (a Viagente usa Google Workspace) — isso elimina a necessidade de verificação do Google, a tela de "app não verificado" e a expiração de token em 7 dias que existiriam no modo "Teste". Cada atendente conecta a própria conta `@viagente.com.br`; eventos são criados de verdade (com confirmação real via API), com fallback pro link simples "Adicionar ao Google Agenda" caso o usuário ainda não tenha conectado a conta.

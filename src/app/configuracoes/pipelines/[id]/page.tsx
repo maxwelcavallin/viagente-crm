@@ -2,7 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { messageTemplates, pipelines, stages, stageTasks } from "@/db/schema";
+import {
+  messageTemplates,
+  pipelines,
+  stages,
+  stageTasks,
+  whatsappChannels,
+} from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
@@ -30,7 +36,7 @@ export default async function PipelineDetailPage({
     .orderBy(asc(stages.order));
 
   const stageIds = pipelineStages.map((s) => s.id);
-  const [stageTaskRows, templates] = await Promise.all([
+  const [stageTaskRows, templates, channels] = await Promise.all([
     stageIds.length > 0
       ? db
           .select({
@@ -41,13 +47,17 @@ export default async function PipelineDetailPage({
             messageTemplateId: stageTasks.messageTemplateId,
             order: stageTasks.order,
             daysToComplete: stageTasks.daysToComplete,
+            triggerDelayDays: stageTasks.triggerDelayDays,
             isAutomatic: stageTasks.isAutomatic,
+            autoSend: stageTasks.autoSend,
+            autoSendChannelId: stageTasks.autoSendChannelId,
           })
           .from(stageTasks)
           .where(inArray(stageTasks.stageId, stageIds))
           .orderBy(asc(stageTasks.order))
       : Promise.resolve([]),
     db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
+    db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
   ]);
 
   const stageTasksByStageId: Record<string, StageTask[]> = {};
@@ -59,7 +69,10 @@ export default async function PipelineDetailPage({
       type: row.type,
       messageTemplateId: row.messageTemplateId,
       daysToComplete: row.daysToComplete,
+      triggerDelayDays: row.triggerDelayDays,
       isAutomatic: row.isAutomatic,
+      autoSend: row.autoSend,
+      autoSendChannelId: row.autoSendChannelId,
     });
     stageTasksByStageId[row.stageId] = list;
   }
@@ -87,6 +100,7 @@ export default async function PipelineDetailPage({
               pipelineId={pipeline.id}
               stageTasksByStageId={stageTasksByStageId}
               templates={templates}
+              channels={channels}
             />
           </CardContent>
         </Card>

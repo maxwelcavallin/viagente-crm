@@ -1,0 +1,1 @@
+ALTER TABLE "whatsapp_channels" ADD COLUMN "relay_webhook_url" text;

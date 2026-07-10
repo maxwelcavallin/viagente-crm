@@ -85,6 +85,27 @@
       "when": 1783548233853,
       "tag": "0011_smart_revanche",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783610101672,
+      "tag": "0012_fast_captain_cross",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783646159883,
+      "tag": "0013_majestic_pretty_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783648790614,
+      "tag": "0014_typical_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

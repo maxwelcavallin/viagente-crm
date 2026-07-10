@@ -88,6 +88,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         pathname.startsWith("/api/whatsapp/webhook") ||
         pathname === "/api/cron/cleanup-media" ||
         pathname === "/api/cron/send-scheduled-messages" ||
+        pathname === "/api/cron/task-automation" ||
         pathname.startsWith("/api/webhooks/inbound");
 
       if (!auth) {

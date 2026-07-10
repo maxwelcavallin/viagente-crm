@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBaseUrl } from "@/lib/base-url";
 import { AccessToggle } from "./access-toggle";
+import { RelayUrlForm } from "./relay-url-form";
 
 export default async function ChannelAccessPage({
   params,
@@ -17,7 +18,11 @@ export default async function ChannelAccessPage({
   const { id } = await params;
 
   const [channel] = await db
-    .select({ id: whatsappChannels.id, label: whatsappChannels.label })
+    .select({
+      id: whatsappChannels.id,
+      label: whatsappChannels.label,
+      relayWebhookUrl: whatsappChannels.relayWebhookUrl,
+    })
     .from(whatsappChannels)
     .where(eq(whatsappChannels.id, id))
     .limit(1);
@@ -62,6 +67,20 @@ export default async function ChannelAccessPage({
           <div className="rounded-lg border border-border bg-muted p-3 text-sm">
             <code className="font-mono text-xs break-all">{webhookUrl}</code>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Repasse pra outro sistema</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            A Z-API só aceita uma URL cadastrada por evento — se essa instância também
+            for usada por outro sistema, cole a URL de webhook dele aqui. O CRM repassa
+            uma cópia de cada evento recebido (mensagem e status) pra essa URL, sem afetar
+            o processamento normal.
+          </p>
+          <RelayUrlForm channelId={channel.id} defaultValue={channel.relayWebhookUrl} />
         </CardContent>
       </Card>
       <Card>

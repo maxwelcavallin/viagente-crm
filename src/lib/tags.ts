@@ -1,6 +1,7 @@
 import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { contactTags, dealTags, tags } from "@/db/schema";
+import { fireTagAddedAutomations } from "@/lib/task-automation";
 
 export type TagOption = { id: string; name: string; color: string | null };
 
@@ -54,8 +55,18 @@ export async function attachTagsToContact(contactId: string, tagIds: string[]): 
 
 export async function attachTagsToDeal(dealId: string, tagIds: string[]): Promise<void> {
   if (tagIds.length === 0) return;
-  await db
+  // .returning() só traz as linhas que de fato foram inseridas (tags que o
+  // negócio ainda não tinha) — usado pra disparar a automação de "tag
+  // adicionada" só pras tags genuinamente novas (webhook de entrada e
+  // importação de CSV passam por aqui).
+  const inserted = await db
     .insert(dealTags)
     .values(tagIds.map((tagId) => ({ dealId, tagId })))
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ tagId: dealTags.tagId });
+
+  await fireTagAddedAutomations(
+    dealId,
+    inserted.map((row) => row.tagId)
+  );
 }

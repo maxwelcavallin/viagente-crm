@@ -119,6 +119,76 @@ export async function createFieldAction(
   return idle;
 }
 
+export type QuickCreateFieldResult =
+  | {
+      ok: true;
+      field: {
+        id: string;
+        key: string;
+        label: string;
+        type: "texto" | "numero" | "select" | "data";
+        options: FieldOption[] | null;
+      };
+    }
+  | { ok: false; message: string };
+
+// Variante simplificada de createFieldAction pra criação rápida embutida
+// nas telas de mapeamento (webhook/importação) — só tipos sem configuração
+// extra (texto/número/data); campos "select" continuam exigindo a tela
+// completa em /configuracoes/campos, onde dá pra cadastrar as opções.
+export async function createFieldQuickAction(
+  entity: "contact" | "deal",
+  label: string,
+  type: "texto" | "numero" | "data"
+): Promise<QuickCreateFieldResult> {
+  if (!(await requireAdmin())) {
+    return { ok: false, message: "Acesso negado." };
+  }
+  if (!label.trim()) {
+    return { ok: false, message: "Label é obrigatório." };
+  }
+
+  const key = label
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!KEY_PATTERN.test(key)) {
+    return { ok: false, message: "Label inválido pra gerar uma chave válida." };
+  }
+
+  const rowsForEntity = await db
+    .select({ key: customFieldDefinitions.key, order: customFieldDefinitions.order })
+    .from(customFieldDefinitions)
+    .where(eq(customFieldDefinitions.entity, entity));
+
+  if (rowsForEntity.some((r) => r.key === key)) {
+    return { ok: false, message: "Já existe um campo com essa chave nesta entidade." };
+  }
+
+  const nextOrder =
+    rowsForEntity.length > 0 ? Math.max(...rowsForEntity.map((r) => r.order)) + 1 : 0;
+
+  const [created] = await db
+    .insert(customFieldDefinitions)
+    .values({ entity, key, label: label.trim(), type, options: null, order: nextOrder })
+    .returning({
+      id: customFieldDefinitions.id,
+      key: customFieldDefinitions.key,
+      label: customFieldDefinitions.label,
+      type: customFieldDefinitions.type,
+      options: customFieldDefinitions.options,
+    });
+
+  revalidatePath("/configuracoes/campos");
+  return {
+    ok: true,
+    field: { ...created, options: created.options as FieldOption[] | null },
+  };
+}
+
 export async function updateFieldAction(
   _prevState: FieldFormState,
   formData: FormData

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -15,6 +15,7 @@ import {
   tasks,
 } from "@/db/schema";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
+import { fireTagAddedAutomations, maybeAutoSendTask } from "@/lib/task-automation";
 import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 async function requireSession() {
@@ -27,21 +28,30 @@ export type DealFormState =
   | { status: "error"; message: string }
   | { status: "success"; dealId: string };
 
-async function syncDealTags(dealId: string, tagIds: string[]) {
+// Diff real (não delete-tudo-reinsere-tudo) — além de evitar reescrever
+// linhas que não mudaram, preserva dealTags.createdAt das tags que já
+// estavam lá (usado pelo gatilho "dias com a tag") e retorna só as tags
+// genuinamente novas, pra disparar a automação de "tag adicionada".
+async function syncDealTags(dealId: string, tagIds: string[]): Promise<string[]> {
   const uniqueTagIds = Array.from(new Set(tagIds));
-  const inserts = uniqueTagIds.map((tagId) =>
-    db.insert(dealTags).values({ dealId, tagId })
-  );
-  const del = db.delete(dealTags).where(eq(dealTags.dealId, dealId));
+  const current = await db
+    .select({ tagId: dealTags.tagId })
+    .from(dealTags)
+    .where(eq(dealTags.dealId, dealId));
+  const currentIds = new Set(current.map((r) => r.tagId));
 
-  if (inserts.length === 0) {
-    await del;
-    return;
+  const toAdd = uniqueTagIds.filter((id) => !currentIds.has(id));
+  const toRemove = Array.from(currentIds).filter((id) => !uniqueTagIds.includes(id));
+
+  if (toRemove.length > 0) {
+    await db
+      .delete(dealTags)
+      .where(and(eq(dealTags.dealId, dealId), inArray(dealTags.tagId, toRemove)));
   }
-  await db.batch([
-    del,
-    ...(inserts as [(typeof inserts)[number], ...(typeof inserts)[number][]]),
-  ]);
+  if (toAdd.length > 0) {
+    await db.insert(dealTags).values(toAdd.map((tagId) => ({ dealId, tagId })));
+  }
+  return toAdd;
 }
 
 function parseValue(raw: FormDataEntryValue | null): string | null {
@@ -150,7 +160,8 @@ export async function createDealAction(
     })
     .returning({ id: deals.id });
 
-  await syncDealTags(created.id, fields.tagIds);
+  const newTagIds = await syncDealTags(created.id, fields.tagIds);
+  await fireTagAddedAutomations(created.id, newTagIds);
   void dispatchOutboundWebhooks("negocio_criado", created.id);
 
   revalidatePath("/negocios");
@@ -172,6 +183,13 @@ export async function updateDealAction(
   const fields = await readDealFields(formData);
   if ("error" in fields) return { status: "error", message: fields.error };
 
+  const [current] = await db
+    .select({ stageId: deals.stageId })
+    .from(deals)
+    .where(eq(deals.id, id))
+    .limit(1);
+  const stageChanged = current != null && current.stageId !== fields.stageId;
+
   await db
     .update(deals)
     .set({
@@ -183,10 +201,15 @@ export async function updateDealAction(
       value: fields.value,
       customFields: fields.customFields,
       updatedAt: new Date(),
+      // Editar o negócio pode trocar a etapa fora do fluxo normal do
+      // kanban (moveDealStageAction) — sem isso, o gatilho "X dias na
+      // etapa" ficaria contando a partir de uma entrada antiga/errada.
+      ...(stageChanged ? { stageEnteredAt: new Date() } : {}),
     })
     .where(eq(deals.id, id));
 
-  await syncDealTags(id, fields.tagIds);
+  const newTagIds = await syncDealTags(id, fields.tagIds);
+  await fireTagAddedAutomations(id, newTagIds);
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${id}`);
@@ -228,39 +251,67 @@ export async function moveDealStageAction(
 
   await db
     .update(deals)
-    .set({ stageId, updatedAt: new Date() })
+    .set({ stageId, updatedAt: new Date(), stageEnteredAt: new Date() })
     .where(eq(deals.id, dealId));
 
   // Cria as tarefas automáticas da etapa de destino (Etapa 9). Só as
   // marcadas isAutomatic=true — as demais ficam como modelo disponível pra
   // adicionar manualmente (ver addStageTaskToDealAction). Se o negócio já
   // visitou essa etapa antes, cria de novo — não reaproveita tarefas antigas
-  // já concluídas (regra explícita do critério de aceite).
+  // já concluídas (regra explícita do critério de aceite). Tarefas com
+  // triggerDelayDays setado NÃO entram aqui — ficam pro cron de automação
+  // varrer quando o prazo em dias na etapa for atingido.
   const tasksForStage = await db
     .select({
       id: stageTasks.id,
       title: stageTasks.title,
       type: stageTasks.type,
       daysToComplete: stageTasks.daysToComplete,
+      autoSend: stageTasks.autoSend,
+      autoSendChannelId: stageTasks.autoSendChannelId,
+      messageTemplateId: stageTasks.messageTemplateId,
     })
     .from(stageTasks)
-    .where(and(eq(stageTasks.stageId, stageId), eq(stageTasks.isAutomatic, true)));
+    .where(
+      and(
+        eq(stageTasks.stageId, stageId),
+        eq(stageTasks.isAutomatic, true),
+        isNull(stageTasks.triggerDelayDays)
+      )
+    );
 
   if (tasksForStage.length > 0) {
     const now = Date.now();
-    await db.insert(tasks).values(
-      tasksForStage.map((st) => ({
+    const inserted = await db
+      .insert(tasks)
+      .values(
+        tasksForStage.map((st) => ({
+          dealId,
+          stageTaskId: st.id,
+          title: st.title,
+          type: st.type,
+          status: "pendente" as const,
+          dueAt:
+            st.daysToComplete != null
+              ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
+              : null,
+        }))
+      )
+      .returning({ id: tasks.id, stageTaskId: tasks.stageTaskId, dueAt: tasks.dueAt });
+
+    for (const task of inserted) {
+      const source = tasksForStage.find((st) => st.id === task.stageTaskId);
+      if (!source) continue;
+      await maybeAutoSendTask({
+        taskId: task.id,
         dealId,
-        stageTaskId: st.id,
-        title: st.title,
-        type: st.type,
-        status: "pendente" as const,
-        dueAt:
-          st.daysToComplete != null
-            ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
-            : null,
-      }))
-    );
+        type: source.type,
+        dueAt: task.dueAt,
+        autoSend: source.autoSend,
+        autoSendChannelId: source.autoSendChannelId,
+        messageTemplateId: source.messageTemplateId,
+      });
+    }
   }
 
   void dispatchOutboundWebhooks("etapa_alterada", dealId);
@@ -304,6 +355,7 @@ export async function completeTaskAction(
 
   revalidatePath(`/negocios/${dealId}`);
   revalidatePath("/negocios");
+  revalidatePath("/tarefas");
   return { ok: true };
 }
 
@@ -322,22 +374,40 @@ export async function addStageTaskToDealAction(
       title: stageTasks.title,
       type: stageTasks.type,
       daysToComplete: stageTasks.daysToComplete,
+      autoSend: stageTasks.autoSend,
+      autoSendChannelId: stageTasks.autoSendChannelId,
+      messageTemplateId: stageTasks.messageTemplateId,
     })
     .from(stageTasks)
     .where(eq(stageTasks.id, stageTaskId))
     .limit(1);
   if (!stageTask) return { ok: false };
 
-  await db.insert(tasks).values({
+  const dueAt =
+    stageTask.daysToComplete != null
+      ? new Date(Date.now() + stageTask.daysToComplete * 24 * 60 * 60 * 1000)
+      : null;
+
+  const [created] = await db
+    .insert(tasks)
+    .values({
+      dealId,
+      stageTaskId,
+      title: stageTask.title,
+      type: stageTask.type,
+      status: "pendente",
+      dueAt,
+    })
+    .returning({ id: tasks.id });
+
+  await maybeAutoSendTask({
+    taskId: created.id,
     dealId,
-    stageTaskId,
-    title: stageTask.title,
     type: stageTask.type,
-    status: "pendente",
-    dueAt:
-      stageTask.daysToComplete != null
-        ? new Date(Date.now() + stageTask.daysToComplete * 24 * 60 * 60 * 1000)
-        : null,
+    dueAt,
+    autoSend: stageTask.autoSend,
+    autoSendChannelId: stageTask.autoSendChannelId,
+    messageTemplateId: stageTask.messageTemplateId,
   });
 
   revalidatePath(`/negocios/${dealId}`);
@@ -356,7 +426,7 @@ export async function bulkMoveDealsAction(
 
   await db
     .update(deals)
-    .set({ stageId, updatedAt: new Date() })
+    .set({ stageId, updatedAt: new Date(), stageEnteredAt: new Date() })
     .where(inArray(deals.id, dealIds));
 
   revalidatePath("/negocios");
@@ -402,10 +472,19 @@ export async function bulkAddTagAction(
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
 
-  await db
+  // onConflictDoNothing().returning() só retorna as linhas que de fato
+  // foram inseridas (deals que ainda não tinham a tag) — usado pra saber
+  // exatamente pra quem disparar a automação de "tag adicionada", sem
+  // reprocessar deals que já tinham a tag.
+  const inserted = await db
     .insert(dealTags)
     .values(dealIds.map((dealId) => ({ dealId, tagId })))
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ dealId: dealTags.dealId });
+
+  for (const row of inserted) {
+    await fireTagAddedAutomations(row.dealId, [tagId]);
+  }
 
   revalidatePath("/negocios");
   return { ok: true };
