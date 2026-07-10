@@ -10,6 +10,7 @@ import {
   customFieldDefinitions,
   dealTags,
   deals,
+  lossReasons,
   messageTemplates,
   pipelines,
   stages,
@@ -69,6 +70,7 @@ export default async function DealDetailPage({
     ownerRows,
     fieldDefRows,
     allowedChannelIds,
+    pipelineLossReasons,
   ] = await Promise.all([
     db
       .select()
@@ -122,6 +124,11 @@ export default async function DealDetailPage({
       .where(eq(customFieldDefinitions.entity, "deal"))
       .orderBy(asc(customFieldDefinitions.order)),
     getAllowedChannelIds(session.user.id, session.user.role),
+    db
+      .select({ id: lossReasons.id, label: lossReasons.label })
+      .from(lossReasons)
+      .where(eq(lossReasons.pipelineId, deal.pipelineId))
+      .orderBy(asc(lossReasons.order)),
   ]);
 
   if (!contact) notFound();
@@ -300,7 +307,11 @@ export default async function DealDetailPage({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <DealStatusActions dealId={deal.id} status={deal.status} />
+          <DealStatusActions
+            dealId={deal.id}
+            status={deal.status}
+            lossReasons={pipelineLossReasons}
+          />
           <DealFormDialog
             {...formProps}
             mode="edit"

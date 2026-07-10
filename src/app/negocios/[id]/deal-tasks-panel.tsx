@@ -2,11 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ListTodo, MessageSquare, Phone, CalendarClock, Plus } from "lucide-react";
+import {
+  Check,
+  ListTodo,
+  MessageSquare,
+  Pencil,
+  Phone,
+  CalendarClock,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MessageTaskExecutor, SchedulingTaskExecutor, type TaskLike } from "@/components/task-executors";
+import { EditTaskDialog } from "@/components/edit-task-dialog";
+import { DeleteTaskDialog } from "@/components/delete-task-dialog";
 import { addStageTaskToDealAction, completeTaskAction } from "../actions";
 
 export type DealTask = TaskLike;
@@ -100,6 +111,28 @@ function TaskRow({
               {formatDueAt(task.dueAt)}
             </Badge>
           )}
+          <div className="ml-auto flex items-center gap-1">
+            <EditTaskDialog
+              task={task}
+              dealId={dealId}
+              onDone={onDone}
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Editar tarefa">
+                  <Pencil size={13} strokeWidth={1.75} />
+                </Button>
+              }
+            />
+            <DeleteTaskDialog
+              task={task}
+              dealId={dealId}
+              onDone={onDone}
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Excluir tarefa">
+                  <Trash2 size={13} strokeWidth={1.75} />
+                </Button>
+              }
+            />
+          </div>
         </div>
         {!isDone && task.type === "mensagem" && (
           <MessageTaskExecutor

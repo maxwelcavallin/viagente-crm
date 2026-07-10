@@ -3,26 +3,35 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { setDealStatusAction } from "../actions";
+import { MarkLostDialog } from "@/components/mark-lost-dialog";
+import { setDealLostAction, setDealStatusAction } from "../actions";
 
 export function DealStatusActions({
   dealId,
   status,
+  lossReasons,
 }: {
   dealId: string;
   status: "aberto" | "ganho" | "perdido";
+  lossReasons: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [isPending, setIsPending] = useState(false);
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
 
-  function handleSetStatus(next: "aberto" | "ganho" | "perdido") {
+  function handleSetStatus(next: "aberto" | "ganho") {
     setIsPending(true);
     startTransition(async () => {
       await setDealStatusAction(dealId, next);
       setIsPending(false);
       router.refresh();
     });
+  }
+
+  async function handleSetLost(lossReasonId: string) {
+    await setDealLostAction(dealId, lossReasonId);
+    router.refresh();
   }
 
   return (
@@ -42,7 +51,7 @@ export function DealStatusActions({
           type="button"
           variant="outline"
           disabled={isPending}
-          onClick={() => handleSetStatus("perdido")}
+          onClick={() => setLostDialogOpen(true)}
         >
           Marcar Perdido
         </Button>
@@ -57,6 +66,12 @@ export function DealStatusActions({
           Reabrir
         </Button>
       )}
+      <MarkLostDialog
+        open={lostDialogOpen}
+        onOpenChange={setLostDialogOpen}
+        reasons={lossReasons}
+        onConfirm={handleSetLost}
+      />
     </div>
   );
 }

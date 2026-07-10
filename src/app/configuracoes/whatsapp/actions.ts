@@ -107,6 +107,76 @@ export async function testConnectionAction(
   return idle;
 }
 
+export async function updateChannelAction(
+  _prevState: ChannelFormState,
+  formData: FormData
+): Promise<ChannelFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  const label = formData.get("label");
+  const zapiInstanceId = formData.get("zapiInstanceId");
+  const zapiToken = formData.get("zapiToken");
+  const zapiClientToken = formData.get("zapiClientToken");
+  const phoneNumber = formData.get("phoneNumber");
+
+  if (typeof id !== "string" || !id) {
+    return { status: "error", message: "Canal inválido." };
+  }
+  if (
+    typeof label !== "string" ||
+    !label.trim() ||
+    typeof zapiInstanceId !== "string" ||
+    !zapiInstanceId.trim()
+  ) {
+    return { status: "error", message: "Nome e instance ID são obrigatórios." };
+  }
+
+  // Token/client-token em branco = mantém o valor já salvo — evita forçar
+  // o admin a redigitar credenciais só pra trocar o nome do canal, por
+  // exemplo.
+  const updates: Partial<typeof whatsappChannels.$inferInsert> = {
+    label: label.trim(),
+    zapiInstanceId: zapiInstanceId.trim(),
+    phoneNumber:
+      typeof phoneNumber === "string" && phoneNumber.trim()
+        ? phoneNumber.trim()
+        : null,
+  };
+  if (typeof zapiToken === "string" && zapiToken.trim()) {
+    updates.zapiToken = encryptCredential(zapiToken.trim());
+  }
+  if (typeof zapiClientToken === "string" && zapiClientToken.trim()) {
+    updates.zapiClientToken = encryptCredential(zapiClientToken.trim());
+  }
+
+  await db.update(whatsappChannels).set(updates).where(eq(whatsappChannels.id, id));
+
+  revalidatePath("/configuracoes/whatsapp");
+  return idle;
+}
+
+export async function deleteChannelAction(
+  _prevState: ChannelFormState,
+  formData: FormData
+): Promise<ChannelFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) {
+    return { status: "error", message: "Canal inválido." };
+  }
+
+  await db.delete(whatsappChannels).where(eq(whatsappChannels.id, id));
+
+  revalidatePath("/configuracoes/whatsapp");
+  return idle;
+}
+
 export async function setDefaultChannelAction(formData: FormData): Promise<void> {
   if (!(await requireAdmin())) return;
 

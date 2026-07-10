@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Check, ListTodo, MessageCircle, MoreVertical, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MarkLostDialog } from "@/components/mark-lost-dialog";
 import { cn } from "@/lib/utils";
 import {
   formatCurrencyBRL,
@@ -53,8 +55,10 @@ export function DealCard({
   deal,
   otherStages,
   formProps,
+  lossReasons,
   onMoveStage,
   onSetStatus,
+  onSetLost,
   isGrabbed,
   grabbedPreviewStageName,
   draggable,
@@ -67,8 +71,10 @@ export function DealCard({
   deal: DealCardData;
   otherStages: { id: string; name: string }[];
   formProps: DealFormProps;
+  lossReasons: { id: string; label: string }[];
   onMoveStage: (stageId: string) => void;
-  onSetStatus: (status: "aberto" | "ganho" | "perdido") => void;
+  onSetStatus: (status: "aberto" | "ganho") => void;
+  onSetLost: (lossReasonId: string) => void;
   isGrabbed: boolean;
   grabbedPreviewStageName?: string | null;
   draggable: boolean;
@@ -78,6 +84,7 @@ export function DealCard({
   selected: boolean;
   onToggleSelect: () => void;
 }) {
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const isInactive = deal.status !== "aberto";
   const value = formatCurrencyBRL(deal.value);
 
@@ -194,7 +201,7 @@ export function DealCard({
                 </DropdownMenuItem>
               )}
               {deal.status !== "perdido" && (
-                <DropdownMenuItem onClick={() => onSetStatus("perdido")}>
+                <DropdownMenuItem onClick={() => setLostDialogOpen(true)}>
                   Marcar como Perdido
                 </DropdownMenuItem>
               )}
@@ -274,6 +281,12 @@ export function DealCard({
           }
         />
       </div>
+      <MarkLostDialog
+        open={lostDialogOpen}
+        onOpenChange={setLostDialogOpen}
+        reasons={lossReasons}
+        onConfirm={onSetLost}
+      />
     </div>
   );
 }

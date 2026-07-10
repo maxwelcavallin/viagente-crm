@@ -106,6 +106,13 @@
       "when": 1783648790614,
       "tag": "0014_typical_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783652313913,
+      "tag": "0015_fancy_banshee",
+      "breakpoints": true
     }
   ]
 }

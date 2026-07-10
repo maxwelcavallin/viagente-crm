@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ListTodo, MessageSquare, Phone, CalendarClock } from "lucide-react";
+import { Check, ListTodo, MessageSquare, Pencil, Phone, CalendarClock, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MessageTaskExecutor, SchedulingTaskExecutor, type TaskLike } from "@/components/task-executors";
+import { EditTaskDialog } from "@/components/edit-task-dialog";
+import { DeleteTaskDialog } from "@/components/delete-task-dialog";
 import { completeTaskAction } from "@/app/negocios/actions";
 
 export type TarefaItem = {
@@ -129,6 +131,28 @@ function TarefaRow({
               {formatDueAt(item.dueAt)}
             </Badge>
           )}
+          <div className="ml-auto flex items-center gap-1">
+            <EditTaskDialog
+              task={task}
+              dealId={item.dealId}
+              onDone={onDone}
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Editar tarefa">
+                  <Pencil size={13} strokeWidth={1.75} />
+                </Button>
+              }
+            />
+            <DeleteTaskDialog
+              task={task}
+              dealId={item.dealId}
+              onDone={onDone}
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Excluir tarefa">
+                  <Trash2 size={13} strokeWidth={1.75} />
+                </Button>
+              }
+            />
+          </div>
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
           <Link href={`/negocios/${item.dealId}`} className="hover:text-foreground hover:underline">

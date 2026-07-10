@@ -13,6 +13,7 @@ export default async function WhatsappChannelsPage() {
       phoneNumber: whatsappChannels.phoneNumber,
       status: whatsappChannels.status,
       isDefault: whatsappChannels.isDefault,
+      zapiInstanceId: whatsappChannels.zapiInstanceId,
       zapiToken: whatsappChannels.zapiToken,
       zapiClientToken: whatsappChannels.zapiClientToken,
     })
@@ -27,6 +28,7 @@ export default async function WhatsappChannelsPage() {
     phoneNumber: row.phoneNumber,
     status: row.status,
     isDefault: row.isDefault,
+    zapiInstanceId: row.zapiInstanceId,
     maskedToken: maskCredential(decryptCredential(row.zapiToken)),
     maskedClientToken: maskCredential(decryptCredential(row.zapiClientToken)),
   }));

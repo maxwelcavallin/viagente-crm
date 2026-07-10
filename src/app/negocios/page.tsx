@@ -7,6 +7,7 @@ import {
   customFieldDefinitions,
   dealTags,
   deals,
+  lossReasons,
   pipelines,
   stages,
   tags,
@@ -94,22 +95,30 @@ export default async function NegociosPage({
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
   const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
 
-  const [dealTagRows, messagePreviewByDealId, pendingTaskRows] = await Promise.all([
-    dealIds.length > 0
-      ? db
-          .select({ dealId: dealTags.dealId, tagId: dealTags.tagId })
-          .from(dealTags)
-          .where(inArray(dealTags.dealId, dealIds))
-      : Promise.resolve([]),
-    getLastMessagePreviewsByDealId(dealIds),
-    dealIds.length > 0
-      ? db
-          .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
-          .from(tasks)
-          .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
-          .groupBy(tasks.dealId)
-      : Promise.resolve([]),
-  ]);
+  const [dealTagRows, messagePreviewByDealId, pendingTaskRows, pipelineLossReasons] =
+    await Promise.all([
+      dealIds.length > 0
+        ? db
+            .select({ dealId: dealTags.dealId, tagId: dealTags.tagId })
+            .from(dealTags)
+            .where(inArray(dealTags.dealId, dealIds))
+        : Promise.resolve([]),
+      getLastMessagePreviewsByDealId(dealIds),
+      dealIds.length > 0
+        ? db
+            .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
+            .from(tasks)
+            .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
+            .groupBy(tasks.dealId)
+        : Promise.resolve([]),
+      selectedPipelineId
+        ? db
+            .select({ id: lossReasons.id, label: lossReasons.label })
+            .from(lossReasons)
+            .where(eq(lossReasons.pipelineId, selectedPipelineId))
+            .orderBy(asc(lossReasons.order))
+        : Promise.resolve([]),
+    ]);
 
   const pendingTaskCountByDeal = new Map(
     pendingTaskRows.map((row) => [row.dealId, row.pendingCount])
@@ -173,6 +182,7 @@ export default async function NegociosPage({
         selectedPipelineId={selectedPipelineId}
         stages={allStages}
         deals={dealCards}
+        lossReasons={pipelineLossReasons}
         formProps={{
           pipelines: allPipelines.map((p) => ({ id: p.id, name: p.name })),
           stages: allStages,

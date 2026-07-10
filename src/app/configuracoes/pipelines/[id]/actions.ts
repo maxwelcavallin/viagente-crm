@@ -4,7 +4,7 @@ import { asc, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { deals, stages, stageTasks } from "@/db/schema";
+import { deals, lossReasons, stages, stageTasks } from "@/db/schema";
 
 async function requireAdmin() {
   const session = await auth();
@@ -432,4 +432,66 @@ export async function moveStageTaskAction(formData: FormData): Promise<void> {
   ]);
 
   revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
+}
+
+// ---------- Motivos de perda por pipeline ----------
+
+export type LossReasonFormState =
+  | { status: "idle" }
+  | { status: "error"; message: string };
+
+const lossReasonIdle: LossReasonFormState = { status: "idle" };
+
+export async function createLossReasonAction(
+  _prevState: LossReasonFormState,
+  formData: FormData
+): Promise<LossReasonFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const pipelineId = formData.get("pipelineId");
+  const label = formData.get("label");
+  if (typeof pipelineId !== "string" || !pipelineId) {
+    return { status: "error", message: "Pipeline inválida." };
+  }
+  if (typeof label !== "string" || !label.trim()) {
+    return { status: "error", message: "Descrição do motivo é obrigatória." };
+  }
+
+  const existing = await db
+    .select({ order: lossReasons.order })
+    .from(lossReasons)
+    .where(eq(lossReasons.pipelineId, pipelineId));
+  const nextOrder =
+    existing.length > 0 ? Math.max(...existing.map((r) => r.order)) + 1 : 0;
+
+  await db.insert(lossReasons).values({
+    pipelineId,
+    label: label.trim(),
+    order: nextOrder,
+  });
+
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
+  return lossReasonIdle;
+}
+
+export async function deleteLossReasonAction(
+  _prevState: LossReasonFormState,
+  formData: FormData
+): Promise<LossReasonFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  const pipelineId = formData.get("pipelineId");
+  if (typeof id !== "string" || typeof pipelineId !== "string") {
+    return { status: "error", message: "Motivo inválido." };
+  }
+
+  await db.delete(lossReasons).where(eq(lossReasons.id, id));
+
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
+  return lossReasonIdle;
 }

@@ -13,14 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MarkLostDialog } from "@/components/mark-lost-dialog";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import {
   bulkAddTagAction,
   bulkDeleteDealsAction,
   bulkMoveDealsAction,
+  bulkSetLostAction,
   bulkSetOwnerAction,
   bulkSetStatusAction,
   moveDealStageAction,
+  setDealLostAction,
   setDealStatusAction,
 } from "./actions";
 import { BulkActionsBar } from "./bulk-actions-bar";
@@ -46,12 +49,14 @@ export function KanbanBoard({
   stages,
   deals: initialDeals,
   formProps,
+  lossReasons,
 }: {
   pipelines: { id: string; name: string }[];
   selectedPipelineId: string;
   stages: KanbanStage[];
   deals: DealCardData[];
   formProps: DealFormProps;
+  lossReasons: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -64,6 +69,7 @@ export function KanbanBoard({
     string | null
   >(null);
   const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+  const [bulkLostDialogOpen, setBulkLostDialogOpen] = useState(false);
 
   const stagesForPipeline = useMemo(
     () =>
@@ -127,10 +133,7 @@ export function KanbanBoard({
     });
   }
 
-  function handleSetStatus(
-    dealId: string,
-    status: "aberto" | "ganho" | "perdido"
-  ) {
+  function handleSetStatus(dealId: string, status: "aberto" | "ganho") {
     setDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, status } : d))
     );
@@ -138,10 +141,18 @@ export function KanbanBoard({
       void setDealStatusAction(dealId, status);
     });
     toast.success(
-      status === "aberto"
-        ? "Negócio reaberto"
-        : `Negócio marcado como ${status === "ganho" ? "Ganho" : "Perdido"}`
+      status === "aberto" ? "Negócio reaberto" : "Negócio marcado como Ganho"
     );
+  }
+
+  function handleSetLost(dealId: string, lossReasonId: string) {
+    setDeals((prev) =>
+      prev.map((d) => (d.id === dealId ? { ...d, status: "perdido" } : d))
+    );
+    startTransition(() => {
+      void setDealLostAction(dealId, lossReasonId);
+    });
+    toast.success("Negócio marcado como Perdido");
   }
 
   function toggleSelectDeal(dealId: string) {
@@ -200,13 +211,24 @@ export function KanbanBoard({
     toast.success(`Tag adicionada a ${ids.length} negócio(s)`);
   }
 
-  async function handleBulkSetStatus(status: "aberto" | "ganho" | "perdido") {
+  async function handleBulkSetStatus(status: "aberto" | "ganho") {
     const ids = Array.from(selectedDealIds);
     setDeals((prev) => prev.map((d) => (ids.includes(d.id) ? { ...d, status } : d)));
     clearSelection();
     await bulkSetStatusAction(ids, status);
     router.refresh();
     toast.success(`Status atualizado em ${ids.length} negócio(s)`);
+  }
+
+  async function handleBulkSetLost(lossReasonId: string) {
+    const ids = Array.from(selectedDealIds);
+    setDeals((prev) =>
+      prev.map((d) => (ids.includes(d.id) ? { ...d, status: "perdido" } : d))
+    );
+    clearSelection();
+    await bulkSetLostAction(ids, lossReasonId);
+    router.refresh();
+    toast.success(`${ids.length} negócio(s) marcado(s) como Perdido`);
   }
 
   async function handleBulkDelete() {
@@ -318,10 +340,17 @@ export function KanbanBoard({
           onSetOwner={handleBulkSetOwner}
           onAddTag={handleBulkAddTag}
           onSetStatus={handleBulkSetStatus}
+          onRequestMarkLost={() => setBulkLostDialogOpen(true)}
           onDelete={handleBulkDelete}
           onClear={clearSelection}
         />
       )}
+      <MarkLostDialog
+        open={bulkLostDialogOpen}
+        onOpenChange={setBulkLostDialogOpen}
+        reasons={lossReasons}
+        onConfirm={handleBulkSetLost}
+      />
 
       {stagesForPipeline.length === 0 ? (
         <EmptyState
@@ -386,8 +415,10 @@ export function KanbanBoard({
                       deal={deal}
                       otherStages={otherStages}
                       formProps={formProps}
+                      lossReasons={lossReasons}
                       onMoveStage={(stageId) => commitMove(deal.id, stageId)}
                       onSetStatus={(status) => handleSetStatus(deal.id, status)}
+                      onSetLost={(lossReasonId) => handleSetLost(deal.id, lossReasonId)}
                       isGrabbed={grabbedDealId === deal.id}
                       grabbedPreviewStageName={
                         grabbedDealId === deal.id

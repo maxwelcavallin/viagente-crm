@@ -321,20 +321,53 @@ export async function moveDealStageAction(
   return { ok: true };
 }
 
+// "perdido" saiu daqui — precisa de motivo obrigatório, ver setDealLostAction.
+// wonAt/lostAt são timestamps de transição (diferentes de updatedAt, que
+// qualquer edição toca) — base dos indicadores por período na Início.
 export async function setDealStatusAction(
   dealId: string,
-  status: "aberto" | "ganho" | "perdido"
+  status: "aberto" | "ganho"
 ): Promise<{ ok: boolean }> {
   const user = await requireSession();
   if (!user) return { ok: false };
 
   await db
     .update(deals)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      updatedAt: new Date(),
+      wonAt: status === "ganho" ? new Date() : null,
+      lostAt: null,
+      lossReasonId: null,
+    })
     .where(eq(deals.id, dealId));
 
   if (status === "ganho") void dispatchOutboundWebhooks("negocio_ganho", dealId);
-  if (status === "perdido") void dispatchOutboundWebhooks("negocio_perdido", dealId);
+
+  revalidatePath("/negocios");
+  revalidatePath(`/negocios/${dealId}`);
+  return { ok: true };
+}
+
+export async function setDealLostAction(
+  dealId: string,
+  lossReasonId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || !lossReasonId) return { ok: false };
+
+  await db
+    .update(deals)
+    .set({
+      status: "perdido",
+      updatedAt: new Date(),
+      lostAt: new Date(),
+      lossReasonId,
+      wonAt: null,
+    })
+    .where(eq(deals.id, dealId));
+
+  void dispatchOutboundWebhooks("negocio_perdido", dealId);
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
@@ -352,6 +385,48 @@ export async function completeTaskAction(
     .update(tasks)
     .set({ status: "concluida", completedAt: new Date(), completedBy: user.id })
     .where(eq(tasks.id, taskId));
+
+  revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
+  revalidatePath("/tarefas");
+  return { ok: true };
+}
+
+export async function updateTaskAction(
+  taskId: string,
+  dealId: string,
+  fields: {
+    title: string;
+    type: "mensagem" | "ligacao" | "agendamento" | "generica";
+    dueAt: string | null;
+  }
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || !fields.title.trim()) return { ok: false };
+
+  await db
+    .update(tasks)
+    .set({
+      title: fields.title.trim(),
+      type: fields.type,
+      dueAt: fields.dueAt ? new Date(fields.dueAt) : null,
+    })
+    .where(eq(tasks.id, taskId));
+
+  revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
+  revalidatePath("/tarefas");
+  return { ok: true };
+}
+
+export async function deleteTaskAction(
+  taskId: string,
+  dealId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user) return { ok: false };
+
+  await db.delete(tasks).where(eq(tasks.id, taskId));
 
   revalidatePath(`/negocios/${dealId}`);
   revalidatePath("/negocios");
@@ -451,14 +526,42 @@ export async function bulkSetOwnerAction(
 
 export async function bulkSetStatusAction(
   dealIds: string[],
-  status: "aberto" | "ganho" | "perdido"
+  status: "aberto" | "ganho"
 ): Promise<{ ok: boolean }> {
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
 
   await db
     .update(deals)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      updatedAt: new Date(),
+      wonAt: status === "ganho" ? new Date() : null,
+      lostAt: null,
+      lossReasonId: null,
+    })
+    .where(inArray(deals.id, dealIds));
+
+  revalidatePath("/negocios");
+  return { ok: true };
+}
+
+export async function bulkSetLostAction(
+  dealIds: string[],
+  lossReasonId: string
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || dealIds.length === 0 || !lossReasonId) return { ok: false };
+
+  await db
+    .update(deals)
+    .set({
+      status: "perdido",
+      updatedAt: new Date(),
+      lostAt: new Date(),
+      lossReasonId,
+      wonAt: null,
+    })
     .where(inArray(deals.id, dealIds));
 
   revalidatePath("/negocios");

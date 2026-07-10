@@ -119,6 +119,21 @@ export const pipelines = pgTable("pipelines", {
     .defaultNow(),
 });
 
+// Lista de motivos de perda configurável pelo admin, por pipeline (cada
+// pipeline pode ter categorias de perda diferentes) — ver deals.lossReasonId
+// e o painel em configuracoes/pipelines/[id]/loss-reasons-panel.tsx.
+export const lossReasons = pgTable("loss_reasons", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pipelineId: uuid("pipeline_id")
+    .notNull()
+    .references(() => pipelines.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const stages = pgTable(
   "stages",
   {
@@ -241,6 +256,16 @@ export const deals = pgTable(
     value: numeric("value", { precision: 12, scale: 2 }),
     source: text("source"),
     status: dealStatusEnum("status").notNull().default("aberto"),
+    // Timestamps de transição de status — diferente de updatedAt (que é
+    // tocado por QUALQUER edição do negócio, não só mudança de status).
+    // Base pros indicadores de vendas/perdas por período na Início. Null =
+    // nunca esteve nesse estado, ou foi reaberto depois (ver
+    // setDealStatusAction/setDealLostAction: sempre limpam o par oposto).
+    wonAt: timestamp("won_at", { withTimezone: true }),
+    lostAt: timestamp("lost_at", { withTimezone: true }),
+    lossReasonId: uuid("loss_reason_id").references(() => lossReasons.id, {
+      onDelete: "set null",
+    }),
     // gasto_mensal_cartao, gasto_anual_viagens, frequencia_viagens_ano,
     // perfil_profissional, mentalidade, economia_estimada — ver seção 12 da spec
     customFields: jsonb("custom_fields").notNull().default({}),

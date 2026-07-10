@@ -21,10 +21,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { TagOption } from "@/lib/tags";
 
-const STATUS_LABELS: Record<"aberto" | "ganho" | "perdido", string> = {
+const STATUS_LABELS: Record<"aberto" | "ganho", string> = {
   aberto: "Aberto",
   ganho: "Ganho",
-  perdido: "Perdido",
 };
 
 function ActionMenu({
@@ -54,6 +53,7 @@ export function BulkActionsBar({
   onSetOwner,
   onAddTag,
   onSetStatus,
+  onRequestMarkLost,
   onDelete,
   onClear,
 }: {
@@ -64,7 +64,8 @@ export function BulkActionsBar({
   onMoveStage: (stageId: string) => void;
   onSetOwner: (ownerId: string | null) => void;
   onAddTag: (tagId: string) => void;
-  onSetStatus: (status: "aberto" | "ganho" | "perdido") => void;
+  onSetStatus: (status: "aberto" | "ganho") => void;
+  onRequestMarkLost: () => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
@@ -115,11 +116,12 @@ export function BulkActionsBar({
         {Object.entries(STATUS_LABELS).map(([value, label]) => (
           <DropdownMenuItem
             key={value}
-            onClick={() => onSetStatus(value as "aberto" | "ganho" | "perdido")}
+            onClick={() => onSetStatus(value as "aberto" | "ganho")}
           >
             {label}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuItem onClick={onRequestMarkLost}>Perdido</DropdownMenuItem>
       </ActionMenu>
 
       <Dialog>

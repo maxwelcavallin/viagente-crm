@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  lossReasons,
   messageTemplates,
   pipelines,
   stages,
@@ -12,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
+import { LossReasonsPanel } from "./loss-reasons-panel";
 import type { StageTask } from "./stage-tasks-panel";
 
 export default async function PipelineDetailPage({
@@ -36,7 +38,7 @@ export default async function PipelineDetailPage({
     .orderBy(asc(stages.order));
 
   const stageIds = pipelineStages.map((s) => s.id);
-  const [stageTaskRows, templates, channels] = await Promise.all([
+  const [stageTaskRows, templates, channels, pipelineLossReasons] = await Promise.all([
     stageIds.length > 0
       ? db
           .select({
@@ -58,6 +60,11 @@ export default async function PipelineDetailPage({
       : Promise.resolve([]),
     db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
     db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
+    db
+      .select({ id: lossReasons.id, label: lossReasons.label })
+      .from(lossReasons)
+      .where(eq(lossReasons.pipelineId, id))
+      .orderBy(asc(lossReasons.order)),
   ]);
 
   const stageTasksByStageId: Record<string, StageTask[]> = {};
@@ -104,14 +111,24 @@ export default async function PipelineDetailPage({
             />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Nova etapa</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CreateStageForm pipelineId={pipeline.id} />
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Nova etapa</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CreateStageForm pipelineId={pipeline.id} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Motivos de perda</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LossReasonsPanel pipelineId={pipeline.id} reasons={pipelineLossReasons} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
