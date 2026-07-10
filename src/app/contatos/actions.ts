@@ -12,6 +12,7 @@ import {
   deals,
   messages,
 } from "@/db/schema";
+import { syncDealOwnerFromContact } from "@/lib/owner-distribution";
 
 async function requireSession() {
   const session = await auth();
@@ -204,6 +205,23 @@ export async function deleteContactAction(
     redirect(redirectTo);
   }
   return deleteIdle;
+}
+
+// Troca de dono em massa (usada no atendimento) — mantém o negócio aberto
+// de cada contato em sincronia, ver syncDealOwnerFromContact.
+export async function bulkSetContactOwnerAction(
+  contactIds: string[],
+  ownerId: string | null
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || contactIds.length === 0) return { ok: false };
+
+  for (const contactId of contactIds) {
+    await syncDealOwnerFromContact(contactId, ownerId);
+  }
+
+  revalidatePath("/atendimento");
+  return { ok: true };
 }
 
 export async function countContactMessages(contactId: string): Promise<number> {

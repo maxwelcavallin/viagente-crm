@@ -17,11 +17,11 @@ export type TagAutomationFormState =
 
 const idleState: TagAutomationFormState = { status: "idle" };
 
-function parseDelayDays(raw: FormDataEntryValue | null): number | null {
+function parseDelayMinutes(raw: FormDataEntryValue | null): number | null {
   if (typeof raw !== "string" || !raw.trim()) return null;
-  const days = Number(raw);
-  if (!Number.isFinite(days) || days < 0) return null;
-  return Math.floor(days);
+  const minutes = Number(raw);
+  if (!Number.isFinite(minutes) || minutes < 0) return null;
+  return Math.floor(minutes);
 }
 
 type TagAutomationFields = {
@@ -29,7 +29,7 @@ type TagAutomationFields = {
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica";
   trigger: "tag_adicionada" | "dias_apos_tag";
-  delayDays: number | null;
+  delayMinutes: number | null;
   messageTemplateId: string | null;
   autoSend: boolean;
   autoSendChannelId: string | null;
@@ -42,7 +42,7 @@ async function readTagAutomationFields(
   const title = formData.get("title");
   const type = formData.get("type");
   const trigger = formData.get("trigger");
-  const delayDays = parseDelayDays(formData.get("delayDays"));
+  const delayMinutes = parseDelayMinutes(formData.get("delayMinutes"));
   const messageTemplateId = formData.get("messageTemplateId");
   const autoSend = formData.get("autoSend") === "true";
   const autoSendChannelIdRaw = formData.get("autoSendChannelId");
@@ -63,8 +63,8 @@ async function readTagAutomationFields(
   if (trigger !== "tag_adicionada" && trigger !== "dias_apos_tag") {
     return { error: "Gatilho inválido." };
   }
-  if (trigger === "dias_apos_tag" && delayDays == null) {
-    return { error: "Informe quantos dias após a tag pra disparar." };
+  if (trigger === "dias_apos_tag" && delayMinutes == null) {
+    return { error: "Informe quanto tempo após a tag pra disparar." };
   }
   if (type === "mensagem" && (typeof messageTemplateId !== "string" || !messageTemplateId)) {
     return { error: "Selecione um template para automações do tipo mensagem." };
@@ -78,7 +78,7 @@ async function readTagAutomationFields(
     title: title.trim(),
     type: type as "mensagem" | "ligacao" | "agendamento" | "generica",
     trigger: trigger as "tag_adicionada" | "dias_apos_tag",
-    delayDays: trigger === "dias_apos_tag" ? delayDays : null,
+    delayMinutes: trigger === "dias_apos_tag" ? delayMinutes : null,
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
     autoSend: type === "mensagem" ? autoSend : false,
     autoSendChannelId: type === "mensagem" && autoSend ? autoSendChannelId : null,

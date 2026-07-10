@@ -1,7 +1,8 @@
 import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, messages, whatsappChannels } from "@/db/schema";
+import { contacts, messages, users, whatsappChannels } from "@/db/schema";
+import { ownerVisibilityFilter, type VisibilityUser } from "@/lib/visibility";
 
 const replyToMessages = alias(messages, "reply_to_messages");
 
@@ -24,16 +25,20 @@ export type ConversationSummary = {
   lastMessageDirection: "entrada" | "saida";
   lastMessageSenderName: string | null;
   unreadCount: number;
+  ownerId: string | null;
+  ownerName: string | null;
 };
 
 export async function listConversations(
-  allowedChannelIds: string[]
+  allowedChannelIds: string[],
+  currentUser: VisibilityUser
 ): Promise<ConversationSummary[]> {
   const channelFilter = buildChannelFilter(allowedChannelIds);
 
   // DISTINCT ON exige que o primeiro ORDER BY seja a própria coluna do
   // agrupamento (contactId); reordenamos por data no JS depois, sobre um
-  // conjunto já reduzido a 1 linha por contato.
+  // conjunto já reduzido a 1 linha por contato. Junta contacts aqui só pra
+  // poder aplicar a restrição de visibilidade por dono direto na query.
   const latest = await db
     .selectDistinctOn([messages.contactId], {
       contactId: messages.contactId,
@@ -45,7 +50,8 @@ export async function listConversations(
       senderName: messages.senderName,
     })
     .from(messages)
-    .where(channelFilter)
+    .innerJoin(contacts, eq(contacts.id, messages.contactId))
+    .where(and(channelFilter, ownerVisibilityFilter(contacts.ownerId, currentUser)))
     .orderBy(messages.contactId, desc(messages.createdAt));
 
   if (latest.length === 0) return [];
@@ -58,8 +64,11 @@ export async function listConversations(
       phone: contacts.phone,
       isGroup: contacts.isGroup,
       avatarUrl: contacts.avatarUrl,
+      ownerId: contacts.ownerId,
+      ownerName: users.name,
     })
     .from(contacts)
+    .leftJoin(users, eq(users.id, contacts.ownerId))
     .where(inArray(contacts.id, contactIds));
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
 
@@ -112,6 +121,8 @@ export async function listConversations(
       lastMessageDirection: m.direction,
       lastMessageSenderName: m.senderName,
       unreadCount: unreadByContact.get(m.contactId) ?? 0,
+      ownerId: contact?.ownerId ?? null,
+      ownerName: contact?.ownerName ?? null,
     };
   });
 

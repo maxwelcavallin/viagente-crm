@@ -92,10 +92,11 @@ export function KanbanBoard({
             status: deal.status,
             createdAt: deal.createdAt,
           },
-          filters
+          filters,
+          formProps.currentUserId
         )
       ),
-    [deals, filters]
+    [deals, filters, formProps.currentUserId]
   );
 
   function commitMove(dealId: string, stageId: string) {
@@ -328,6 +329,7 @@ export function KanbanBoard({
         onChange={setFilters}
         owners={formProps.owners}
         allTags={formProps.allTags}
+        currentUserId={formProps.currentUserId}
       />
 
       {selectedDealIds.size > 0 && (

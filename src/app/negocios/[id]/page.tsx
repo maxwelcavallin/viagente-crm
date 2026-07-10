@@ -26,6 +26,7 @@ import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { resolveConnectionOwner } from "@/lib/google-calendar";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
+import { canViewOwnedRecord } from "@/lib/visibility";
 import { substituteTemplate } from "@/lib/templates";
 import { TEMPERATURE_BADGE_VARIANT, TEMPERATURE_LABELS } from "@/lib/temperature";
 import type { TagOption } from "@/lib/tags";
@@ -56,6 +57,7 @@ export default async function DealDetailPage({
 
   const [deal] = await db.select().from(deals).where(eq(deals.id, id)).limit(1);
   if (!deal) notFound();
+  if (!canViewOwnedRecord(deal.ownerId, session.user)) notFound();
 
   const [
     contact,
@@ -233,6 +235,7 @@ export default async function DealDetailPage({
 
   const variableValues: Record<string, string> = {
     nome_contato: contact.name,
+    email_contato: contact.email ?? "",
     valor: value ?? "",
   };
   for (const def of fieldDefinitions) {

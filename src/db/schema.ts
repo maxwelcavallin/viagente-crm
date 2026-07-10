@@ -101,6 +101,13 @@ export const users = pgTable(
     mustChangePassword: boolean("must_change_password")
       .notNull()
       .default(true),
+    // Quando true, este atendente só enxerga negócios/contatos dele mesmo
+    // ou sem dono — enforced no servidor (ver src/lib/owner-distribution.ts
+    // e os pontos de leitura em negocios/atendimento), não é só filtro de
+    // UI. Nunca afeta role='admin'.
+    restrictToOwnRecords: boolean("restrict_to_own_records")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -133,6 +140,30 @@ export const lossReasons = pgTable("loss_reasons", {
     .notNull()
     .defaultNow(),
 });
+
+// Regra de distribuição automática de dono por pipeline — usada quando um
+// negócio é criado (manual, webhook ou importação) sem dono explícito. Ver
+// resolveDistributedOwner em src/lib/owner-distribution.ts: escolhe sempre
+// quem está mais "atrasado" em relação a assignedCount/weight (rodízio
+// ponderado determinístico, não sorteio).
+export const pipelineOwnerDistribution = pgTable(
+  "pipeline_owner_distribution",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weight: integer("weight").notNull().default(1),
+    assignedCount: integer("assigned_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("pipeline_owner_distribution_pipeline_user_idx").on(t.pipelineId, t.userId)]
+);
 
 export const stages = pgTable(
   "stages",
@@ -179,12 +210,13 @@ export const stageTasks = pgTable(
     // Prazo em dias a partir da entrada na etapa — usado pra calcular
     // tasks.due_at quando a tarefa é (auto-)criada. Null = sem prazo.
     daysToComplete: integer("days_to_complete"),
-    // Atraso, em dias, entre o negócio entrar na etapa e a task ser CRIADA
-    // (independente de daysToComplete, que é o prazo da task já criada).
-    // Null = cria na hora (comportamento original da Etapa 9). Setado = só
-    // cria quando o negócio estiver nesta etapa há esses dias, varrido pelo
-    // cron de automação via deals.stage_entered_at.
-    triggerDelayDays: integer("trigger_delay_days"),
+    // Atraso, em minutos, entre o negócio entrar na etapa e a task ser
+    // CRIADA (independente de daysToComplete, que é o prazo da task já
+    // criada). Null = cria na hora (comportamento original da Etapa 9).
+    // Setado = só cria quando o negócio estiver nesta etapa há esse tempo,
+    // varrido pelo cron de automação via deals.stage_entered_at. Guarda em
+    // minutos (não dias) pra UI permitir configurar dias/horas/minutos.
+    triggerDelayMinutes: integer("trigger_delay_minutes"),
     // false = a tarefa fica só como "modelo" disponível pra adicionar
     // manualmente ao negócio (ver addStageTaskToDealAction); não é criada
     // sozinha quando o negócio entra na etapa.
@@ -221,6 +253,14 @@ export const contacts = pgTable(
     // abre a conversa — ver markContactRead em src/lib/conversations.ts.
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
     customFields: jsonb("custom_fields").notNull().default({}),
+    // Dono do atendimento — mantido em sincronia com o dono do negócio
+    // aberto deste contato (ver src/lib/owner-distribution.ts). Um contato
+    // pode ter mais de um negócio aberto em pipelines diferentes; nesse
+    // caso o último negócio reatribuído "vence" aqui, é uma simplificação
+    // deliberada.
+    ownerId: uuid("owner_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -367,8 +407,9 @@ export const tagAutomations = pgTable("tag_automations", {
   trigger: tagAutomationTriggerEnum("trigger")
     .notNull()
     .default("tag_adicionada"),
-  // Só usado quando trigger = 'dias_apos_tag'.
-  delayDays: integer("delay_days"),
+  // Só usado quando trigger = 'dias_apos_tag'. Em minutos (não dias) pra UI
+  // permitir configurar dias/horas/minutos.
+  delayMinutes: integer("delay_minutes"),
   title: text("title").notNull(),
   type: stageTaskTypeEnum("type").notNull(),
   messageTemplateId: uuid("message_template_id").references(

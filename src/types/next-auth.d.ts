@@ -10,6 +10,7 @@ declare module "@auth/core/types" {
     id: string;
     role: "admin" | "atendente";
     mustChangePassword: boolean;
+    restrictToOwnRecords: boolean;
   }
 
   interface Session {
@@ -17,6 +18,7 @@ declare module "@auth/core/types" {
       id: string;
       role: "admin" | "atendente";
       mustChangePassword: boolean;
+      restrictToOwnRecords: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -26,5 +28,6 @@ declare module "@auth/core/jwt" {
     id: string;
     role: "admin" | "atendente";
     mustChangePassword: boolean;
+    restrictToOwnRecords: boolean;
   }
 }

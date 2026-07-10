@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, customFieldDefinitions, deals } from "@/db/schema";
+import {
+  resolveDistributedOwner,
+  syncContactOwnerFromDeal,
+} from "@/lib/owner-distribution";
 import { attachTagsToContact, attachTagsToDeal, resolveOrCreateTagIds } from "@/lib/tags";
 import {
   normalizePhone,
@@ -132,6 +136,8 @@ export async function importCsvBatch(params: {
       result.contactsCreated += 1;
     }
 
+    const distributedOwnerId = await resolveDistributedOwner(pipelineId);
+
     const [createdDeal] = await db
       .insert(deals)
       .values({
@@ -141,9 +147,14 @@ export async function importCsvBatch(params: {
         title: resolved.dealTitle || resolved.contactName || phone,
         value: resolved.dealValue,
         customFields: filteredDealCustom,
+        ownerId: distributedOwnerId,
       })
       .returning({ id: deals.id });
     result.dealsCreated += 1;
+
+    // Só propaga quando a distribuição de fato escolheu alguém — um
+    // negócio novo sem dono não deve apagar o dono que o contato já tinha.
+    if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
 
     if (resolved.contactTagNames.length > 0) {
       await attachTagsToContact(contactId, await resolveOrCreateTagIds(resolved.contactTagNames));

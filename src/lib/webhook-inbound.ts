@@ -7,6 +7,10 @@ import {
   temperatureRules,
   webhookLogs,
 } from "@/db/schema";
+import {
+  resolveDistributedOwner,
+  syncContactOwnerFromDeal,
+} from "@/lib/owner-distribution";
 import { attachTagsToContact, attachTagsToDeal } from "@/lib/tags";
 
 // Resolve um caminho tipo "answers.gasto_cartao" ou "payload.nome" dentro de
@@ -181,6 +185,8 @@ export async function processInboundPayload(
     Object.entries(dealCustomFields).filter(([key]) => knownDealKeys.has(key))
   );
 
+  const distributedOwnerId = await resolveDistributedOwner(webhookConfig.defaultPipelineId);
+
   const [createdDeal] = await db
     .insert(deals)
     .values({
@@ -190,8 +196,13 @@ export async function processInboundPayload(
       title: contactFields.name || contactFields.phone,
       customFields: filteredDealCustomFields,
       temperature,
+      ownerId: distributedOwnerId,
     })
     .returning({ id: deals.id });
+
+  // Só propaga quando a distribuição de fato escolheu alguém — um negócio
+  // novo sem dono não deve apagar o dono que o contato já tinha.
+  if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
 
   if (contactTagIds.length > 0) {
     await attachTagsToContact(contactId, contactTagIds);

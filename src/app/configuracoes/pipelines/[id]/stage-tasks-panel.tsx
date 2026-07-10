@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { DurationPicker, formatMinutesShort } from "@/components/duration-picker";
 import {
   createStageTaskAction,
   deleteStageTaskAction,
@@ -44,7 +45,7 @@ export type StageTask = {
   type: "mensagem" | "ligacao" | "agendamento" | "generica";
   messageTemplateId: string | null;
   daysToComplete: number | null;
-  triggerDelayDays: number | null;
+  triggerDelayMinutes: number | null;
   isAutomatic: boolean;
   autoSend: boolean;
   autoSendChannelId: string | null;
@@ -79,6 +80,9 @@ function EditStageTaskDialog({
   const [autoSendChannelId, setAutoSendChannelId] = useState<string | null>(
     task.autoSendChannelId
   );
+  const [triggerDelayMinutes, setTriggerDelayMinutes] = useState(
+    task.triggerDelayMinutes ?? 0
+  );
   const [state, formAction, isPending] = useActionState(
     updateStageTaskAction,
     idleState
@@ -103,22 +107,23 @@ function EditStageTaskDialog({
           <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
           <input type="hidden" name="autoSend" value={String(autoSend)} />
           <input type="hidden" name="autoSendChannelId" value={autoSendChannelId ?? ""} />
+          <input
+            type="hidden"
+            name="triggerDelayMinutes"
+            value={triggerDelayMinutes || ""}
+          />
           <div className="space-y-2">
             <Label htmlFor={`title-${task.id}`}>Título</Label>
             <Input id={`title-${task.id}`} name="title" defaultValue={task.title} required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`trigger-days-${task.id}`}>
-              Disparar X dias após entrar na etapa
-            </Label>
-            <Input
-              id={`trigger-days-${task.id}`}
-              name="triggerDelayDays"
-              type="number"
-              min={0}
-              placeholder="Deixe vazio pra criar na hora"
-              defaultValue={task.triggerDelayDays ?? ""}
+            <Label>Disparar após entrar na etapa</Label>
+            <DurationPicker
+              idPrefix={`trigger-${task.id}`}
+              totalMinutes={triggerDelayMinutes}
+              onChange={setTriggerDelayMinutes}
             />
+            <p className="text-xs text-muted-foreground">Tudo zerado = cria na hora.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`days-${task.id}`}>Prazo (dias após a tarefa ser criada)</Label>
@@ -295,6 +300,7 @@ function CreateStageTaskForm({
   const [isAutomatic, setIsAutomatic] = useState(true);
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendChannelId, setAutoSendChannelId] = useState<string | null>(null);
+  const [triggerDelayMinutes, setTriggerDelayMinutes] = useState(0);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
@@ -304,6 +310,11 @@ function CreateStageTaskForm({
       <input type="hidden" name="isAutomatic" value={String(isAutomatic)} />
       <input type="hidden" name="autoSend" value={String(autoSend)} />
       <input type="hidden" name="autoSendChannelId" value={autoSendChannelId ?? ""} />
+      <input
+        type="hidden"
+        name="triggerDelayMinutes"
+        value={triggerDelayMinutes || ""}
+      />
       <div className="space-y-1">
         <Label htmlFor={`new-title-${stageId}`} className="text-xs">
           Título
@@ -362,16 +373,12 @@ function CreateStageTaskForm({
         </div>
       )}
       <div className="space-y-1">
-        <Label htmlFor={`new-trigger-days-${stageId}`} className="text-xs">
-          Disparar após (dias)
-        </Label>
-        <Input
-          id={`new-trigger-days-${stageId}`}
-          name="triggerDelayDays"
-          type="number"
-          min={0}
-          placeholder="Na hora"
-          className="h-8 w-28 text-sm"
+        <Label className="text-xs">Disparar após</Label>
+        <DurationPicker
+          idPrefix={`new-trigger-${stageId}`}
+          totalMinutes={triggerDelayMinutes}
+          onChange={setTriggerDelayMinutes}
+          size="sm"
         />
       </div>
       <div className="space-y-1">
@@ -527,9 +534,9 @@ export function StageTasksPanel({
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {TYPE_LABELS[task.type]}
                 </span>
-                {task.triggerDelayDays != null && (
+                {task.triggerDelayMinutes != null && (
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    Disparo: +{task.triggerDelayDays}d
+                    Disparo: +{formatMinutesShort(task.triggerDelayMinutes)}
                   </span>
                 )}
                 {task.daysToComplete != null && (

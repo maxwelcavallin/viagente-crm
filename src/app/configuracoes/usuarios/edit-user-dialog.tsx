@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { updateUserAction, type UpdateUserState } from "./actions";
 
 const idleState: UpdateUserState = { status: "idle" };
@@ -28,11 +29,20 @@ const idleState: UpdateUserState = { status: "idle" };
 export function EditUserDialog({
   user,
 }: {
-  user: { id: string; name: string; email: string; role: "admin" | "atendente" };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: "admin" | "atendente";
+    restrictToOwnRecords: boolean;
+  };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<"admin" | "atendente">(user.role);
+  const [restrictToOwnRecords, setRestrictToOwnRecords] = useState(
+    user.restrictToOwnRecords
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -56,6 +66,7 @@ export function EditUserDialog({
         setOpen(next);
         if (next) {
           setRole(user.role);
+          setRestrictToOwnRecords(user.restrictToOwnRecords);
           setError(null);
         }
       }}
@@ -99,6 +110,27 @@ export function EditUserDialog({
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor={`edit-restrict-${user.id}`}>
+                Restringir aos próprios negócios/atendimentos
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Se ligado, esse usuário só vê negócios e atendimentos dele mesmo ou sem
+                dono — nunca os de outros atendentes.
+              </p>
+            </div>
+            <input
+              type="hidden"
+              name="restrictToOwnRecords"
+              value={String(restrictToOwnRecords)}
+            />
+            <Switch
+              id={`edit-restrict-${user.id}`}
+              checked={restrictToOwnRecords}
+              onCheckedChange={setRestrictToOwnRecords}
+            />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>

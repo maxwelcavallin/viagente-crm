@@ -113,6 +113,27 @@
       "when": 1783652313913,
       "tag": "0015_fancy_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783654355777,
+      "tag": "0016_modern_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783654411461,
+      "tag": "0017_orange_spencer_smythe",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783655281819,
+      "tag": "0018_brainy_human_cannonball",
+      "breakpoints": true
     }
   ]
 }

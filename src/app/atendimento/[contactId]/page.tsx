@@ -1,11 +1,16 @@
 import { notFound, redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { contacts, whatsappChannels } from "@/db/schema";
+import { contacts, customFieldDefinitions, deals, whatsappChannels } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread, markContactRead } from "@/lib/conversations";
+import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
+import { formatCurrencyBRL } from "@/lib/deal-format";
+import { findOpenDealIdForContact } from "@/lib/messaging";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
+import { canViewOwnedRecord } from "@/lib/visibility";
+import type { ContactDealParam } from "@/components/insert-param-button";
 import { ConversationThread } from "./conversation-thread";
 
 export const dynamic = "force-dynamic";
@@ -25,13 +30,17 @@ export default async function ConversationPage({
       id: contacts.id,
       name: contacts.name,
       phone: contacts.phone,
+      email: contacts.email,
       isGroup: contacts.isGroup,
       avatarUrl: contacts.avatarUrl,
+      customFields: contacts.customFields,
+      ownerId: contacts.ownerId,
     })
     .from(contacts)
     .where(eq(contacts.id, contactId))
     .limit(1);
   if (!contact) notFound();
+  if (!canViewOwnedRecord(contact.ownerId, session.user)) notFound();
 
   const allowedChannelIds = await getAllowedChannelIds(
     session.user.id,
@@ -44,16 +53,60 @@ export default async function ConversationPage({
   // atraso já aceito hoje pra mensagens novas chegando.
   await markContactRead(contactId);
 
-  const [thread, allowedChannels, pendingScheduled] = await Promise.all([
-    getThread(contactId, allowedChannelIds),
-    allowedChannelIds.length > 0
-      ? db
-          .select({ id: whatsappChannels.id, label: whatsappChannels.label, isDefault: whatsappChannels.isDefault })
-          .from(whatsappChannels)
-          .where(inArray(whatsappChannels.id, allowedChannelIds))
-      : Promise.resolve([]),
-    getPendingScheduledMessages(contactId),
-  ]);
+  const [thread, allowedChannels, pendingScheduled, openDealId, fieldDefRows] =
+    await Promise.all([
+      getThread(contactId, allowedChannelIds),
+      allowedChannelIds.length > 0
+        ? db
+            .select({ id: whatsappChannels.id, label: whatsappChannels.label, isDefault: whatsappChannels.isDefault })
+            .from(whatsappChannels)
+            .where(inArray(whatsappChannels.id, allowedChannelIds))
+        : Promise.resolve([]),
+      getPendingScheduledMessages(contactId),
+      findOpenDealIdForContact(contactId),
+      db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
+    ]);
+
+  const [openDeal] = openDealId
+    ? await db
+        .select({ value: deals.value, customFields: deals.customFields })
+        .from(deals)
+        .where(eq(deals.id, openDealId))
+        .limit(1)
+    : [];
+
+  // Valores JÁ resolvidos (não placeholders {{}}) — usados pelo botão de
+  // inserir parâmetro no composer, que escreve o texto final na hora, sem
+  // etapa de substituição depois (diferente dos templates).
+  const contactCustomFields = (contact.customFields as Record<string, unknown>) ?? {};
+  const dealCustomFields = (openDeal?.customFields as Record<string, unknown>) ?? {};
+  const contactParams: ContactDealParam[] = [
+    { key: "nome_contato", label: "Nome do contato", value: contact.name },
+  ];
+  if (contact.email) {
+    contactParams.push({ key: "email_contato", label: "Email do contato", value: contact.email });
+  }
+  if (openDeal?.value) {
+    const formatted = formatCurrencyBRL(openDeal.value);
+    if (formatted) contactParams.push({ key: "valor", label: "Valor do negócio", value: formatted });
+  }
+  for (const def of fieldDefRows) {
+    const source = def.entity === "deal" ? dealCustomFields : contactCustomFields;
+    const raw = source[def.key];
+    if (raw == null || raw === "") continue;
+    const fieldDef: FieldDef = {
+      id: def.id,
+      key: def.key,
+      label: def.label,
+      type: def.type,
+      options: def.options as { value: string; label: string }[] | null,
+    };
+    contactParams.push({
+      key: def.key,
+      label: `${def.label} (${def.entity === "contact" ? "contato" : "negócio"})`,
+      value: formatCustomFieldValue(fieldDef, raw),
+    });
+  }
 
   const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
   const defaultChannel = allowedChannels.find((c) => c.isDefault);
@@ -73,6 +126,7 @@ export default async function ConversationPage({
       initialMessages={thread}
       channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
       preselectedChannelId={preselectedChannelId}
+      params={contactParams}
       scheduledMessages={pendingScheduled.map((m) => ({
         id: m.id,
         content: m.content,

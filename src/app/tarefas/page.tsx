@@ -97,6 +97,7 @@ export default async function TarefasPage() {
 
     const variableValues: Record<string, string> = {
       nome_contato: row.contactName,
+      email_contato: row.contactEmail ?? "",
       valor: formatCurrencyBRL(row.dealValue) ?? "",
     };
     for (const def of dealFieldDefinitions) {

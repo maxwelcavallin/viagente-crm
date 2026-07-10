@@ -34,6 +34,7 @@ export function buildVariableCatalog(
 ): TemplateVariableInfo[] {
   const base: TemplateVariableInfo[] = [
     { key: "nome_contato", label: "Nome do contato", example: "Maria Silva" },
+    { key: "email_contato", label: "Email do contato", example: "maria@email.com" },
     { key: "valor", label: "Valor do negócio", example: "R$ 1.500,00" },
   ];
 

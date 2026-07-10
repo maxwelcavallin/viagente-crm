@@ -1,10 +1,10 @@
 "use server";
 
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { deals, lossReasons, stages, stageTasks } from "@/db/schema";
+import { deals, lossReasons, pipelineOwnerDistribution, stages, stageTasks } from "@/db/schema";
 
 async function requireAdmin() {
   const session = await auth();
@@ -242,7 +242,9 @@ export async function createStageTaskAction(
   const type = formData.get("type");
   const messageTemplateId = formData.get("messageTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
-  const triggerDelayDays = parseDaysToComplete(formData.get("triggerDelayDays"));
+  // Reaproveita o mesmo parser (não-negativo ou null) — o cliente já manda
+  // o total combinado de dias/horas/minutos em um único campo.
+  const triggerDelayMinutes = parseDaysToComplete(formData.get("triggerDelayMinutes"));
   const isAutomatic = formData.get("isAutomatic") === "true";
   const autoSend = formData.get("autoSend") === "true";
   const autoSendChannelIdRaw = formData.get("autoSendChannelId");
@@ -292,7 +294,7 @@ export async function createStageTaskAction(
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
     order: nextOrder,
     daysToComplete,
-    triggerDelayDays,
+    triggerDelayMinutes,
     isAutomatic,
     autoSend: type === "mensagem" ? autoSend : false,
     autoSendChannelId: type === "mensagem" && autoSend ? autoSendChannelId : null,
@@ -315,7 +317,9 @@ export async function updateStageTaskAction(
   const title = formData.get("title");
   const messageTemplateId = formData.get("messageTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
-  const triggerDelayDays = parseDaysToComplete(formData.get("triggerDelayDays"));
+  // Reaproveita o mesmo parser (não-negativo ou null) — o cliente já manda
+  // o total combinado de dias/horas/minutos em um único campo.
+  const triggerDelayMinutes = parseDaysToComplete(formData.get("triggerDelayMinutes"));
   const isAutomatic = formData.get("isAutomatic") === "true";
   const autoSend = formData.get("autoSend") === "true";
   const autoSendChannelIdRaw = formData.get("autoSendChannelId");
@@ -358,7 +362,7 @@ export async function updateStageTaskAction(
       messageTemplateId:
         current.type === "mensagem" ? (messageTemplateId as string) : null,
       daysToComplete,
-      triggerDelayDays,
+      triggerDelayMinutes,
       isAutomatic,
       autoSend: current.type === "mensagem" ? autoSend : false,
       autoSendChannelId: current.type === "mensagem" && autoSend ? autoSendChannelId : null,
@@ -494,4 +498,78 @@ export async function deleteLossReasonAction(
 
   revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
   return lossReasonIdle;
+}
+
+// ---------- Distribuição de donos por pipeline ----------
+
+export type OwnerDistributionFormState =
+  | { status: "idle" }
+  | { status: "error"; message: string };
+
+const ownerDistributionIdle: OwnerDistributionFormState = { status: "idle" };
+
+export async function createOwnerDistributionAction(
+  _prevState: OwnerDistributionFormState,
+  formData: FormData
+): Promise<OwnerDistributionFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const pipelineId = formData.get("pipelineId");
+  const userId = formData.get("userId");
+  const weightRaw = formData.get("weight");
+  if (typeof pipelineId !== "string" || !pipelineId) {
+    return { status: "error", message: "Pipeline inválida." };
+  }
+  if (typeof userId !== "string" || !userId) {
+    return { status: "error", message: "Selecione um usuário." };
+  }
+  const weight = Number(weightRaw);
+  if (!Number.isFinite(weight) || weight <= 0) {
+    return { status: "error", message: "Peso precisa ser maior que zero." };
+  }
+
+  const [existing] = await db
+    .select({ id: pipelineOwnerDistribution.id })
+    .from(pipelineOwnerDistribution)
+    .where(
+      and(
+        eq(pipelineOwnerDistribution.pipelineId, pipelineId),
+        eq(pipelineOwnerDistribution.userId, userId)
+      )
+    )
+    .limit(1);
+  if (existing) {
+    return { status: "error", message: "Esse usuário já está na distribuição desta pipeline." };
+  }
+
+  await db.insert(pipelineOwnerDistribution).values({
+    pipelineId,
+    userId,
+    weight: Math.floor(weight),
+  });
+
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
+  return ownerDistributionIdle;
+}
+
+export async function deleteOwnerDistributionAction(
+  _prevState: OwnerDistributionFormState,
+  formData: FormData
+): Promise<OwnerDistributionFormState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "Acesso negado." };
+  }
+
+  const id = formData.get("id");
+  const pipelineId = formData.get("pipelineId");
+  if (typeof id !== "string" || typeof pipelineId !== "string") {
+    return { status: "error", message: "Regra inválida." };
+  }
+
+  await db.delete(pipelineOwnerDistribution).where(eq(pipelineOwnerDistribution.id, id));
+
+  revalidatePath(`/configuracoes/pipelines/${pipelineId}`);
+  return ownerDistributionIdle;
 }

@@ -15,7 +15,7 @@ export default async function AutomacoesPage() {
         tagName: tags.name,
         tagColor: tags.color,
         trigger: tagAutomations.trigger,
-        delayDays: tagAutomations.delayDays,
+        delayMinutes: tagAutomations.delayMinutes,
         title: tagAutomations.title,
         type: tagAutomations.type,
         messageTemplateId: tagAutomations.messageTemplateId,

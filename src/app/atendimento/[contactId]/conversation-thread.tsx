@@ -16,6 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageList, replyPreviewLabel } from "@/components/message-list";
 import { EmojiPicker } from "@/components/emoji-picker";
+import { InsertParamButton, type ContactDealParam } from "@/components/insert-param-button";
 import { AudioRecorderButton } from "@/components/audio-recorder-button";
 import { ScheduleMessageDialog } from "@/components/schedule-message-dialog";
 import {
@@ -38,6 +39,7 @@ export function ConversationThread({
   channels,
   preselectedChannelId,
   scheduledMessages,
+  params,
 }: {
   contactId: string;
   contactName: string;
@@ -48,6 +50,7 @@ export function ConversationThread({
   channels: { id: string; label: string }[];
   preselectedChannelId: string | null;
   scheduledMessages: ScheduledMessageItem[];
+  params: ContactDealParam[];
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -139,19 +142,21 @@ export function ConversationThread({
     await sendMediaFile(blob);
   }
 
-  function insertEmoji(emoji: string) {
+  // Reaproveitado tanto pelo emoji picker quanto pelo botão de inserir
+  // parâmetro (nome/email/campos customizados do contato ou negócio).
+  function insertText(value: string) {
     const textarea = textareaRef.current;
     if (!textarea) {
-      setText((t) => t + emoji);
+      setText((t) => t + value);
       return;
     }
     const start = textarea.selectionStart ?? text.length;
     const end = textarea.selectionEnd ?? text.length;
-    const next = text.slice(0, start) + emoji + text.slice(end);
+    const next = text.slice(0, start) + value + text.slice(end);
     setText(next);
     requestAnimationFrame(() => {
       textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+      textarea.selectionStart = textarea.selectionEnd = start + value.length;
     });
   }
 
@@ -270,7 +275,8 @@ export function ConversationThread({
               </Select>
             </div>
             <div className="flex items-end gap-1">
-              <EmojiPicker onSelect={insertEmoji} />
+              <EmojiPicker onSelect={insertText} />
+              <InsertParamButton params={params} onSelect={insertText} />
               <Button
                 type="button"
                 variant="ghost"

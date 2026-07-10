@@ -32,16 +32,22 @@ export const DEFAULT_FILTERS: DealFiltersState = {
   createdTo: "",
 };
 
+// Sentinelas pro filtro de dono — nunca colidem com um uuid real.
+export const OWNER_FILTER_MINE = "__meus__";
+export const OWNER_FILTER_UNASSIGNED = "__sem_dono__";
+
 export function DealFiltersBar({
   filters,
   onChange,
   owners,
   allTags,
+  currentUserId,
 }: {
   filters: DealFiltersState;
   onChange: (next: DealFiltersState) => void;
   owners: { id: string; name: string }[];
   allTags: TagOption[];
+  currentUserId: string;
 }) {
   function set<K extends keyof DealFiltersState>(key: K, value: DealFiltersState[K]) {
     onChange({ ...filters, [key]: value });
@@ -87,21 +93,27 @@ export function DealFiltersBar({
       <Select
         items={Object.fromEntries([
           ["todos", "Todos os donos"],
-          ...owners.map((o) => [o.id, o.name]),
+          [OWNER_FILTER_MINE, "Meus negócios"],
+          [OWNER_FILTER_UNASSIGNED, "Não atribuído"],
+          ...owners.filter((o) => o.id !== currentUserId).map((o) => [o.id, o.name]),
         ])}
         value={filters.ownerId}
         onValueChange={(value) => set("ownerId", value ?? "todos")}
       >
-        <SelectTrigger className="h-9 w-40">
+        <SelectTrigger className="h-9 w-44">
           <SelectValue placeholder="Dono" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="todos">Todos os donos</SelectItem>
-          {owners.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.name}
-            </SelectItem>
-          ))}
+          <SelectItem value={OWNER_FILTER_MINE}>Meus negócios</SelectItem>
+          <SelectItem value={OWNER_FILTER_UNASSIGNED}>Não atribuído</SelectItem>
+          {owners
+            .filter((o) => o.id !== currentUserId)
+            .map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.name}
+              </SelectItem>
+            ))}
         </SelectContent>
       </Select>
 
@@ -178,10 +190,17 @@ export function matchesDealFilters(
     status: string;
     createdAt: Date;
   },
-  filters: DealFiltersState
+  filters: DealFiltersState,
+  currentUserId: string
 ): boolean {
   if (filters.status !== "todos" && deal.status !== filters.status) return false;
-  if (filters.ownerId !== "todos" && deal.ownerId !== filters.ownerId) return false;
+  if (filters.ownerId === OWNER_FILTER_MINE) {
+    if (deal.ownerId !== currentUserId) return false;
+  } else if (filters.ownerId === OWNER_FILTER_UNASSIGNED) {
+    if (deal.ownerId !== null) return false;
+  } else if (filters.ownerId !== "todos" && deal.ownerId !== filters.ownerId) {
+    return false;
+  }
   if (filters.tagId !== "todas" && !deal.tagIds.includes(filters.tagId)) return false;
   if (filters.temperature !== "todas" && deal.temperature !== filters.temperature)
     return false;

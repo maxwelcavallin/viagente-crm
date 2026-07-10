@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { getLastMessagePreviewsByDealId } from "@/lib/deals";
 import type { TagOption } from "@/lib/tags";
+import { ownerVisibilityFilter } from "@/lib/visibility";
 import { KanbanBoard } from "./kanban-board";
 import type { DealCardData } from "./deal-card";
 
@@ -88,7 +89,12 @@ export default async function NegociosPage({
           pipelineId: deals.pipelineId,
         })
         .from(deals)
-        .where(eq(deals.pipelineId, selectedPipelineId))
+        .where(
+          and(
+            eq(deals.pipelineId, selectedPipelineId),
+            ownerVisibilityFilter(deals.ownerId, session.user)
+          )
+        )
     : [];
 
   const dealIds = pipelineDeals.map((d) => d.id);

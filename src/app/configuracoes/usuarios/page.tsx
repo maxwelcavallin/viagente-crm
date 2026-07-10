@@ -17,6 +17,7 @@ export default async function UsuariosPage() {
       email: users.email,
       role: users.role,
       mustChangePassword: users.mustChangePassword,
+      restrictToOwnRecords: users.restrictToOwnRecords,
     })
     .from(users)
     .orderBy(users.createdAt);

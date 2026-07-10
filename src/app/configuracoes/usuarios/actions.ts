@@ -29,6 +29,7 @@ export async function updateUserAction(
   const name = formData.get("name");
   const email = formData.get("email");
   const role = formData.get("role");
+  const restrictToOwnRecords = formData.get("restrictToOwnRecords") === "true";
 
   if (typeof id !== "string" || !id) {
     return { status: "error", message: "Usuário inválido." };
@@ -86,7 +87,7 @@ export async function updateUserAction(
 
   await db
     .update(users)
-    .set({ name: name.trim(), email: normalizedEmail, role })
+    .set({ name: name.trim(), email: normalizedEmail, role, restrictToOwnRecords })
     .where(eq(users.id, id));
 
   revalidatePath("/configuracoes/usuarios");

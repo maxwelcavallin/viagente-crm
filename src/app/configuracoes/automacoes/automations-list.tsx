@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { DurationPicker, formatMinutesShort } from "@/components/duration-picker";
 import {
   Table,
   TableBody,
@@ -46,7 +47,7 @@ export type TagAutomationRow = {
   tagName: string;
   tagColor: string | null;
   trigger: "tag_adicionada" | "dias_apos_tag";
-  delayDays: number | null;
+  delayMinutes: number | null;
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica";
   messageTemplateId: string | null;
@@ -87,6 +88,7 @@ function TagAutomationFormDialog({
   const [ruleTrigger, setRuleTrigger] = useState<TagAutomationRow["trigger"]>(
     automation?.trigger ?? "tag_adicionada"
   );
+  const [delayMinutes, setDelayMinutes] = useState(automation?.delayMinutes ?? 0);
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     automation?.messageTemplateId ?? null
   );
@@ -208,15 +210,12 @@ function TagAutomationFormDialog({
 
           {ruleTrigger === "dias_apos_tag" && (
             <div className="space-y-2">
-              <Label htmlFor="ta-delay">Dias com a tag antes de disparar</Label>
-              <Input
-                id="ta-delay"
-                name="delayDays"
-                type="number"
-                min={0}
-                placeholder="Ex: 3"
-                defaultValue={automation?.delayDays ?? ""}
-                required
+              <Label>Tempo com a tag antes de disparar</Label>
+              <input type="hidden" name="delayMinutes" value={delayMinutes || ""} />
+              <DurationPicker
+                idPrefix="ta-delay"
+                totalMinutes={delayMinutes}
+                onChange={setDelayMinutes}
               />
             </div>
           )}
@@ -360,8 +359,8 @@ export function AutomationsList({
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {TRIGGER_LABELS[automation.trigger]}
-                  {automation.trigger === "dias_apos_tag" && automation.delayDays != null
-                    ? ` (${automation.delayDays}d)`
+                  {automation.trigger === "dias_apos_tag" && automation.delayMinutes != null
+                    ? ` (${formatMinutesShort(automation.delayMinutes)})`
                     : ""}
                 </TableCell>
                 <TableCell className="text-sm">

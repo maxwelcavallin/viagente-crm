@@ -18,6 +18,7 @@ type UserRow = {
   email: string;
   role: "admin" | "atendente";
   mustChangePassword: boolean;
+  restrictToOwnRecords: boolean;
 };
 
 export function UsersTable({
@@ -54,9 +55,14 @@ export function UsersTable({
             <TableCell>{user.name}</TableCell>
             <TableCell>{user.email}</TableCell>
             <TableCell>
-              <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                {user.role}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                  {user.role}
+                </Badge>
+                {user.restrictToOwnRecords && (
+                  <Badge variant="outline">Restrito ao próprio</Badge>
+                )}
+              </div>
             </TableCell>
             <TableCell>
               {user.mustChangePassword ? (

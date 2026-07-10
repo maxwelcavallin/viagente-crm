@@ -38,6 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           role: user.role,
           mustChangePassword: user.mustChangePassword,
+          restrictToOwnRecords: user.restrictToOwnRecords,
         };
       },
     }),
@@ -48,6 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = user.role;
         token.mustChangePassword = user.mustChangePassword;
+        token.restrictToOwnRecords = user.restrictToOwnRecords;
       }
 
       // Disparado por `useSession().update()` — relemos o banco pra pegar o
@@ -62,6 +64,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (fresh) {
           token.role = fresh.role;
           token.mustChangePassword = fresh.mustChangePassword;
+          token.restrictToOwnRecords = fresh.restrictToOwnRecords;
         }
       }
 
@@ -71,6 +74,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.id = token.id;
       session.user.role = token.role;
       session.user.mustChangePassword = token.mustChangePassword;
+      session.user.restrictToOwnRecords = token.restrictToOwnRecords;
       return session;
     },
     authorized({ request, auth }) {

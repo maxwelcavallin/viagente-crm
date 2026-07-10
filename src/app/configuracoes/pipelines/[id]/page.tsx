@@ -5,15 +5,18 @@ import { db } from "@/db";
 import {
   lossReasons,
   messageTemplates,
+  pipelineOwnerDistribution,
   pipelines,
   stages,
   stageTasks,
+  users,
   whatsappChannels,
 } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
 import { LossReasonsPanel } from "./loss-reasons-panel";
+import { OwnerDistributionPanel } from "./owner-distribution-panel";
 import type { StageTask } from "./stage-tasks-panel";
 
 export default async function PipelineDetailPage({
@@ -38,7 +41,8 @@ export default async function PipelineDetailPage({
     .orderBy(asc(stages.order));
 
   const stageIds = pipelineStages.map((s) => s.id);
-  const [stageTaskRows, templates, channels, pipelineLossReasons] = await Promise.all([
+  const [stageTaskRows, templates, channels, pipelineLossReasons, distributionRows, allUsers] =
+    await Promise.all([
     stageIds.length > 0
       ? db
           .select({
@@ -49,7 +53,7 @@ export default async function PipelineDetailPage({
             messageTemplateId: stageTasks.messageTemplateId,
             order: stageTasks.order,
             daysToComplete: stageTasks.daysToComplete,
-            triggerDelayDays: stageTasks.triggerDelayDays,
+            triggerDelayMinutes: stageTasks.triggerDelayMinutes,
             isAutomatic: stageTasks.isAutomatic,
             autoSend: stageTasks.autoSend,
             autoSendChannelId: stageTasks.autoSendChannelId,
@@ -65,6 +69,19 @@ export default async function PipelineDetailPage({
       .from(lossReasons)
       .where(eq(lossReasons.pipelineId, id))
       .orderBy(asc(lossReasons.order)),
+    db
+      .select({
+        id: pipelineOwnerDistribution.id,
+        userId: pipelineOwnerDistribution.userId,
+        userName: users.name,
+        weight: pipelineOwnerDistribution.weight,
+        assignedCount: pipelineOwnerDistribution.assignedCount,
+      })
+      .from(pipelineOwnerDistribution)
+      .innerJoin(users, eq(users.id, pipelineOwnerDistribution.userId))
+      .where(eq(pipelineOwnerDistribution.pipelineId, id))
+      .orderBy(asc(pipelineOwnerDistribution.createdAt)),
+    db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
   ]);
 
   const stageTasksByStageId: Record<string, StageTask[]> = {};
@@ -76,7 +93,7 @@ export default async function PipelineDetailPage({
       type: row.type,
       messageTemplateId: row.messageTemplateId,
       daysToComplete: row.daysToComplete,
-      triggerDelayDays: row.triggerDelayDays,
+      triggerDelayMinutes: row.triggerDelayMinutes,
       isAutomatic: row.isAutomatic,
       autoSend: row.autoSend,
       autoSendChannelId: row.autoSendChannelId,
@@ -126,6 +143,18 @@ export default async function PipelineDetailPage({
             </CardHeader>
             <CardContent>
               <LossReasonsPanel pipelineId={pipeline.id} reasons={pipelineLossReasons} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Distribuição de donos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <OwnerDistributionPanel
+                pipelineId={pipeline.id}
+                rows={distributionRows}
+                availableUsers={allUsers}
+              />
             </CardContent>
           </Card>
         </div>

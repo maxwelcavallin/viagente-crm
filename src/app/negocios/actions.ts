@@ -15,6 +15,10 @@ import {
   tasks,
 } from "@/db/schema";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
+import {
+  resolveDistributedOwner,
+  syncContactOwnerFromDeal,
+} from "@/lib/owner-distribution";
 import { fireTagAddedAutomations, maybeAutoSendTask } from "@/lib/task-automation";
 import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
@@ -147,6 +151,12 @@ export async function createDealAction(
   const fields = await readDealFields(formData);
   if ("error" in fields) return { status: "error", message: fields.error };
 
+  // Sem dono escolhido no form: tenta a regra de distribuição da pipeline
+  // (ver Configurações > Pipelines > editar > Distribuição de donos) —
+  // continua null se a pipeline não tiver regra configurada.
+  const ownerId =
+    fields.ownerId ?? (await resolveDistributedOwner(fields.pipelineId));
+
   const [created] = await db
     .insert(deals)
     .values({
@@ -154,12 +164,16 @@ export async function createDealAction(
       pipelineId: fields.pipelineId,
       stageId: fields.stageId,
       title: fields.title,
-      ownerId: fields.ownerId,
+      ownerId,
       value: fields.value,
       customFields: fields.customFields,
     })
     .returning({ id: deals.id });
 
+  // Só propaga quando há um dono de fato (escolhido ou distribuído) — um
+  // negócio novo sem dono não deve apagar o dono que o contato já tinha de
+  // um negócio anterior.
+  if (ownerId) await syncContactOwnerFromDeal(fields.contactId, ownerId);
   const newTagIds = await syncDealTags(created.id, fields.tagIds);
   await fireTagAddedAutomations(created.id, newTagIds);
   void dispatchOutboundWebhooks("negocio_criado", created.id);
@@ -208,6 +222,7 @@ export async function updateDealAction(
     })
     .where(eq(deals.id, id));
 
+  await syncContactOwnerFromDeal(fields.contactId, fields.ownerId);
   const newTagIds = await syncDealTags(id, fields.tagIds);
   await fireTagAddedAutomations(id, newTagIds);
 
@@ -259,8 +274,8 @@ export async function moveDealStageAction(
   // adicionar manualmente (ver addStageTaskToDealAction). Se o negócio já
   // visitou essa etapa antes, cria de novo — não reaproveita tarefas antigas
   // já concluídas (regra explícita do critério de aceite). Tarefas com
-  // triggerDelayDays setado NÃO entram aqui — ficam pro cron de automação
-  // varrer quando o prazo em dias na etapa for atingido.
+  // triggerDelayMinutes setado NÃO entram aqui — ficam pro cron de automação
+  // varrer quando o tempo configurado na etapa for atingido.
   const tasksForStage = await db
     .select({
       id: stageTasks.id,
@@ -276,7 +291,7 @@ export async function moveDealStageAction(
       and(
         eq(stageTasks.stageId, stageId),
         eq(stageTasks.isAutomatic, true),
-        isNull(stageTasks.triggerDelayDays)
+        isNull(stageTasks.triggerDelayMinutes)
       )
     );
 
@@ -515,10 +530,19 @@ export async function bulkSetOwnerAction(
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
 
+  const affected = await db
+    .select({ contactId: deals.contactId })
+    .from(deals)
+    .where(inArray(deals.id, dealIds));
+
   await db
     .update(deals)
     .set({ ownerId, updatedAt: new Date() })
     .where(inArray(deals.id, dealIds));
+
+  for (const row of affected) {
+    await syncContactOwnerFromDeal(row.contactId, ownerId);
+  }
 
   revalidatePath("/negocios");
   return { ok: true };

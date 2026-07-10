@@ -29,6 +29,7 @@ async function buildTemplateVariables(
       dealCustomFields: deals.customFields,
       contactId: contacts.id,
       contactName: contacts.name,
+      contactEmail: contacts.email,
       contactCustomFields: contacts.customFields,
     })
     .from(deals)
@@ -43,6 +44,7 @@ async function buildTemplateVariables(
 
   const variableValues: Record<string, string> = {
     nome_contato: row.contactName,
+    email_contato: row.contactEmail ?? "",
     valor: formatCurrencyBRL(row.dealValue) ?? "",
   };
   for (const def of fieldDefRows) {
@@ -152,6 +154,7 @@ export async function fireTagAddedAutomations(
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_MINUTE = 60 * 1000;
 
 // Varredura periódica (cron) pros dois gatilhos com atraso — não são
 // eventos síncronos, alguém precisa checar "já passou tempo suficiente?"
@@ -166,7 +169,7 @@ export async function runDelayedAutomationSweep(): Promise<{
   let stageTasksCreated = 0;
   let tagAutomationsCreated = 0;
 
-  // A. stage_tasks com triggerDelayDays: negócio precisa estar na etapa
+  // A. stage_tasks com triggerDelayMinutes: negócio precisa estar na etapa
   // certa há tempo suficiente, e ainda não ter ganho a task nesta "visita"
   // (task criada em/depois de stageEnteredAt).
   const delayedStageTasks = await db
@@ -176,7 +179,7 @@ export async function runDelayedAutomationSweep(): Promise<{
       title: stageTasks.title,
       type: stageTasks.type,
       daysToComplete: stageTasks.daysToComplete,
-      triggerDelayDays: stageTasks.triggerDelayDays,
+      triggerDelayMinutes: stageTasks.triggerDelayMinutes,
       autoSend: stageTasks.autoSend,
       autoSendChannelId: stageTasks.autoSendChannelId,
       messageTemplateId: stageTasks.messageTemplateId,
@@ -185,7 +188,7 @@ export async function runDelayedAutomationSweep(): Promise<{
     .where(eq(stageTasks.isAutomatic, true));
 
   for (const st of delayedStageTasks) {
-    if (st.triggerDelayDays == null) continue;
+    if (st.triggerDelayMinutes == null) continue;
 
     const dealsInStage = await db
       .select({ id: deals.id, stageEnteredAt: deals.stageEnteredAt })
@@ -194,7 +197,7 @@ export async function runDelayedAutomationSweep(): Promise<{
 
     for (const deal of dealsInStage) {
       const elapsedMs = now - deal.stageEnteredAt.getTime();
-      if (elapsedMs < st.triggerDelayDays * MS_PER_DAY) continue;
+      if (elapsedMs < st.triggerDelayMinutes * MS_PER_MINUTE) continue;
 
       const [alreadyFired] = await db
         .select({ id: tasks.id })
@@ -247,7 +250,7 @@ export async function runDelayedAutomationSweep(): Promise<{
     .where(eq(tagAutomations.trigger, "dias_apos_tag"));
 
   for (const rule of delayedTagRules) {
-    if (rule.delayDays == null) continue;
+    if (rule.delayMinutes == null) continue;
 
     const taggedDeals = await db
       .select({ dealId: dealTags.dealId, createdAt: dealTags.createdAt })
@@ -256,7 +259,7 @@ export async function runDelayedAutomationSweep(): Promise<{
 
     for (const dt of taggedDeals) {
       const elapsedMs = now - dt.createdAt.getTime();
-      if (elapsedMs < rule.delayDays * MS_PER_DAY) continue;
+      if (elapsedMs < rule.delayMinutes * MS_PER_MINUTE) continue;
 
       const [alreadyFired] = await db
         .select({ id: tasks.id })
