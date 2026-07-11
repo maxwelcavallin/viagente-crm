@@ -4,6 +4,19 @@ CRM interno da Viagente (substituto da Clint). Ver a especificação completa em
 
 **Stack:** Next.js (App Router) + TypeScript + Tailwind CSS + shadcn/ui + Drizzle ORM + Neon (Postgres serverless), deploy na Vercel.
 
+## Funcionalidades
+
+MVP de dia 1 (Etapas 1-12, `docs/dia1-etapas/etapa-1-*` a `etapa-12-*`): autenticação e usuários, pipelines/etapas configuráveis, negócios em kanban com campos customizados e tags, contatos, atendimento via WhatsApp (Z-API) com histórico persistido, motor de webhook de entrada/saída, automação básica de tarefa por etapa, templates de mensagem, importação de contatos/negócios via CSV, integração com Google Agenda.
+
+Entregue depois do cutover (Etapas 13-19, mesma pasta, ver seção 14 de `viagente-crm-spec.md` para o resumo de cada uma):
+- Automação avançada de tarefas — gatilho por etapa ou por tag, atraso configurável, envio automático de WhatsApp (`/configuracoes/automacoes`, `/configuracoes/pipelines/[id]`)
+- Tags estáticas em webhook de entrada + repasse de webhook Z-API pra outro sistema
+- `/tarefas` — visão global de tarefas de todos os negócios, com editar/excluir
+- Indicadores de negócio e dashboard na página Início (motivos de perda, conversão, vendas, atividades, mensagens)
+- Editar/excluir canal WhatsApp
+- Parâmetros de contato/negócio disponíveis em templates e no composer do atendimento
+- Dono do negócio/atendimento — distribuição automática por pipeline, sincronização, filtros, restrição de visibilidade por usuário, troca em massa
+
 ## Setup local
 
 ### 1. Instalar dependências
@@ -54,22 +67,22 @@ npm run create-admin -- "Seu Nome" "seu@email.com"
 
 O script imprime a senha temporária **uma única vez** no terminal — copie e use pra logar em `/login`. No primeiro login o sistema força a troca dessa senha antes de liberar o resto do sistema. Rodar o script de novo com o mesmo email não duplica nem sobrescreve nada (é seguro rodar mais de uma vez, só que só cria se o email ainda não existir).
 
-Depois disso, o próprio admin pode criar os demais usuários pela tela `/admin/usuarios` (mesma lógica de senha temporária exibida uma vez).
+Depois disso, o próprio admin pode criar os demais usuários pela tela `/configuracoes/usuarios` (mesma lógica de senha temporária exibida uma vez).
 
 ## Autenticação (Auth.js / NextAuth v5)
 
 - Login por email + senha (`Credentials` provider), sessão em JWT — ver `src/auth.ts`.
-- Proteção de rota em `src/proxy.ts` — no Next.js 16 o arquivo `middleware.ts` foi renomeado para `proxy.ts` (mesma função, nome do export mudou de `middleware` para `proxy`/default export). Toda a lógica de autorização (redirecionar não autenticado pra `/login`, forçar `/trocar-senha`, bloquear `/admin/*` pra quem não é admin) está no callback `callbacks.authorized` em `src/auth.ts`.
+- Proteção de rota em `src/proxy.ts` — no Next.js 16 o arquivo `middleware.ts` foi renomeado para `proxy.ts` (mesma função, nome do export mudou de `middleware` para `proxy`/default export). Toda a lógica de autorização (redirecionar não autenticado pra `/login`, forçar `/trocar-senha`, bloquear `/configuracoes/*` pra quem não é admin) está no callback `callbacks.authorized` em `src/auth.ts`.
 - Senhas com hash via `bcryptjs` (mesmo algoritmo/formato do `bcrypt` nativo — trocado só pra evitar risco de falha de compilação nativa no `npm install` em Windows/Node novo).
 - `must_change_password`: `true` por padrão em usuários novos; ao trocar a senha em `/trocar-senha`, vira `false` no banco e a action já faz `signOut` forçando novo login (mais simples e confiável do que atualizar o JWT em memória via `useSession().update()`, que se mostrou instável nesse setup Next 16 + NextAuth v5 beta durante os testes — chegou a travar).
-- Roles: `admin` (acessa `/admin/*`) e `atendente` (não vê o link nem consegue acessar, é redirecionado pra `/acesso-negado`).
+- Roles: `admin` (acessa `/configuracoes/*`) e `atendente` (não vê o link nem consegue acessar, é redirecionado pra `/acesso-negado`).
 - Não há recuperação de senha por email nesta etapa — se alguém esquecer a senha, um admin cria de novo o acesso manualmente (reset por admin fica pra depois).
 
-**Testado ponta a ponta** (login, troca de senha obrigatória no primeiro acesso, criação de usuário via `/admin/usuarios`, bloqueio de `/admin/*` para `atendente`, logout com invalidação real de sessão) via `npm run dev`. **Pendente**: validar `npm run build` — o disco local ficou sem espaço durante os testes (não é um problema do código) e o build de produção não foi reexecutado depois das últimas alterações no fluxo de troca de senha. Rodar `npm run build` antes de considerar isso testado em produção.
+**Testado ponta a ponta** (login, troca de senha obrigatória no primeiro acesso, criação de usuário via `/configuracoes/usuarios`, bloqueio de `/configuracoes/*` para `atendente`, logout com invalidação real de sessão, restrição de visibilidade por usuário — Etapa 19) via `npm run dev` e `npm run build`.
 
 ## Banco de dados (Drizzle + Neon)
 
-- Schema em `src/db/schema.ts` (17 tabelas: as 15 do MVP original + `whatsapp_channels` e `whatsapp_channel_restrictions`, ver seção 5 da spec), cliente de conexão em `src/db/index.ts`.
+- Schema em `src/db/schema.ts` (25 tabelas: as do MVP original — ver seção 5 da spec — mais as introduzidas pelas etapas posteriores ao cutover, seção 14 da spec e `docs/dia1-etapas/etapa-13-*` em diante), cliente de conexão em `src/db/index.ts`.
 - `npm run db:generate` — gera migrations a partir do schema.
 - `npm run db:migrate` — aplica migrations pendentes no banco.
 - `npm run db:seed` — popula a pipeline "Funil Viagente" (7 etapas), os 6 campos customizados e as 3 regras de temperatura padrão (`scripts/seed.ts`).
@@ -81,12 +94,12 @@ A tabela `messages` é particionada por mês (`created_at`) via SQL raw editado 
 
 ## Atendimento via WhatsApp (Z-API)
 
-- Cada número WhatsApp conectado é um **canal** (`whatsapp_channels`), configurado direto na tela `/admin/whatsapp` — não em variável de ambiente. O sistema suporta múltiplos canais simultâneos (ex: comercial + suporte).
+- Cada número WhatsApp conectado é um **canal** (`whatsapp_channels`), configurado direto na tela `/configuracoes/whatsapp` — não em variável de ambiente. O sistema suporta múltiplos canais simultâneos (ex: comercial + suporte).
 - `zapi_token` e `zapi_client_token` são criptografados (AES-256-GCM) antes de gravar no banco, usando `CREDENTIALS_ENCRYPTION_KEY`. Depois de salvos, aparecem mascarados na tela (`••••••1234`).
 
 ### 1. Adicionar um canal
 
-Em `/admin/whatsapp` (só `role = admin`), clique em "Adicionar canal" e informe:
+Em `/configuracoes/whatsapp` (só `role = admin`), clique em "Adicionar canal" e informe:
 
 - **Nome do canal** (label livre, ex: "Comercial")
 - **Z-API Instance ID** e **Token** — da instância específica (painel Z-API → sua instância)
@@ -96,7 +109,7 @@ Depois de salvo, clique em **"Testar conexão"** pra confirmar que a instância 
 
 ### 2. Gerenciar acesso por atendente
 
-Dentro de cada canal (`/admin/whatsapp/[id]`), a lista de usuários `atendente` aparece com um toggle "tem acesso" — **marcado por padrão** (todo atendente vê todos os canais). Desmarcar bloqueia aquele atendente especificamente daquele canal (fica registrado em `whatsapp_channel_restrictions`). Usuários `admin` não aparecem na lista porque sempre têm acesso a tudo.
+Dentro de cada canal (`/configuracoes/whatsapp/[id]`), a lista de usuários `atendente` aparece com um toggle "tem acesso" — **marcado por padrão** (todo atendente vê todos os canais). Desmarcar bloqueia aquele atendente especificamente daquele canal (fica registrado em `whatsapp_channel_restrictions`). Usuários `admin` não aparecem na lista porque sempre têm acesso a tudo.
 
 ### 3. Configurar o webhook na Z-API
 
@@ -106,7 +119,7 @@ Cada canal tem sua própria URL de webhook:
 https://<seu-dominio>/api/whatsapp/webhook/<channelId>
 ```
 
-O `channelId` é o `id` do canal (visível na URL de `/admin/whatsapp/[id]`). Configure essa URL no painel da Z-API, na aba **Webhooks** daquela instância, tanto para "Ao receber" (mensagens) quanto para "Status da mensagem" (entregue/lido) — a Z-API envia os dois tipos de evento para a mesma URL, e o endpoint diferencia pelo formato do payload.
+O `channelId` é o `id` do canal (visível na URL de `/configuracoes/whatsapp/[id]`). Configure essa URL no painel da Z-API, na aba **Webhooks** daquela instância, tanto para "Ao receber" (mensagens) quanto para "Status da mensagem" (entregue/lido) — a Z-API envia os dois tipos de evento para a mesma URL, e o endpoint diferencia pelo formato do payload.
 
 **Testando localmente com ngrok:** como a Z-API precisa alcançar sua máquina publicamente, rode um túnel:
 
