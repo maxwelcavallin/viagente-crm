@@ -29,6 +29,9 @@ export type TarefaItem = {
   messagePreview: string | null;
   dealId: string;
   dealTitle: string;
+  dealOwnerId: string | null;
+  pipelineId: string;
+  pipelineName: string;
   contactId: string;
   contactName: string;
   contactEmail: string | null;
@@ -40,6 +43,22 @@ const STATUS_OPTIONS: Record<string, string> = {
   concluida: "Concluídas",
   todas: "Todas",
 };
+
+// Sentinelas pro filtro de dono — nunca colidem com um uuid real.
+const OWNER_FILTER_ALL = "todos";
+const OWNER_FILTER_MINE = "__meus__";
+const OWNER_FILTER_UNASSIGNED = "__sem_dono__";
+
+const ALL_TYPES = "todos";
+const TYPE_FILTER_OPTIONS: Record<string, string> = {
+  [ALL_TYPES]: "Todos os tipos",
+  mensagem: "Mensagem",
+  ligacao: "Ligação",
+  agendamento: "Agendamento",
+  generica: "Genérica",
+};
+
+const ALL_PIPELINES = "todas";
 
 const TYPE_ICON = {
   mensagem: MessageSquare,
@@ -66,14 +85,6 @@ function formatDueAt(dueAt: string): string {
 
 function isOverdue(dueAt: string | null, isDone: boolean, now: Date = new Date()): boolean {
   return !isDone && !!dueAt && new Date(dueAt).getTime() < now.getTime();
-}
-
-function isSameLocalDate(dueAt: string, dateStr: string): boolean {
-  const d = new Date(dueAt);
-  const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-  return local === dateStr;
 }
 
 function TarefaRow({
@@ -160,6 +171,8 @@ function TarefaRow({
           </Link>
           {" · "}
           {item.contactName}
+          {" · "}
+          {item.pipelineName}
         </p>
         {!isDone && item.type === "mensagem" && (
           <MessageTaskExecutor
@@ -200,25 +213,67 @@ export function TarefasList({
   channels,
   preselectedChannelId,
   isGoogleConnected,
+  currentUserId,
+  users,
+  pipelines,
 }: {
   tasks: TarefaItem[];
   channels: { id: string; label: string }[];
   preselectedChannelId: string | null;
   isGoogleConnected: boolean;
+  currentUserId: string;
+  users: { id: string; name: string }[];
+  pipelines: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [status, setStatus] = useState("aberto");
-  const [date, setDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [ownerId, setOwnerId] = useState(OWNER_FILTER_ALL);
+  const [type, setType] = useState(ALL_TYPES);
+  const [pipelineId, setPipelineId] = useState(ALL_PIPELINES);
+
+  const ownerItems: Record<string, string> = useMemo(
+    () => ({
+      [OWNER_FILTER_ALL]: "Todos os donos",
+      [OWNER_FILTER_MINE]: "Minhas tarefas",
+      [OWNER_FILTER_UNASSIGNED]: "Não atribuído",
+      ...Object.fromEntries(
+        users.filter((u) => u.id !== currentUserId).map((u) => [u.id, u.name])
+      ),
+    }),
+    [users, currentUserId]
+  );
+
+  const pipelineItems: Record<string, string> = useMemo(
+    () => ({
+      [ALL_PIPELINES]: "Todas as pipelines",
+      ...Object.fromEntries(pipelines.map((p) => [p.id, p.name])),
+    }),
+    [pipelines]
+  );
 
   const filtered = useMemo(() => {
     const now = new Date();
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
     const list = tasks.filter((t) => {
       const done = t.status === "concluida";
       const overdue = isOverdue(t.dueAt, done, now);
       if (status === "aberto" && done) return false;
       if (status === "atrasada" && !overdue) return false;
       if (status === "concluida" && !done) return false;
-      if (date && (!t.dueAt || !isSameLocalDate(t.dueAt, date))) return false;
+      if (from && (!t.dueAt || new Date(t.dueAt) < from)) return false;
+      if (to && (!t.dueAt || new Date(t.dueAt) > to)) return false;
+      if (type !== ALL_TYPES && t.type !== type) return false;
+      if (pipelineId !== ALL_PIPELINES && t.pipelineId !== pipelineId) return false;
+      if (ownerId === OWNER_FILTER_MINE) {
+        if (t.dealOwnerId !== currentUserId) return false;
+      } else if (ownerId === OWNER_FILTER_UNASSIGNED) {
+        if (t.dealOwnerId !== null) return false;
+      } else if (ownerId !== OWNER_FILTER_ALL && t.dealOwnerId !== ownerId) {
+        return false;
+      }
       return true;
     });
     return list.sort((a, b) => {
@@ -230,13 +285,15 @@ export function TarefasList({
       if (!b.dueAt) return -1;
       return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
     });
-  }, [tasks, status, date]);
+  }, [tasks, status, dateFrom, dateTo, type, pipelineId, ownerId, currentUserId]);
+
+  const hasDateFilter = dateFrom || dateTo;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Select items={STATUS_OPTIONS} value={status} onValueChange={(v) => setStatus(v ?? "aberto")}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -247,15 +304,70 @@ export function TarefasList({
             ))}
           </SelectContent>
         </Select>
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-44"
-        />
-        {date && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => setDate("")}>
-            Limpar data
+        <Select items={ownerItems} value={ownerId} onValueChange={(v) => setOwnerId(v ?? OWNER_FILTER_ALL)}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ownerItems).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select items={TYPE_FILTER_OPTIONS} value={type} onValueChange={(v) => setType(v ?? ALL_TYPES)}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(TYPE_FILTER_OPTIONS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select items={pipelineItems} value={pipelineId} onValueChange={(v) => setPipelineId(v ?? ALL_PIPELINES)}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(pipelineItems).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-36"
+            aria-label="Prazo a partir de"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-36"
+            aria-label="Prazo até"
+          />
+        </div>
+        {hasDateFilter && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+            }}
+          >
+            Limpar datas
           </Button>
         )}
       </div>

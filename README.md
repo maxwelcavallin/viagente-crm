@@ -8,11 +8,11 @@ CRM interno da Viagente (substituto da Clint). Ver a especificação completa em
 
 MVP de dia 1 (Etapas 1-12, `docs/dia1-etapas/etapa-1-*` a `etapa-12-*`): autenticação e usuários, pipelines/etapas configuráveis, negócios em kanban com campos customizados e tags, contatos, atendimento via WhatsApp (Z-API) com histórico persistido, motor de webhook de entrada/saída, automação básica de tarefa por etapa, templates de mensagem, importação de contatos/negócios via CSV, integração com Google Agenda.
 
-Entregue depois do cutover (Etapas 13-19, mesma pasta, ver seção 14 de `viagente-crm-spec.md` para o resumo de cada uma):
+Entregue depois do cutover (Etapas 13-21, mesma pasta, ver seção 14 de `viagente-crm-spec.md` para o resumo de cada uma):
 - Automação avançada de tarefas — gatilho por etapa ou por tag, atraso configurável, envio automático de WhatsApp (`/configuracoes/automacoes`, `/configuracoes/pipelines/[id]`)
 - Tags estáticas em webhook de entrada + repasse de webhook Z-API pra outro sistema
-- `/tarefas` — visão global de tarefas de todos os negócios, com editar/excluir
-- Indicadores de negócio e dashboard na página Início (motivos de perda, conversão, vendas, atividades, mensagens)
+- `/tarefas` — visão global de tarefas de todos os negócios, com editar/excluir e filtros de dono, tipo, pipeline e intervalo de datas
+- Dashboard na página Início — motivos de perda, conversão, vendas, atividades, mensagens, funil por etapa, ranking por vendedor, ciclo médio de venda, ticket médio, mensagens por dia, tempo médio até a primeira resposta, com filtro de pipeline e de tag
 - Editar/excluir canal WhatsApp
 - Parâmetros de contato/negócio disponíveis em templates e no composer do atendimento
 - Dono do negócio/atendimento — distribuição automática por pipeline, sincronização, filtros, restrição de visibilidade por usuário, troca em massa

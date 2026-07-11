@@ -7,8 +7,10 @@ import {
   customFieldDefinitions,
   deals,
   messageTemplates,
+  pipelines,
   stageTasks,
   tasks,
+  users,
   whatsappChannels,
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
@@ -24,8 +26,15 @@ export default async function TarefasPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [taskRows, dealFieldDefRows, contactFieldDefRows, allowedChannelIds, googleConnectionOwner] =
-    await Promise.all([
+  const [
+    taskRows,
+    dealFieldDefRows,
+    contactFieldDefRows,
+    allowedChannelIds,
+    googleConnectionOwner,
+    allUsers,
+    allPipelines,
+  ] = await Promise.all([
       db
         .select({
           id: tasks.id,
@@ -38,6 +47,9 @@ export default async function TarefasPage() {
           dealTitle: deals.title,
           dealCustomFields: deals.customFields,
           dealValue: deals.value,
+          dealOwnerId: deals.ownerId,
+          pipelineId: deals.pipelineId,
+          pipelineName: pipelines.name,
           contactId: contacts.id,
           contactName: contacts.name,
           contactEmail: contacts.email,
@@ -46,6 +58,7 @@ export default async function TarefasPage() {
         .from(tasks)
         .innerJoin(deals, eq(tasks.dealId, deals.id))
         .innerJoin(contacts, eq(deals.contactId, contacts.id))
+        .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
         .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id)),
       db
@@ -60,6 +73,8 @@ export default async function TarefasPage() {
         .orderBy(asc(customFieldDefinitions.order)),
       getAllowedChannelIds(session.user.id, session.user.role),
       resolveConnectionOwner(session.user.id),
+      db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
+      db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
     ]);
 
   const isGoogleConnected = googleConnectionOwner != null;
@@ -122,6 +137,9 @@ export default async function TarefasPage() {
         : null,
       dealId: row.dealId,
       dealTitle: row.dealTitle,
+      dealOwnerId: row.dealOwnerId,
+      pipelineId: row.pipelineId,
+      pipelineName: row.pipelineName,
       contactId: row.contactId,
       contactName: row.contactName,
       contactEmail: row.contactEmail,
@@ -144,6 +162,9 @@ export default async function TarefasPage() {
         channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
         preselectedChannelId={preselectedChannelId}
         isGoogleConnected={isGoogleConnected}
+        currentUserId={session.user.id}
+        users={allUsers}
+        pipelines={allPipelines}
       />
     </div>
   );
