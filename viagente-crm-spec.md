@@ -108,6 +108,7 @@ tag_automations (id, tag_id, trigger ['tag_adicionada','dias_apos_tag'], delay_m
 contacts (id, name, phone, email, custom_fields jsonb,
           owner_id nullable,      -- Etapa 19: sincronizado com o dono do negócio aberto
           last_read_at,           -- Etapa 5b: marca de leitura compartilhada da equipe
+          linkedin_url nullable,  -- Etapa 20
           created_at)
 
 -- NEGÓCIOS
@@ -118,6 +119,7 @@ deals (id, contact_id, pipeline_id, stage_id, owner_id,
        stage_entered_at,         -- Etapa 13: quando entrou na etapa atual (não é updated_at)
        won_at nullable, lost_at nullable, loss_reason_id nullable,  -- Etapa 16
        created_at, updated_at)
+       -- source aceita 'linkedin' desde a Etapa 20, além dos webhook_configs já existentes
 
 -- TAREFAS (instâncias, geradas a partir de stage_tasks/tag_automations)
 tasks (id, deal_id, stage_task_id nullable, tag_automation_id nullable,  -- Etapa 13
@@ -144,6 +146,7 @@ messages (id, deal_id, contact_id, channel_id, direction ['entrada','saida'],
           is_favorite boolean default false,             -- Etapa 5b
           reply_to_message_id FK messages(id) nullable,  -- Etapa 5b
           sender_name/sender_phone/sender_avatar_url,    -- grupos do WhatsApp
+          source ['whatsapp','linkedin'] default 'whatsapp',  -- Etapa 20; channel_id só se aplica a whatsapp
           z_api_message_id text, created_at)
 
 -- MENSAGENS AGENDADAS (agendamento de envio futuro pelo composer)
@@ -176,7 +179,7 @@ webhook_configs (id, name, direction ['entrada','saida'], active,
 webhook_logs (id, webhook_config_id, direction ['entrada','saida'], payload jsonb,
               status ['sucesso','erro'], error_message, created_at)
 
--- IMPORTAÇÃO CSV (Etapa 11)
+-- IMPORTAÇÃO CSV (Etapa 11, reaproveitada na Etapa 20 pra carga inicial da LeadDelta)
 csv_imports (id, pipeline_id, stage_id, field_mapping jsonb, stage_mapping jsonb,
              contacts_created, contacts_updated, deals_created, error_rows jsonb, created_at)
 
@@ -209,7 +212,7 @@ Esse é o equivalente ao que a Clint chama de "criar integração via webhook ma
 4. Se o mapeamento falhar (campo esperado ausente), loga erro mas **não derruba o webhook** — grava o payload bruto pra reprocessamento manual depois.
 
 **Integrações do dia 1:** Calculadora e Diagnóstico.
-**Integrações que entram depois usando a mesma engine, sem código novo:** Facebook, LeadDelta e as demais — só criar novo `webhook_config` e mapear campos.
+**Integrações que entraram depois usando a mesma engine, sem código novo:** LeadDelta (Etapa 20). Facebook e demais seguem o mesmo caminho quando forem conectadas — só criar novo `webhook_config` e mapear campos.
 
 **Teste do motor sem integração real (Etapa 10):** antes de conectar a Calculadora e o Diagnóstico de verdade, a tela de cada webhook de entrada tem um botão "Enviar payload de teste" — cola um JSON de exemplo e valida a engine inteira (mapeamento, criação de contato/negócio, cálculo de temperatura) sem depender de nenhum formulário externo. A Calculadora e o Diagnóstico reais são conectados manualmente depois, cadastrando um webhook de entrada pra cada um e mapeando os campos deles.
 
@@ -232,6 +235,7 @@ Esse é o equivalente ao que a Clint chama de "criar integração via webhook ma
 - **Exportação do histórico em `.md`:** botão "Exportar conversa" que gera um arquivo Markdown com o histórico completo (mensagens em ordem cronológica, identificando remetente, canal, timestamps, e links de mídia) e dispara o download em um clique. Endpoint reutilizável (`GET /api/conversations/{contactId}/export`) para ser usado tanto na tela de atendimento quanto, futuramente, na página do negócio.
 - **Controle de acesso por canal:** por padrão, **todo atendente enxerga todos os canais**. O admin pode restringir manualmente o acesso de um atendente a um canal específico (ex: só quem cuida de suporte vê o número de suporte) via `whatsapp_channel_restrictions` — a presença de uma linha ali bloqueia aquele usuário daquele canal. `role = 'admin'` sempre vê todos os canais, independente de restrição. Ao listar/exportar conversas, mensagens de canais restritos pro usuário atual não devem aparecer, mesmo que o contato tenha conversado por mais de um canal.
 - **Chat completo (Etapa 5b), paridade com a Clint:** envio de mídia pela UI (imagem, vídeo, documento, áudio gravado via `MediaRecorder`), colar (Ctrl+V) imagem da área de transferência direto no composer, emoji picker, responder/citar uma mensagem específica (`reply_to_message_id`), e favoritar mensagens (`favorited`) com filtro de "Favoritas" por conversa.
+- **Fontes adicionais de mensagem (Etapa 20):** `messages.source` distingue WhatsApp de LinkedIn (via LeadDelta) — mensagens de LinkedIn são só leitura no CRM, sem composer de resposta; o envio continua acontecendo na LeadDelta.
 
 ---
 
@@ -276,7 +280,7 @@ Como não há confirmação de API de exportação da Clint neste documento, o c
 
 - **API pública + MCP**: expor `deals`, `contacts`, `messages`, `tasks` como recursos MCP — leitura (histórico de conversa, negócios por etapa) e ações (mover etapa, criar tarefa, enviar mensagem)
 - **Dashboard**: visão geral por pipeline/dono, tempo médio por etapa
-- Conectar Facebook, LeadDelta e demais integrações via `webhook_configs`
+- Conectar Facebook e demais integrações via `webhook_configs` (LeadDelta já entrou, Etapa 20)
 
 ---
 
@@ -324,5 +328,6 @@ O MVP de dia 1 (Etapas 1-12) está em produção. As etapas abaixo já foram ent
 | 17 | Editar/excluir canal WhatsApp |
 | 18 | Parâmetros de contato/negócio disponíveis em templates e no composer do atendimento |
 | 19 | Dono do negócio/atendimento: distribuição automática por pipeline, sincronização negócio↔atendimento, filtros ("meus"/"não atribuído"), restrição de visibilidade por usuário, troca de dono em massa |
+| 20 | Integração com LinkedIn via LeadDelta (leitura): conexões, tags/etapa de prospecção e histórico de mensagens visíveis no CRM, reaproveitando o motor de webhook (Etapa 10) e o importador CSV (Etapa 11) — envio continua na LeadDelta |
 
 Ajustes pontuais sem numeração de etapa (mesma pasta, prefixo `ajuste-`/`correcao-`): consolidação de `/configuracoes`, correção de fetch de áudio, logo/branding do login e do menu.
