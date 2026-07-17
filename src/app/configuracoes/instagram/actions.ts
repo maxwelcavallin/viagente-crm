@@ -41,10 +41,7 @@ export async function testConnectionAction(
     return { status: "error", message: "Canal não encontrado." };
   }
 
-  const result = await checkInstagramStatus(
-    decryptCredential(channel.accessToken),
-    channel.instagramUserId
-  );
+  const result = await checkInstagramStatus(decryptCredential(channel.accessToken));
 
   await db
     .update(instagramChannels)

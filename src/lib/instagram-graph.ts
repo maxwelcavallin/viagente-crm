@@ -181,13 +181,16 @@ export async function getInstagramUserProfile(
 }
 
 // Valida o token fazendo uma chamada leve — usado pelo "Testar conexão" da
-// página de configurações, mesmo padrão de checkZapiStatus.
+// página de configurações, mesmo padrão de checkZapiStatus. Consulta /me,
+// não /{instagramUserId}: no Instagram API with Instagram Login, buscar a
+// própria conta por id direto responde 400 ("does not exist... ou não
+// suporta essa operação") mesmo com token e permissões corretos — /me é o
+// jeito documentado de ler dados da conta dona do token.
 export async function checkInstagramStatus(
-  accessToken: string,
-  instagramUserId: string
+  accessToken: string
 ): Promise<{ connected: boolean; error?: string }> {
   try {
-    await graphInstagramGet<{ id?: string }>(`${GRAPH_BASE}/${instagramUserId}`, {
+    await graphInstagramGet<{ id?: string }>(`${GRAPH_BASE}/me`, {
       fields: "id",
       access_token: accessToken,
     });
