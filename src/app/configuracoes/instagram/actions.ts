@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { instagramChannels } from "@/db/schema";
 import { decryptCredential } from "@/lib/credentials-crypto";
-import { checkInstagramStatus } from "@/lib/instagram-graph";
+import { checkInstagramStatus, subscribeInstagramWebhook } from "@/lib/instagram-graph";
 
 async function requireAdmin() {
   const session = await auth();
@@ -41,7 +41,16 @@ export async function testConnectionAction(
     return { status: "error", message: "Canal não encontrado." };
   }
 
-  const result = await checkInstagramStatus(decryptCredential(channel.accessToken));
+  const rawAccessToken = decryptCredential(channel.accessToken);
+  const result = await checkInstagramStatus(rawAccessToken);
+  // Reafirma a inscrição de webhook a cada teste — idempotente do lado do
+  // Meta, e conserta de graça uma conta que ficou conectada mas nunca foi
+  // inscrita (bug corrigido nesta sessão), sem precisar reconectar do zero.
+  if (result.connected) {
+    await subscribeInstagramWebhook(rawAccessToken).catch((error) => {
+      console.error("[instagram testConnectionAction] falha ao inscrever webhook", error);
+    });
+  }
 
   await db
     .update(instagramChannels)

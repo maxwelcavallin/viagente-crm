@@ -7,6 +7,7 @@ import {
   exchangeCodeForUserToken,
   exchangeForLongLivedToken,
   getInstagramUsername,
+  subscribeInstagramWebhook,
 } from "@/lib/instagram-graph";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,13 @@ export async function GET(request: Request) {
     );
     const { accessToken, expiresAt } = await exchangeForLongLivedToken(shortLivedToken);
     const username = await getInstagramUsername(accessToken).catch(() => null);
+    // Passo obrigatório e separado da URL de webhook cadastrada no painel do
+    // app — sem isso a conta nunca recebe evento nenhum (ver
+    // subscribeInstagramWebhook). Falha aqui não deve travar a conexão em
+    // si (o token já é válido); só loga pra investigar depois.
+    await subscribeInstagramWebhook(accessToken).catch((error) => {
+      console.error("[instagram oauth callback] falha ao inscrever webhook", error);
+    });
 
     const values = {
       label: username ? `@${username}` : instagramUserId,

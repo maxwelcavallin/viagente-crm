@@ -136,6 +136,22 @@ export async function getInstagramUsername(accessToken: string): Promise<string 
   return data.username ?? null;
 }
 
+// Passo obrigatório e separado da configuração da URL de webhook no painel
+// do app — sem essa chamada, a conta fica com token válido mas o Meta nunca
+// dispara nenhum evento pra ela (nenhum POST chega, só o handshake de
+// verificação da URL em si). Precisa ser feita uma vez por conta conectada.
+export async function subscribeInstagramWebhook(accessToken: string): Promise<void> {
+  const url = `${GRAPH_BASE}/me/subscribed_apps?${new URLSearchParams({
+    subscribed_fields: "messages",
+    access_token: accessToken,
+  }).toString()}`;
+  const res = await fetch(url, { method: "POST", cache: "no-store" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Falha ao inscrever webhook do Instagram (status ${res.status}): ${text}`);
+  }
+}
+
 export async function sendInstagramText(
   accessToken: string,
   recipientIgsid: string,
