@@ -37,10 +37,12 @@ export function SidebarNav({
   role,
   onNavigate,
   className,
+  collapsed = false,
 }: {
   role: "admin" | "atendente";
   onNavigate?: () => void;
   className?: string;
+  collapsed?: boolean;
 }) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin");
@@ -56,15 +58,17 @@ export function SidebarNav({
             key={item.href}
             href={item.href}
             onClick={onNavigate}
+            title={collapsed ? item.label : undefined}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              collapsed && "justify-center px-2",
               isActive
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Icon size={20} strokeWidth={1.75} />
-            {item.label}
+            {!collapsed && item.label}
           </Link>
         );
       })}

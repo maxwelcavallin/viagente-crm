@@ -35,7 +35,8 @@ async function main() {
       isGroup: contacts.isGroup,
       avatarUrl: contacts.avatarUrl,
     })
-    .from(contacts);
+    .from(contacts)
+    .where(isNotNull(contacts.phone));
 
   const credsByChannel = new Map<string, ZapiChannelCredentials | null>();
   async function credsForChannel(channelId: string): Promise<ZapiChannelCredentials | null> {
@@ -64,6 +65,7 @@ async function main() {
   let skipped = 0;
 
   for (const contact of allContacts) {
+    if (!contact.phone) continue;
     const isGroupPhone = contact.phone.endsWith("-group");
     const channelId = await lastChannelIdForContact(contact.id);
     if (!channelId) {

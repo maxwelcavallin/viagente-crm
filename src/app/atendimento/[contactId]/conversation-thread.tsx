@@ -43,11 +43,11 @@ export function ConversationThread({
 }: {
   contactId: string;
   contactName: string;
-  contactPhone: string;
+  contactPhone: string | null;
   isGroup: boolean;
   avatarUrl: string | null;
   initialMessages: ThreadMessage[];
-  channels: { id: string; label: string }[];
+  channels: { id: string; label: string; channelType: "whatsapp" | "instagram" }[];
   preselectedChannelId: string | null;
   scheduledMessages: ScheduledMessageItem[];
   params: ContactDealParam[];
@@ -64,6 +64,10 @@ export function ConversationThread({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const selectedChannel = channels.find((c) => c.id === channelId);
+  const isInstagramChannel = selectedChannel?.channelType === "instagram";
+  const whatsappChannels = channels.filter((c) => c.channelType !== "instagram");
+
   async function handleSend() {
     const message = text.trim();
     if (!message || !channelId) return;
@@ -76,6 +80,7 @@ export function ConversationThread({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channelId,
+          channelType: selectedChannel?.channelType ?? "whatsapp",
           contactId,
           message,
           replyToMessageId: replyingTo?.id,
@@ -97,7 +102,9 @@ export function ConversationThread({
   }
 
   async function sendMediaFile(file: File | Blob, fileName?: string) {
-    if (!channelId) return;
+    // Envio de mídia é WhatsApp-only nesta etapa (Instagram só texto, ver
+    // Etapa 25) — o botão de anexo/áudio já fica desabilitado nesse caso.
+    if (!channelId || isInstagramChannel) return;
     setIsUploading(true);
     setUploadError(null);
     try {
@@ -282,7 +289,8 @@ export function ConversationThread({
                 variant="ghost"
                 size="icon"
                 aria-label="Anexar arquivo"
-                disabled={isUploading}
+                disabled={isUploading || isInstagramChannel}
+                title={isInstagramChannel ? "Envio de mídia ainda não disponível pro Instagram" : undefined}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={18} strokeWidth={1.75} />
@@ -297,11 +305,11 @@ export function ConversationThread({
               />
               <AudioRecorderButton
                 onRecorded={handleAudioRecorded}
-                disabled={isUploading}
+                disabled={isUploading || isInstagramChannel}
               />
               <ScheduleMessageDialog
                 contactId={contactId}
-                channels={channels}
+                channels={whatsappChannels}
                 defaultChannelId={channelId || preselectedChannelId}
                 defaultMessage={text}
                 onScheduled={() => setText("")}

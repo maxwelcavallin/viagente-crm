@@ -55,6 +55,51 @@ export async function findOrCreateContactByPhone(
   return created;
 }
 
+// Espelha findOrCreateContactByPhone, mas dedupe por instagramUserId (IGSID)
+// em vez de telefone — ver Etapa 25.
+export async function findOrCreateContactByInstagramUserId(
+  instagramUserId: string,
+  name?: string,
+  avatarUrl?: string
+): Promise<{ id: string }> {
+  const [existing] = await db
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      avatarUrl: contacts.avatarUrl,
+    })
+    .from(contacts)
+    .where(eq(contacts.instagramUserId, instagramUserId))
+    .limit(1);
+
+  if (existing) {
+    const trimmedName = name?.trim();
+    const nextName = trimmedName && trimmedName !== existing.name ? trimmedName : undefined;
+    const nextAvatar = avatarUrl && avatarUrl !== existing.avatarUrl ? avatarUrl : undefined;
+    if (nextName || nextAvatar) {
+      await db
+        .update(contacts)
+        .set({
+          ...(nextName ? { name: nextName } : {}),
+          ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
+        })
+        .where(eq(contacts.id, existing.id));
+    }
+    return existing;
+  }
+
+  const [created] = await db
+    .insert(contacts)
+    .values({
+      instagramUserId,
+      name: name?.trim() || instagramUserId,
+      avatarUrl,
+    })
+    .returning({ id: contacts.id });
+
+  return created;
+}
+
 // Heurística da seção 7 da spec: se o contato tiver mais de um negócio
 // aberto, usa o mais recentemente atualizado.
 export async function findOpenDealIdForContact(

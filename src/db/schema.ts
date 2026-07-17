@@ -32,6 +32,7 @@ export const stageTaskTypeEnum = pgEnum("stage_task_type", [
   "ligacao",
   "agendamento",
   "generica",
+  "email",
 ]);
 export const taskStatusEnum = pgEnum("task_status", ["pendente", "concluida"]);
 // Etapa de automação avançada: quando a task de uma tag_automation é criada.
@@ -68,6 +69,16 @@ export const messageStatusEnum = pgEnum("message_status", [
   "lido",
   "falhou",
 ]);
+export const messageChannelTypeEnum = pgEnum("message_channel_type", [
+  "whatsapp",
+  "instagram",
+]);
+export const emailProviderEnum = pgEnum("email_provider", [
+  "resend",
+  "postmark",
+  "sendgrid",
+]);
+export const emailStatusEnum = pgEnum("email_status", ["enviado", "falhou"]);
 export const webhookLogStatusEnum = pgEnum("webhook_log_status", [
   "sucesso",
   "erro",
@@ -77,6 +88,11 @@ export const webhookDirectionEnum = pgEnum("webhook_direction", [
   "saida",
 ]);
 export const whatsappChannelStatusEnum = pgEnum("whatsapp_channel_status", [
+  "conectado",
+  "desconectado",
+  "pendente",
+]);
+export const instagramChannelStatusEnum = pgEnum("instagram_channel_status", [
   "conectado",
   "desconectado",
   "pendente",
@@ -241,6 +257,58 @@ export const messageTemplates = pgTable("message_templates", {
   variables: jsonb("variables").notNull().default([]),
 });
 
+// Mesmo espírito de messageTemplates, mas com assunto — usado pela tarefa
+// tipo 'email' (Etapa 26).
+export const emailTemplates = pgTable("email_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  variables: jsonb("variables").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ---------- Envio de email (Etapa 26 — só envio, não é canal de atendimento) ----------
+// Config única (1 registro, mesmo padrão de nps_settings/auto_deal_settings)
+// — apiKey gravada criptografada (AES-256-GCM, ver
+// src/lib/credentials-crypto.ts), igual às demais credenciais de terceiros.
+export const emailSettings = pgTable("email_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fromAddress: text("from_address").notNull(),
+  fromName: text("from_name").notNull(),
+  provider: emailProviderEnum("provider").notNull(),
+  apiKey: text("api_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const emailsSent = pgTable("emails_sent", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  dealId: uuid("deal_id")
+    .notNull()
+    .references(() => deals.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  // Null = email avulso, disparado sem uma tarefa associada.
+  taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  // Array de {filename, url} — url é o proxy interno de download
+  // (/api/emails/attachments), nunca um link público direto do R2.
+  attachments: jsonb("attachments").notNull().default([]),
+  sentByUserId: uuid("sent_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  status: emailStatusEnum("status").notNull().default("enviado"),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- Tarefa padrão por etapa (definição) ----------
 
 export const stageTasks = pgTable(
@@ -254,6 +322,12 @@ export const stageTasks = pgTable(
     type: stageTaskTypeEnum("type").notNull(),
     messageTemplateId: uuid("message_template_id").references(
       () => messageTemplates.id,
+      { onDelete: "set null" }
+    ),
+    // Só usado quando type='email' — mesmo raciocínio de messageTemplateId,
+    // em coluna separada porque email tem assunto além do corpo.
+    emailTemplateId: uuid("email_template_id").references(
+      () => emailTemplates.id,
       { onDelete: "set null" }
     ),
     order: integer("order").notNull().default(0),
@@ -291,11 +365,15 @@ export const contacts = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
-    phone: text("phone").notNull(),
+    // Nullable: contato só-Instagram não tem telefone (ver instagramUserId).
+    phone: text("phone"),
     email: text("email"),
     // true quando "phone" é na verdade o id de um grupo do WhatsApp
     // (formato Z-API: "<id>-group"), não um número de telefone real.
     isGroup: boolean("is_group").notNull().default(false),
+    // Identidade do contato quando vem do Instagram Direct (IGSID) — ver
+    // src/lib/messaging.ts findOrCreateContactByInstagramUserId.
+    instagramUserId: text("instagram_user_id"),
     // Foto do contato ou do grupo (campo "photo"/"senderPhoto" da Z-API).
     avatarUrl: text("avatar_url"),
     // Marca de leitura compartilhada pela equipe (inbox único, não por
@@ -315,7 +393,10 @@ export const contacts = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("contacts_phone_idx").on(t.phone)]
+  (t) => [
+    uniqueIndex("contacts_phone_idx").on(t.phone),
+    uniqueIndex("contacts_instagram_user_id_idx").on(t.instagramUserId),
+  ]
 );
 
 // ---------- Negócios ----------
@@ -573,6 +654,53 @@ export const whatsappChannelRestrictions = pgTable(
   ]
 );
 
+// ---------- Canais Instagram (Etapa 25, Instagram API with Instagram Login) ----------
+// Login direto na conta profissional do Instagram (sem Página do Facebook
+// vinculada) — accessToken já é tudo que precisa pra ler/enviar mensagem,
+// gravado criptografado (mesmo padrão de zapiToken, ver
+// src/lib/credentials-crypto.ts). instagramUserId fica em texto puro: só
+// identificador, não credencial. Token de longa duração dura 60 dias e
+// precisa ser renovado antes de expirar (ver refreshExpiringInstagramTokens
+// em src/lib/instagram-graph.ts, chamado pelo cron de task-automation).
+
+export const instagramChannels = pgTable("instagram_channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: text("label").notNull(),
+  username: text("username"),
+  instagramUserId: text("instagram_user_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
+  status: instagramChannelStatusEnum("status").notNull().default("pendente"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Mesmo modelo de bloqueio de whatsappChannelRestrictions, espelhado pra
+// não mexer na tabela do WhatsApp já em uso.
+export const instagramChannelRestrictions = pgTable(
+  "instagram_channel_restrictions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => instagramChannels.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("instagram_channel_restrictions_user_channel_idx").on(
+      t.userId,
+      t.channelId
+    ),
+  ]
+);
+
 // ---------- Mensagens ----------
 // Particionada por mês (created_at). drizzle-kit não gera "PARTITION BY"
 // nativamente, então a migration gerada é ajustada manualmente para
@@ -591,15 +719,19 @@ export const messages = pgTable(
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
-    channelId: uuid("channel_id").references(() => whatsappChannels.id, {
-      onDelete: "set null",
-    }),
+    // Sem FK de propósito (mesmo padrão de deal_activity_log.dealId): pode
+    // apontar pra whatsapp_channels OU instagram_channels dependendo de
+    // channelType, então não dá pra referenciar uma tabela só.
+    channelId: uuid("channel_id"),
+    channelType: messageChannelTypeEnum("channel_type").notNull().default("whatsapp"),
     direction: messageDirectionEnum("direction").notNull(),
     type: messageTypeEnum("type").notNull(),
     content: text("content"),
     mediaUrl: text("media_url"),
     status: messageStatusEnum("status").notNull().default("enviado"),
-    zApiMessageId: text("z_api_message_id"),
+    // Id da mensagem no sistema externo (zApiMessageId no WhatsApp, id da
+    // mensagem no Instagram) — usado pro dedupe do webhook de entrada.
+    externalMessageId: text("external_message_id"),
     isFavorite: boolean("is_favorite").notNull().default(false),
     // Preenchidos só quando a mensagem vem de um grupo (isGroup=true no
     // payload da Z-API): identifica qual participante enviou, já que
@@ -801,6 +933,63 @@ export const googleCalendarShares = pgTable(
       t.ownerUserId,
       t.sharedWithUserId
     ),
+  ]
+);
+
+// ---------- Notas do Gemini (Meet + Drive, Etapa 31) ----------
+// driveFileId é do documento de NOTAS (resumo/detalhes/próximas etapas) —
+// único, cobre o mesmo evento aparecendo na agenda de mais de um usuário
+// conectado. crmUserId é nullable (set null): só metadado de "quem tinha
+// essa reunião na agenda conectada", não crítico o bastante pra travar em
+// FK forte se o usuário for removido depois.
+export const meetingNotes = pgTable(
+  "meeting_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    googleEventId: text("google_event_id").notNull(),
+    crmUserId: uuid("crm_user_id").references(() => users.id, { onDelete: "set null" }),
+    driveFileId: text("drive_file_id").notNull(),
+    driveFileUrl: text("drive_file_url").notNull(),
+    title: text("title").notNull(),
+    meetingDate: timestamp("meeting_date", { withTimezone: true }).notNull(),
+    attendeeEmails: jsonb("attendee_emails").notNull().default([]),
+    // Resumo + seção "Detalhes" do Gemini combinados (ver parseGeminiNotesDoc)
+    // — o "Resumo" isolado é curto demais pra carregar o valor real da
+    // reunião, e não há UI própria para uma seção "Detalhes" separada.
+    summary: text("summary").notNull(),
+    transcript: text("transcript"),
+    actionItems: jsonb("action_items"),
+    // false = documento não bateu com os títulos de seção esperados
+    // (idioma diferente, formato futuro do Gemini) — texto bruto inteiro
+    // foi salvo em `summary` mesmo assim, pra revisão manual depois.
+    parsedOk: boolean("parsed_ok").notNull().default(true),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("meeting_notes_drive_file_id_idx").on(t.driveFileId)]
+);
+
+// Uma reunião pode ter mais de um convidado reconhecido (contato e/ou
+// negócio aberto de cada um) — a nota em si vive só uma vez em
+// meeting_notes, essa tabela é o join pra "aparecer em mais de um lugar
+// sem duplicar o conteúdo" (ver critério de aceite da etapa).
+export const meetingNotesContacts = pgTable(
+  "meeting_notes_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    meetingNoteId: uuid("meeting_note_id")
+      .notNull()
+      .references(() => meetingNotes.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("meeting_notes_contacts_note_contact_idx").on(t.meetingNoteId, t.contactId),
+    index("meeting_notes_contacts_contact_id_idx").on(t.contactId),
+    index("meeting_notes_contacts_deal_id_idx").on(t.dealId),
   ]
 );
 
@@ -1080,18 +1269,24 @@ export const npsSurveys = pgTable(
 // puro no momento da criação (mostrada uma única vez pro admin), e a busca
 // por hash é uma igualdade indexada direta, sem precisar de bcrypt (a chave
 // já nasce com entropia alta, ao contrário de senha escolhida por humano).
-// scopes é array pra deixar aberto a granularidade futura, mas por ora só
-// dois valores emitidos: ["leitura"] ou ["leitura","escrita"] (ver
-// requireWriteScope em src/lib/api-keys.ts).
+// scope é único por chave (não mais array): 'operacional' cobre todo o
+// dia a dia comercial (negócios/contatos/tarefas/mensagens/emails/tags,
+// leitura E escrita — não existe mais um nível "só leitura" separado);
+// 'admin' é 'operacional' + configuração do CRM (pipelines, campos, tags,
+// templates, automações, webhooks). Ver hasAdminScope em
+// src/lib/api-keys.ts.
 // rateLimitWindowStart/rateLimitCount não estão no esboço de migration da
 // etapa, mas são o jeito mais simples de fazer "rate limiting básico por
 // chave" sem depender de um serviço externo (Redis) que este projeto não
-// tem — janela fixa de 1 minuto, reiniciada quando expira.
+// tem — janela fixa de 1 minuto, reiniciada quando expira; o limite (por
+// minuto) varia por escopo, ver RATE_LIMIT_PER_MINUTE.
+export const apiKeyScopeEnum = pgEnum("api_key_scope", ["operacional", "admin"]);
+
 export const apiKeys = pgTable("api_keys", {
   id: uuid("id").defaultRandom().primaryKey(),
   label: text("label").notNull(),
   keyHash: text("key_hash").notNull(),
-  scopes: jsonb("scopes").$type<string[]>().notNull().default(["leitura"]),
+  scope: apiKeyScopeEnum("scope").notNull().default("operacional"),
   createdByUserId: uuid("created_by_user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -1103,3 +1298,39 @@ export const apiKeys = pgTable("api_keys", {
     .notNull()
     .defaultNow(),
 }, (t) => [uniqueIndex("api_keys_key_hash_idx").on(t.keyHash)]);
+
+// Auditoria genérica de escrita via API/MCP (Etapa 28) — complementar ao
+// deal_activity_log (que é específico de negócio): cobre também escritas
+// em entidades de configuração (pipeline, tag, template, ...) que não têm
+// um dealId pra pendurar num histórico existente. apiKeyId sem FK, de
+// propósito (mesmo raciocínio de deal_activity_log.dealId): a auditoria
+// precisa sobreviver à revogação/exclusão da própria chave que ela audita.
+export const apiWriteLog = pgTable(
+  "api_write_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    apiKeyId: uuid("api_key_id").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    action: text("action").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("api_write_log_api_key_id_created_at_idx").on(t.apiKeyId, t.createdAt)]
+);
+
+// Config global (linha única, mesmo padrão de npsSettings) — não é por
+// canal: qualquer canal WhatsApp conectado cria negócio na mesma
+// pipeline/etapa quando uma conversa nova chega sem negócio aberto.
+export const autoDealSettings = pgTable("auto_deal_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  active: boolean("active").notNull().default(false),
+  pipelineId: uuid("pipeline_id").references(() => pipelines.id, {
+    onDelete: "set null",
+  }),
+  stageId: uuid("stage_id").references(() => stages.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

@@ -6,7 +6,14 @@ import { decryptCredential, encryptCredential } from "@/lib/credentials-crypto";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
-const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+// drive.readonly foi adicionado na Etapa 31 (ler os docs de notas do Gemini
+// anexados aos eventos) — usuários que conectaram antes disso precisam
+// reconectar (prompt=consent abaixo já força nova concessão de escopo a
+// cada conexão).
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/drive.readonly",
+];
 const TIME_ZONE = "America/Sao_Paulo";
 // Margem de segurança antes do vencimento real — evita usar um token que
 // expira no meio da chamada por causa de latência de rede.
@@ -23,7 +30,7 @@ export function getGoogleAuthUrl(state: string): string {
     client_id: requireEnv("GOOGLE_CLIENT_ID"),
     redirect_uri: requireEnv("GOOGLE_OAUTH_REDIRECT_URI"),
     response_type: "code",
-    scope: CALENDAR_SCOPE,
+    scope: SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
     state,
@@ -250,4 +257,65 @@ export async function createCalendarEvent(
 
   const data = (await res.json()) as { id: string; htmlLink: string };
   return { id: data.id, htmlLink: data.htmlLink };
+}
+
+export type CalendarEventAttachment = {
+  fileId: string;
+  fileUrl: string;
+  title: string;
+  mimeType: string;
+};
+
+export type CalendarEvent = {
+  id: string;
+  summary?: string;
+  start?: { dateTime?: string; date?: string };
+  attendees?: { email: string }[];
+  attachments?: CalendarEventAttachment[];
+};
+
+// Lista eventos de um usuário conectado num intervalo de datas, paginando
+// até esgotar (Etapa 31 — sincronização de notas do Gemini). `attachments`
+// e `attendees` já vêm por padrão na representação completa do evento, sem
+// precisar de nenhum parâmetro extra na query.
+export async function listCalendarEvents(
+  ownerUserId: string,
+  params: { timeMin: Date; timeMax: Date }
+): Promise<CalendarEvent[]> {
+  const [connection] = await db
+    .select({ calendarId: googleCalendarConnections.calendarId })
+    .from(googleCalendarConnections)
+    .where(eq(googleCalendarConnections.userId, ownerUserId))
+    .limit(1);
+  if (!connection) throw new Error("NOT_CONNECTED");
+
+  const accessToken = await getValidAccessToken(ownerUserId);
+  const events: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const query = new URLSearchParams({
+      timeMin: params.timeMin.toISOString(),
+      timeMax: params.timeMax.toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+    });
+    if (pageToken) query.set("pageToken", pageToken);
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendarId)}/events?${query.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("[google-calendar] falha ao listar eventos", res.status, text);
+      throw new Error(`GOOGLE_API_ERROR: ${res.status}`);
+    }
+
+    const data = (await res.json()) as { items?: CalendarEvent[]; nextPageToken?: string };
+    events.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return events;
 }

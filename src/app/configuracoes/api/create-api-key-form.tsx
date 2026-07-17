@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TriangleAlert } from "lucide-react";
+import { ShieldAlert, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,7 @@ export function CreateApiKeyForm() {
   const [state, formAction, isPending] = useActionState(createApiKeyAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
-  const [scope, setScope] = useState("leitura");
+  const [scope, setScope] = useState("operacional");
 
   if (state.status === "success") {
     return (
@@ -64,17 +64,27 @@ export function CreateApiKeyForm() {
         <input type="hidden" name="scope" value={scope} />
         <Select
           value={scope}
-          onValueChange={(v) => setScope(v ?? "leitura")}
-          items={{ leitura: "Somente leitura", leitura_escrita: "Leitura e escrita" }}
+          onValueChange={(v) => setScope(v ?? "operacional")}
+          items={{ operacional: "Operacional", admin: "Admin" }}
         >
           <SelectTrigger id="scope" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="leitura">Somente leitura</SelectItem>
-            <SelectItem value="leitura_escrita">Leitura e escrita</SelectItem>
+            <SelectItem value="operacional">Operacional</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">
+          Operacional cobre negócios, contatos, tarefas, mensagens e emails do dia a dia.
+        </p>
+        {scope === "admin" && (
+          <p className="flex items-start gap-1.5 text-xs text-status-warning">
+            <ShieldAlert size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            Admin também permite configurar pipelines, automações, templates e webhooks — use só
+            pra ferramentas de confiança.
+          </p>
+        )}
       </div>
       {state.status === "error" && <p className="text-sm text-destructive">{state.message}</p>}
       <Button type="submit" disabled={isPending}>

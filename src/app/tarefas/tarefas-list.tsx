@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ListTodo, MessageSquare, Pencil, Phone, CalendarClock, Trash2 } from "lucide-react";
+import { Check, ListTodo, Mail, MessageSquare, Pencil, Phone, CalendarClock, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,7 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MessageTaskExecutor, SchedulingTaskExecutor, type TaskLike } from "@/components/task-executors";
+import {
+  EmailTaskExecutor,
+  MessageTaskExecutor,
+  SchedulingTaskExecutor,
+  type TaskLike,
+} from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
 import { completeTaskAction } from "@/app/negocios/actions";
@@ -23,10 +28,11 @@ import { completeTaskAction } from "@/app/negocios/actions";
 export type TarefaItem = {
   id: string;
   title: string;
-  type: "mensagem" | "ligacao" | "agendamento" | "generica";
+  type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
   status: "pendente" | "concluida";
   dueAt: string | null;
   messagePreview: string | null;
+  emailSubjectPreview?: string | null;
   dealId: string;
   dealTitle: string;
   dealOwnerId: string | null;
@@ -56,6 +62,7 @@ const TYPE_FILTER_OPTIONS: Record<string, string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 const ALL_PIPELINES = "todas";
@@ -65,6 +72,7 @@ const TYPE_ICON = {
   ligacao: Phone,
   agendamento: CalendarClock,
   generica: ListTodo,
+  email: Mail,
 } as const;
 
 const TYPE_LABELS: Record<TarefaItem["type"], string> = {
@@ -72,6 +80,7 @@ const TYPE_LABELS: Record<TarefaItem["type"], string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 function formatDueAt(dueAt: string): string {
@@ -112,6 +121,7 @@ function TarefaRow({
     status: item.status,
     messagePreview: item.messagePreview,
     dueAt: item.dueAt,
+    emailSubjectPreview: item.emailSubjectPreview,
   };
 
   async function handleComplete() {
@@ -195,7 +205,21 @@ function TarefaRow({
             />
           </div>
         )}
-        {!isDone && item.type !== "mensagem" && item.type !== "agendamento" && (
+        {!isDone && item.type === "email" && (
+          <div className="mt-2">
+            <EmailTaskExecutor
+              task={task}
+              dealId={item.dealId}
+              contactId={item.contactId}
+              contactEmail={item.contactEmail}
+              onDone={onDone}
+            />
+          </div>
+        )}
+        {!isDone &&
+          item.type !== "mensagem" &&
+          item.type !== "agendamento" &&
+          item.type !== "email" && (
           <div className="mt-2">
             <Button type="button" size="sm" disabled={isPending} onClick={handleComplete}>
               <Check size={14} strokeWidth={1.75} />

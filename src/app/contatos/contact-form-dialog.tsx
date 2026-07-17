@@ -31,7 +31,7 @@ export type { TagOption } from "@/lib/tags";
 export type ContactData = {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   customFields: Record<string, unknown>;
   tagIds: string[];
@@ -108,7 +108,7 @@ export function ContactFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Telefone</Label>
-            <Input id="phone" name="phone" defaultValue={contact?.phone} required />
+            <Input id="phone" name="phone" defaultValue={contact?.phone ?? ""} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>

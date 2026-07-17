@@ -30,7 +30,6 @@ export default async function ApiSettingsPage() {
             <ApiKeysTable
               apiKeys={keys.map((k) => ({
                 ...k,
-                scopes: k.scopes as string[],
                 lastUsedAt: k.lastUsedAt ? k.lastUsedAt.toISOString() : null,
                 createdAt: k.createdAt.toISOString(),
               }))}

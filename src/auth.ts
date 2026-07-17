@@ -90,9 +90,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // webhook_config, respectivamente). Ver src/app/api/whatsapp/webhook,
         // src/app/api/cron/cleanup-media e src/app/api/webhooks/inbound.
         pathname.startsWith("/api/whatsapp/webhook") ||
+        pathname === "/api/instagram/webhook" ||
         pathname === "/api/cron/cleanup-media" ||
         pathname === "/api/cron/send-scheduled-messages" ||
         pathname === "/api/cron/task-automation" ||
+        pathname === "/api/cron/sync-meeting-notes" ||
         pathname.startsWith("/api/webhooks/inbound") ||
         // API pública e servidor MCP (Etapa 28) — autenticados por API key
         // própria (Authorization: Bearer), não por sessão de usuário.

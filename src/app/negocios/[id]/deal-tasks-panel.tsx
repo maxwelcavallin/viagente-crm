@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Check,
   ListTodo,
+  Mail,
   MessageSquare,
   Pencil,
   Phone,
@@ -15,7 +16,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MessageTaskExecutor, SchedulingTaskExecutor, type TaskLike } from "@/components/task-executors";
+import {
+  EmailTaskExecutor,
+  MessageTaskExecutor,
+  SchedulingTaskExecutor,
+  type TaskLike,
+} from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
 import { addStageTaskToDealAction, completeTaskAction } from "../actions";
@@ -25,7 +31,7 @@ export type DealTask = TaskLike;
 export type ManualStageTask = {
   id: string;
   title: string;
-  type: "mensagem" | "ligacao" | "agendamento" | "generica";
+  type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
 };
 
 function formatDueAt(dueAt: string): string {
@@ -50,6 +56,7 @@ const TYPE_ICON = {
   ligacao: Phone,
   agendamento: CalendarClock,
   generica: ListTodo,
+  email: Mail,
 } as const;
 
 const TYPE_LABELS: Record<DealTask["type"], string> = {
@@ -57,6 +64,7 @@ const TYPE_LABELS: Record<DealTask["type"], string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 function TaskRow({
@@ -155,7 +163,21 @@ function TaskRow({
             />
           </div>
         )}
-        {!isDone && task.type !== "mensagem" && task.type !== "agendamento" && (
+        {!isDone && task.type === "email" && (
+          <div className="mt-2">
+            <EmailTaskExecutor
+              task={task}
+              dealId={dealId}
+              contactId={contactId}
+              contactEmail={contactEmail}
+              onDone={onDone}
+            />
+          </div>
+        )}
+        {!isDone &&
+          task.type !== "mensagem" &&
+          task.type !== "agendamento" &&
+          task.type !== "email" && (
           <div className="mt-2">
             <Button type="button" size="sm" disabled={isPending} onClick={handleComplete}>
               <Check size={14} strokeWidth={1.75} />

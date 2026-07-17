@@ -1,6 +1,6 @@
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
-import { SidebarNav } from "@/components/sidebar-nav";
+import { CollapsibleSidebar } from "@/components/collapsible-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { NotificationBell } from "@/components/notification-bell";
@@ -37,10 +37,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border lg:block">
-          <SidebarNav role={role} />
-        </aside>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <CollapsibleSidebar role={role} />
+        <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

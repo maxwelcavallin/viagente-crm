@@ -537,7 +537,7 @@ export async function updateTaskAction(
   dealId: string,
   fields: {
     title: string;
-    type: "mensagem" | "ligacao" | "agendamento" | "generica";
+    type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
     dueAt: string | null;
   }
 ): Promise<{ ok: boolean }> {

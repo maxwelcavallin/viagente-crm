@@ -35,7 +35,7 @@ import {
   type DealFormState,
 } from "./actions";
 
-export type DealFormContact = { id: string; name: string; phone: string };
+export type DealFormContact = { id: string; name: string; phone: string | null };
 export type DealFormOwner = { id: string; name: string };
 export type DealFormPipeline = { id: string; name: string };
 export type DealFormStage = {
@@ -84,7 +84,8 @@ function ContactPicker({
     return contacts
       .filter(
         (c) =>
-          c.name.toLowerCase().includes(term) || c.phone.toLowerCase().includes(term)
+          c.name.toLowerCase().includes(term) ||
+          (c.phone?.toLowerCase().includes(term) ?? false)
       )
       .slice(0, 30);
   }, [contacts, search]);
@@ -128,8 +129,10 @@ function ContactPicker({
       >
         {selected ? (
           <span className="truncate">
-            {selected.name}{" "}
-            <span className="text-muted-foreground">— {selected.phone}</span>
+            {selected.name}
+            {selected.phone && (
+              <span className="text-muted-foreground"> — {selected.phone}</span>
+            )}
           </span>
         ) : (
           <span className="text-muted-foreground">Selecionar contato...</span>
@@ -207,8 +210,10 @@ function ContactPicker({
                   className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                   <span className="truncate">
-                    {contact.name}{" "}
-                    <span className="text-muted-foreground">— {contact.phone}</span>
+                    {contact.name}
+                    {contact.phone && (
+                      <span className="text-muted-foreground"> — {contact.phone}</span>
+                    )}
                   </span>
                   {contact.id === selectedContactId && (
                     <Check size={14} strokeWidth={1.75} className="shrink-0" />
@@ -241,6 +246,9 @@ export type DealFormProps = {
   currentUserId: string;
   defaultPipelineId?: string;
   defaultStageId?: string;
+  // Quando informado, o contato vem fixo (ex: criar negócio a partir da
+  // página do contato) — some com o ContactPicker, não dá pra trocar.
+  lockedContact?: DealFormContact;
 };
 
 export function DealFormDialog({
@@ -255,6 +263,7 @@ export function DealFormDialog({
   currentUserId,
   defaultPipelineId,
   defaultStageId,
+  lockedContact,
   trigger,
   triggerLabel,
 }: DealFormProps & {
@@ -266,7 +275,9 @@ export function DealFormDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [contactsList, setContactsList] = useState(contacts);
-  const [contactId, setContactId] = useState(deal?.contactId ?? "");
+  const [contactId, setContactId] = useState(
+    deal?.contactId ?? lockedContact?.id ?? ""
+  );
   const [pipelineId, setPipelineId] = useState(
     deal?.pipelineId ?? defaultPipelineId ?? pipelines[0]?.id ?? ""
   );
@@ -362,16 +373,25 @@ export function DealFormDialog({
 
           <div className="space-y-2">
             <Label>Contato</Label>
-            <ContactPicker
-              contacts={contactsList}
-              selectedContactId={contactId}
-              onSelect={(contact) => {
-                setContactId(contact.id);
-                setContactsList((prev) =>
-                  prev.some((c) => c.id === contact.id) ? prev : [contact, ...prev]
-                );
-              }}
-            />
+            {lockedContact ? (
+              <div className="flex items-center rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                {lockedContact.name}
+                {lockedContact.phone && (
+                  <span className="ml-1 text-muted-foreground">— {lockedContact.phone}</span>
+                )}
+              </div>
+            ) : (
+              <ContactPicker
+                contacts={contactsList}
+                selectedContactId={contactId}
+                onSelect={(contact) => {
+                  setContactId(contact.id);
+                  setContactsList((prev) =>
+                    prev.some((c) => c.id === contact.id) ? prev : [contact, ...prev]
+                  );
+                }}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

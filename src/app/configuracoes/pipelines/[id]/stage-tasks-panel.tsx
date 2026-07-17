@@ -42,8 +42,9 @@ import {
 export type StageTask = {
   id: string;
   title: string;
-  type: "mensagem" | "ligacao" | "agendamento" | "generica";
+  type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
   messageTemplateId: string | null;
+  emailTemplateId: string | null;
   daysToComplete: number | null;
   triggerDelayMinutes: number | null;
   isAutomatic: boolean;
@@ -56,6 +57,7 @@ const TYPE_LABELS: Record<StageTask["type"], string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 const idleState: StageTaskFormState = { status: "idle" };
@@ -64,16 +66,21 @@ function EditStageTaskDialog({
   task,
   pipelineId,
   templates,
+  emailTemplates,
   channels,
 }: {
   task: StageTask;
   pipelineId: string;
   templates: { id: string; name: string }[];
+  emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     task.messageTemplateId
+  );
+  const [emailTemplateId, setEmailTemplateId] = useState<string | null>(
+    task.emailTemplateId
   );
   const [isAutomatic, setIsAutomatic] = useState(task.isAutomatic);
   const [autoSend, setAutoSend] = useState(task.autoSend);
@@ -167,6 +174,28 @@ function EditStageTaskDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {task.type === "email" && (
+            <div className="space-y-2">
+              <Label>Template de email (opcional)</Label>
+              <input type="hidden" name="emailTemplateId" value={emailTemplateId ?? ""} />
+              <Select
+                items={Object.fromEntries(emailTemplates.map((t) => [t.id, t.name]))}
+                value={emailTemplateId}
+                onValueChange={(v) => setEmailTemplateId(v ?? null)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Nenhum" />
+                </SelectTrigger>
+                <SelectContent>
+                  {emailTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
                     </SelectItem>
@@ -282,11 +311,13 @@ function CreateStageTaskForm({
   stageId,
   pipelineId,
   templates,
+  emailTemplates,
   channels,
 }: {
   stageId: string;
   pipelineId: string;
   templates: { id: string; name: string }[];
+  emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(
@@ -297,6 +328,7 @@ function CreateStageTaskForm({
   const [messageTemplateId, setMessageTemplateId] = useState<string | null>(
     null
   );
+  const [emailTemplateId, setEmailTemplateId] = useState<string | null>(null);
   const [isAutomatic, setIsAutomatic] = useState(true);
   const [autoSend, setAutoSend] = useState(false);
   const [autoSendChannelId, setAutoSendChannelId] = useState<string | null>(null);
@@ -346,6 +378,28 @@ function CreateStageTaskForm({
           </SelectContent>
         </Select>
       </div>
+      {type === "email" && (
+        <div className="space-y-1">
+          <Label className="text-xs">Template de email</Label>
+          <input type="hidden" name="emailTemplateId" value={emailTemplateId ?? ""} />
+          <Select
+            items={Object.fromEntries(emailTemplates.map((t) => [t.id, t.name]))}
+            value={emailTemplateId}
+            onValueChange={(v) => setEmailTemplateId(v ?? null)}
+          >
+            <SelectTrigger className="h-8 w-40 text-sm">
+              <SelectValue placeholder="Nenhum" />
+            </SelectTrigger>
+            <SelectContent>
+              {emailTemplates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {type === "mensagem" && (
         <div className="space-y-1">
           <Label className="text-xs">Template</Label>
@@ -454,12 +508,14 @@ export function StageTasksPanel({
   pipelineId,
   tasks,
   templates,
+  emailTemplates,
   channels,
 }: {
   stageId: string;
   pipelineId: string;
   tasks: StageTask[];
   templates: { id: string; name: string }[];
+  emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
@@ -559,6 +615,7 @@ export function StageTasksPanel({
                     task={task}
                     pipelineId={pipelineId}
                     templates={templates}
+                    emailTemplates={emailTemplates}
                     channels={channels}
                   />
                   <DeleteStageTaskDialog task={task} pipelineId={pipelineId} />
@@ -570,6 +627,7 @@ export function StageTasksPanel({
             stageId={stageId}
             pipelineId={pipelineId}
             templates={templates}
+            emailTemplates={emailTemplates}
             channels={channels}
           />
         </div>

@@ -1,13 +1,31 @@
-import { and, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, deals, pipelines, stages, dealTags, tasks, users } from "@/db/schema";
+import {
+  contacts,
+  customFieldDefinitions,
+  deals,
+  dealTags,
+  pipelines,
+  stages,
+  tags,
+  tasks,
+  users,
+} from "@/db/schema";
+import { logApiWrite } from "@/lib/api-audit";
 import type { AuthenticatedApiKey } from "@/lib/api-keys";
-import { hasWriteScope } from "@/lib/api-keys";
 import { getAllowedChannelIds, userHasChannelAccess } from "@/lib/channel-access";
 import { getThread, type ThreadMessage } from "@/lib/conversations";
+import { logDealActivity } from "@/lib/deal-activity-log";
 import { moveDealStage } from "@/lib/deal-mutations";
+import { sendDealEmail } from "@/lib/emails";
+import {
+  resolveDistributedOwner,
+  syncContactOwnerFromDeal,
+} from "@/lib/owner-distribution";
 import { sendTextMessage } from "@/lib/send-message";
+import { fireTagAddedAutomations } from "@/lib/task-automation";
 import { canViewOwnedRecord, ownerVisibilityFilter } from "@/lib/visibility";
+import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -121,10 +139,6 @@ export async function moveDealStageForApiKey(
   dealId: string,
   stageId: string
 ): Promise<ApiResult<{ dealId: string; stageId: string }>> {
-  if (!hasWriteScope(apiKey)) {
-    return { ok: false, status: 403, error: "Chave sem escopo de escrita." };
-  }
-
   const [deal] = await db.select({ ownerId: deals.ownerId }).from(deals).where(eq(deals.id, dealId)).limit(1);
   if (!deal || !canViewOwnedRecord(deal.ownerId, apiKey.actingUser)) {
     return { ok: false, status: 404, error: "Negócio não encontrado." };
@@ -138,7 +152,248 @@ export async function moveDealStageForApiKey(
     source: "api",
   });
   if (!result.ok) return { ok: false, status: 404, error: "Negócio não encontrado." };
+  void logApiWrite(apiKey.id, "deal", dealId, "move_stage");
   return { ok: true, data: { dealId, stageId } };
+}
+
+// ---------- Negócios: criar/editar (Etapa 28) ----------
+
+async function filterCustomFields(
+  entity: "deal" | "contact",
+  customFields: Record<string, unknown> | undefined
+): Promise<Record<string, string>> {
+  if (!customFields) return {};
+  const defs = await db
+    .select({ key: customFieldDefinitions.key })
+    .from(customFieldDefinitions)
+    .where(eq(customFieldDefinitions.entity, entity));
+  const allowedKeys = new Set(defs.map((d) => d.key));
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(customFields)) {
+    if (allowedKeys.has(key) && value != null && String(value).trim()) {
+      result[key] = String(value).trim();
+    }
+  }
+  return result;
+}
+
+export type CreateDealParams = {
+  contactId: string;
+  pipelineId: string;
+  stageId: string;
+  title?: string;
+  ownerId?: string | null;
+  value?: string | null;
+  customFields?: Record<string, unknown>;
+  tagIds?: string[];
+};
+
+export async function createDealForApiKey(
+  apiKey: AuthenticatedApiKey,
+  params: CreateDealParams
+): Promise<ApiResult<{ id: string }>> {
+  const [stage] = await db
+    .select({ id: stages.id, pipelineId: stages.pipelineId })
+    .from(stages)
+    .where(eq(stages.id, params.stageId))
+    .limit(1);
+  if (!stage || stage.pipelineId !== params.pipelineId) {
+    return { ok: false, status: 400, error: "Etapa inválida para a pipeline informada." };
+  }
+
+  const [contact] = await db
+    .select({ name: contacts.name, ownerId: contacts.ownerId })
+    .from(contacts)
+    .where(eq(contacts.id, params.contactId))
+    .limit(1);
+  if (!contact || !canViewOwnedRecord(contact.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Contato não encontrado." };
+  }
+
+  const title = params.title?.trim() || contact.name;
+  const customFields = await filterCustomFields("deal", params.customFields);
+  const ownerId =
+    params.ownerId !== undefined ? params.ownerId : await resolveDistributedOwner(params.pipelineId);
+
+  const [created] = await db
+    .insert(deals)
+    .values({
+      contactId: params.contactId,
+      pipelineId: params.pipelineId,
+      stageId: params.stageId,
+      title,
+      ownerId,
+      value: params.value ?? null,
+      customFields,
+    })
+    .returning({ id: deals.id });
+
+  if (ownerId) await syncContactOwnerFromDeal(params.contactId, ownerId);
+  await logDealActivity({ dealId: created.id, userId: apiKey.actingUser.id, source: "api", action: "criado" });
+
+  const tagIds = Array.from(new Set(params.tagIds ?? []));
+  if (tagIds.length > 0) {
+    await db.insert(dealTags).values(tagIds.map((tagId) => ({ dealId: created.id, tagId })));
+    const tagRows = await db.select({ id: tags.id, name: tags.name }).from(tags).where(inArray(tags.id, tagIds));
+    for (const tag of tagRows) {
+      await logDealActivity({
+        dealId: created.id,
+        userId: apiKey.actingUser.id,
+        source: "api",
+        action: "tag_adicionada",
+        newValue: tag.name,
+      });
+    }
+    await fireTagAddedAutomations(created.id, tagIds);
+  }
+
+  void dispatchOutboundWebhooks("negocio_criado", created.id);
+  void logApiWrite(apiKey.id, "deal", created.id, "create");
+  return { ok: true, data: { id: created.id } };
+}
+
+export type UpdateDealParams = {
+  title?: string;
+  ownerId?: string | null;
+  value?: string | null;
+  stageId?: string;
+  customFields?: Record<string, unknown>;
+};
+
+export async function updateDealForApiKey(
+  apiKey: AuthenticatedApiKey,
+  dealId: string,
+  params: UpdateDealParams
+): Promise<ApiResult<{ id: string }>> {
+  const [current] = await db.select().from(deals).where(eq(deals.id, dealId)).limit(1);
+  if (!current || !canViewOwnedRecord(current.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Negócio não encontrado." };
+  }
+
+  const customFields =
+    params.customFields !== undefined
+      ? { ...(current.customFields as Record<string, string>), ...(await filterCustomFields("deal", params.customFields)) }
+      : undefined;
+
+  await db
+    .update(deals)
+    .set({
+      ...(params.title !== undefined ? { title: params.title.trim() || current.title } : {}),
+      ...(params.ownerId !== undefined ? { ownerId: params.ownerId } : {}),
+      ...(params.value !== undefined ? { value: params.value } : {}),
+      ...(customFields !== undefined ? { customFields } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(deals.id, dealId));
+
+  if (params.ownerId !== undefined) {
+    await syncContactOwnerFromDeal(current.contactId, params.ownerId);
+  }
+  await logDealActivity({
+    dealId,
+    userId: apiKey.actingUser.id,
+    source: "api",
+    action: "editado",
+  });
+
+  if (params.stageId && params.stageId !== current.stageId) {
+    const [stage] = await db.select({ id: stages.id }).from(stages).where(eq(stages.id, params.stageId)).limit(1);
+    if (!stage) return { ok: false, status: 400, error: "Etapa inválida." };
+    await moveDealStage(dealId, params.stageId, { userId: apiKey.actingUser.id, source: "api" });
+  }
+
+  void logApiWrite(apiKey.id, "deal", dealId, "update");
+  return { ok: true, data: { id: dealId } };
+}
+
+export async function addTagToDealForApiKey(
+  apiKey: AuthenticatedApiKey,
+  dealId: string,
+  tagId: string
+): Promise<ApiResult<{ ok: true }>> {
+  const [deal] = await db.select({ ownerId: deals.ownerId }).from(deals).where(eq(deals.id, dealId)).limit(1);
+  if (!deal || !canViewOwnedRecord(deal.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Negócio não encontrado." };
+  }
+  const [tag] = await db.select({ id: tags.id, name: tags.name }).from(tags).where(eq(tags.id, tagId)).limit(1);
+  if (!tag) return { ok: false, status: 400, error: "Tag inválida." };
+
+  const inserted = await db
+    .insert(dealTags)
+    .values({ dealId, tagId })
+    .onConflictDoNothing()
+    .returning({ dealId: dealTags.dealId });
+
+  if (inserted.length > 0) {
+    await logDealActivity({
+      dealId,
+      userId: apiKey.actingUser.id,
+      source: "api",
+      action: "tag_adicionada",
+      newValue: tag.name,
+    });
+    await fireTagAddedAutomations(dealId, [tagId]);
+  }
+
+  void logApiWrite(apiKey.id, "deal", dealId, "add_tag");
+  return { ok: true, data: { ok: true } };
+}
+
+export async function removeTagFromDealForApiKey(
+  apiKey: AuthenticatedApiKey,
+  dealId: string,
+  tagId: string
+): Promise<ApiResult<{ ok: true }>> {
+  const [deal] = await db.select({ ownerId: deals.ownerId }).from(deals).where(eq(deals.id, dealId)).limit(1);
+  if (!deal || !canViewOwnedRecord(deal.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Negócio não encontrado." };
+  }
+  const [tag] = await db.select({ id: tags.id, name: tags.name }).from(tags).where(eq(tags.id, tagId)).limit(1);
+
+  await db.delete(dealTags).where(and(eq(dealTags.dealId, dealId), eq(dealTags.tagId, tagId)));
+  if (tag) {
+    await logDealActivity({
+      dealId,
+      userId: apiKey.actingUser.id,
+      source: "api",
+      action: "tag_removida",
+      oldValue: tag.name,
+    });
+  }
+
+  void logApiWrite(apiKey.id, "deal", dealId, "remove_tag");
+  return { ok: true, data: { ok: true } };
+}
+
+export async function sendActivityEmailForApiKey(
+  apiKey: AuthenticatedApiKey,
+  params: { dealId: string; to: string; subject: string; body: string }
+): Promise<ApiResult<{ emailSentId: string }>> {
+  const [deal] = await db
+    .select({ ownerId: deals.ownerId, contactId: deals.contactId })
+    .from(deals)
+    .where(eq(deals.id, params.dealId))
+    .limit(1);
+  if (!deal || !canViewOwnedRecord(deal.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Negócio não encontrado." };
+  }
+  if (!params.to.trim() || !params.subject.trim() || !params.body.trim()) {
+    return { ok: false, status: 400, error: "to, subject e body são obrigatórios." };
+  }
+
+  const result = await sendDealEmail({
+    dealId: params.dealId,
+    contactId: deal.contactId,
+    to: params.to.trim(),
+    subject: params.subject.trim(),
+    body: params.body,
+    attachments: [],
+    sentByUserId: apiKey.actingUser.id,
+  });
+  if (!result.ok) return { ok: false, status: 400, error: result.error };
+
+  void logApiWrite(apiKey.id, "deal", params.dealId, "send_email");
+  return { ok: true, data: { emailSentId: result.emailSentId } };
 }
 
 // ---------- Contatos ----------
@@ -193,6 +448,98 @@ export async function getContact(actingUser: AuthenticatedApiKey["actingUser"], 
   return contact;
 }
 
+async function contactPhoneConflicts(phone: string, excludeId?: string): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(
+      excludeId
+        ? and(eq(contacts.phone, phone), ne(contacts.id, excludeId))
+        : eq(contacts.phone, phone)
+    )
+    .limit(1);
+  return Boolean(existing);
+}
+
+export type CreateContactParams = {
+  name: string;
+  phone: string;
+  email?: string | null;
+  customFields?: Record<string, unknown>;
+};
+
+export async function createContactForApiKey(
+  apiKey: AuthenticatedApiKey,
+  params: CreateContactParams
+): Promise<ApiResult<{ id: string }>> {
+  if (!params.name.trim()) return { ok: false, status: 400, error: "name é obrigatório." };
+  if (!params.phone.trim()) return { ok: false, status: 400, error: "phone é obrigatório." };
+
+  const normalizedPhone = params.phone.trim();
+  if (await contactPhoneConflicts(normalizedPhone)) {
+    return { ok: false, status: 400, error: "Já existe um contato com esse telefone." };
+  }
+
+  const customFields = await filterCustomFields("contact", params.customFields);
+  const [created] = await db
+    .insert(contacts)
+    .values({
+      name: params.name.trim(),
+      phone: normalizedPhone,
+      email: params.email?.trim() || null,
+      customFields,
+    })
+    .returning({ id: contacts.id });
+
+  void logApiWrite(apiKey.id, "contact", created.id, "create");
+  return { ok: true, data: { id: created.id } };
+}
+
+export type UpdateContactParams = {
+  name?: string;
+  phone?: string;
+  email?: string | null;
+  customFields?: Record<string, unknown>;
+};
+
+export async function updateContactForApiKey(
+  apiKey: AuthenticatedApiKey,
+  contactId: string,
+  params: UpdateContactParams
+): Promise<ApiResult<{ id: string }>> {
+  const [current] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+  if (!current || !canViewOwnedRecord(current.ownerId, apiKey.actingUser)) {
+    return { ok: false, status: 404, error: "Contato não encontrado." };
+  }
+
+  let phone = current.phone;
+  if (params.phone !== undefined) {
+    if (!params.phone.trim()) return { ok: false, status: 400, error: "phone não pode ser vazio." };
+    phone = params.phone.trim();
+    if (await contactPhoneConflicts(phone, contactId)) {
+      return { ok: false, status: 400, error: "Já existe um contato com esse telefone." };
+    }
+  }
+
+  const customFields =
+    params.customFields !== undefined
+      ? { ...(current.customFields as Record<string, string>), ...(await filterCustomFields("contact", params.customFields)) }
+      : undefined;
+
+  await db
+    .update(contacts)
+    .set({
+      ...(params.name !== undefined ? { name: params.name.trim() || current.name } : {}),
+      phone,
+      ...(params.email !== undefined ? { email: params.email?.trim() || null } : {}),
+      ...(customFields !== undefined ? { customFields } : {}),
+    })
+    .where(eq(contacts.id, contactId));
+
+  void logApiWrite(apiKey.id, "contact", contactId, "update");
+  return { ok: true, data: { id: contactId } };
+}
+
 // ---------- Mensagens (histórico de conversa de um negócio) ----------
 
 export async function getDealConversation(
@@ -217,10 +564,6 @@ export async function sendMessageForApiKey(
   apiKey: AuthenticatedApiKey,
   params: { channelId: string; contactId: string; message: string }
 ): Promise<ApiResult<{ messageId: string }>> {
-  if (!hasWriteScope(apiKey)) {
-    return { ok: false, status: 403, error: "Chave sem escopo de escrita." };
-  }
-
   const [contact] = await db
     .select({ ownerId: contacts.ownerId })
     .from(contacts)
@@ -242,6 +585,7 @@ export async function sendMessageForApiKey(
     const status = result.error.includes("não encontrado") ? 404 : 400;
     return { ok: false, status, error: result.error };
   }
+  void logApiWrite(apiKey.id, "message", result.message.id, "send");
   return { ok: true, data: { messageId: result.message.id } };
 }
 
@@ -288,13 +632,10 @@ export async function createTaskForApiKey(
   params: {
     dealId: string;
     title: string;
-    type: "mensagem" | "ligacao" | "agendamento" | "generica";
+    type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
     dueAt: string | null;
   }
 ): Promise<ApiResult<{ id: string }>> {
-  if (!hasWriteScope(apiKey)) {
-    return { ok: false, status: 403, error: "Chave sem escopo de escrita." };
-  }
   if (!params.title.trim()) return { ok: false, status: 400, error: "title é obrigatório." };
 
   const [deal] = await db.select({ ownerId: deals.ownerId }).from(deals).where(eq(deals.id, params.dealId)).limit(1);
@@ -313,6 +654,7 @@ export async function createTaskForApiKey(
     })
     .returning({ id: tasks.id });
 
+  void logApiWrite(apiKey.id, "task", created.id, "create");
   return { ok: true, data: { id: created.id } };
 }
 
@@ -320,10 +662,6 @@ export async function completeTaskForApiKey(
   apiKey: AuthenticatedApiKey,
   taskId: string
 ): Promise<ApiResult<{ id: string }>> {
-  if (!hasWriteScope(apiKey)) {
-    return { ok: false, status: 403, error: "Chave sem escopo de escrita." };
-  }
-
   const [row] = await db
     .select({ taskId: tasks.id, ownerId: deals.ownerId })
     .from(tasks)
@@ -339,5 +677,6 @@ export async function completeTaskForApiKey(
     .set({ status: "concluida", completedAt: new Date(), completedBy: apiKey.actingUser.id })
     .where(eq(tasks.id, taskId));
 
+  void logApiWrite(apiKey.id, "task", taskId, "complete");
   return { ok: true, data: { id: taskId } };
 }

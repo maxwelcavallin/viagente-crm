@@ -4,6 +4,8 @@ import {
   KeyRound,
   ListChecks,
   ListOrdered,
+  Mail,
+  MessageSquarePlus,
   Smile,
   Tag,
   Upload,
@@ -13,6 +15,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { InstagramIcon } from "@/components/icons/instagram-icon";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
 import { WhatsappIcon } from "@/components/icons/whatsapp-icon";
 
@@ -28,11 +31,18 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/configuracoes/campos", label: "Campos Customizados", icon: ListChecks },
   { href: "/configuracoes/tags", label: "Tags", icon: Tag },
   { href: "/configuracoes/automacoes", label: "Automações", icon: Zap },
+  {
+    href: "/configuracoes/negocio-automatico",
+    label: "Negócio automático",
+    icon: MessageSquarePlus,
+  },
   { href: "/configuracoes/sequencias", label: "Sequências", icon: ListOrdered },
   { href: "/configuracoes/nps", label: "Pós-venda / NPS", icon: Smile },
   { href: "/configuracoes/whatsapp", label: "Conexão de canais", icon: WhatsappIcon },
+  { href: "/configuracoes/instagram", label: "Instagram", icon: InstagramIcon },
   { href: "/configuracoes/linkedin", label: "LinkedIn", icon: LinkedinIcon },
   { href: "/configuracoes/templates", label: "Templates de Mensagem", icon: FileText },
+  { href: "/configuracoes/email", label: "Email", icon: Mail },
   { href: "/configuracoes/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/configuracoes/importacao", label: "Importação de Dados", icon: Upload },
   { href: "/configuracoes/google-agenda", label: "Google Agenda", icon: CalendarClock },

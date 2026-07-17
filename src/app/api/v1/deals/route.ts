@@ -1,5 +1,5 @@
 import { authenticateApiRequest } from "@/lib/api-keys";
-import { listDeals } from "@/lib/api-v1";
+import { createDealForApiKey, listDeals } from "@/lib/api-v1";
 
 export const dynamic = "force-dynamic";
 
@@ -26,4 +26,38 @@ export async function GET(request: Request) {
   });
 
   return Response.json({ deals });
+}
+
+// POST /api/v1/deals  { contactId, pipelineId, stageId, title?, ownerId?, value?, customFields?, tagIds? }
+export async function POST(request: Request) {
+  const auth = await authenticateApiRequest(request);
+  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+
+  const body = (await request.json().catch(() => null)) as {
+    contactId?: string;
+    pipelineId?: string;
+    stageId?: string;
+    title?: string;
+    ownerId?: string | null;
+    value?: string | null;
+    customFields?: Record<string, unknown>;
+    tagIds?: string[];
+  } | null;
+  if (!body?.contactId || !body?.pipelineId || !body?.stageId) {
+    return Response.json({ error: "contactId, pipelineId e stageId são obrigatórios." }, { status: 400 });
+  }
+
+  const result = await createDealForApiKey(auth.apiKey, {
+    contactId: body.contactId,
+    pipelineId: body.pipelineId,
+    stageId: body.stageId,
+    title: body.title,
+    ownerId: body.ownerId,
+    value: body.value,
+    customFields: body.customFields,
+    tagIds: body.tagIds,
+  });
+  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+
+  return Response.json({ deal: result.data }, { status: 201 });
 }

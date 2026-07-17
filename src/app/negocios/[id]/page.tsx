@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -10,7 +10,11 @@ import {
   customFieldDefinitions,
   dealTags,
   deals,
+  emailsSent,
+  emailTemplates,
   lossReasons,
+  meetingNotes,
+  meetingNotesContacts,
   messageTemplates,
   pipelines,
   stages,
@@ -44,6 +48,9 @@ import { DeleteDealDialog } from "../delete-deal-dialog";
 import { DealActivityLogCard } from "./deal-activity-log-card";
 import { DealStatusActions } from "./deal-status-actions";
 import { DealTasksPanel, type DealTask, type ManualStageTask } from "./deal-tasks-panel";
+import { EmailComposeDialog } from "@/components/email-compose-dialog";
+import { EmailsSentList } from "./emails-sent-list";
+import { MeetingNotesList, type MeetingNoteItem } from "@/components/meeting-notes-list";
 
 export const dynamic = "force-dynamic";
 
@@ -147,6 +154,9 @@ export default async function DealDetailPage({
     pendingScheduled,
     googleConnectionOwner,
     activityLogPage,
+    emailTemplateRows,
+    emailsSentRows,
+    meetingNoteRows,
   ] = await Promise.all([
       getThread(contact.id, allowedChannelIds),
       db
@@ -166,10 +176,13 @@ export default async function DealDetailPage({
           status: tasks.status,
           dueAt: tasks.dueAt,
           templateContent: messageTemplates.content,
+          emailTemplateSubject: emailTemplates.subject,
+          emailTemplateContent: emailTemplates.content,
         })
         .from(tasks)
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
         .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
+        .leftJoin(emailTemplates, eq(stageTasks.emailTemplateId, emailTemplates.id))
         .where(eq(tasks.dealId, id)),
       db
         .select({ id: stageTasks.id, title: stageTasks.title, type: stageTasks.type })
@@ -191,6 +204,35 @@ export default async function DealDetailPage({
       getPendingScheduledMessages(contact.id),
       resolveConnectionOwner(session.user.id),
       getDealActivityLogPage(id),
+      db
+        .select({
+          id: emailTemplates.id,
+          name: emailTemplates.name,
+          subject: emailTemplates.subject,
+          content: emailTemplates.content,
+        })
+        .from(emailTemplates)
+        .orderBy(asc(emailTemplates.name)),
+      db
+        .select()
+        .from(emailsSent)
+        .where(eq(emailsSent.dealId, id))
+        .orderBy(desc(emailsSent.sentAt)),
+      db
+        .select({
+          id: meetingNotes.id,
+          title: meetingNotes.title,
+          meetingDate: meetingNotes.meetingDate,
+          summary: meetingNotes.summary,
+          actionItems: meetingNotes.actionItems,
+          transcript: meetingNotes.transcript,
+          driveFileUrl: meetingNotes.driveFileUrl,
+          parsedOk: meetingNotes.parsedOk,
+        })
+        .from(meetingNotesContacts)
+        .innerJoin(meetingNotes, eq(meetingNotesContacts.meetingNoteId, meetingNotes.id))
+        .where(eq(meetingNotesContacts.dealId, id))
+        .orderBy(desc(meetingNotes.meetingDate)),
     ]);
 
   const isGoogleConnected = googleConnectionOwner != null;
@@ -253,6 +295,17 @@ export default async function DealDetailPage({
     }
   }
 
+  const meetingNoteItems: MeetingNoteItem[] = meetingNoteRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    meetingDate: row.meetingDate.toISOString(),
+    summary: row.summary,
+    actionItems: row.actionItems as string[] | null,
+    transcript: row.transcript,
+    driveFileUrl: row.driveFileUrl,
+    parsedOk: row.parsedOk,
+  }));
+
   const dealTasks: DealTask[] = taskRows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -261,6 +314,11 @@ export default async function DealDetailPage({
     dueAt: row.dueAt ? row.dueAt.toISOString() : null,
     messagePreview: row.templateContent
       ? substituteTemplate(row.templateContent, variableValues)
+      : row.emailTemplateContent
+        ? substituteTemplate(row.emailTemplateContent, variableValues)
+        : null,
+    emailSubjectPreview: row.emailTemplateSubject
+      ? substituteTemplate(row.emailTemplateSubject, variableValues)
       : null,
   }));
 
@@ -511,6 +569,14 @@ export default async function DealDetailPage({
               trigger={<Button type="button" variant="outline" size="sm" />}
               triggerLabel="Agendar mensagem"
             />
+            <EmailComposeDialog
+              dealId={deal.id}
+              contactId={contact.id}
+              contactEmail={contact.email}
+              templates={emailTemplateRows}
+              trigger={<Button type="button" variant="outline" size="sm" />}
+              triggerLabel="Enviar email"
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -533,6 +599,34 @@ export default async function DealDetailPage({
             channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
             preselectedChannelId={preselectedChannelId}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Emails enviados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmailsSentList
+            emails={emailsSentRows.map((e) => ({
+              id: e.id,
+              toEmail: e.toEmail,
+              subject: e.subject,
+              status: e.status,
+              errorMessage: e.errorMessage,
+              sentAt: e.sentAt.toISOString(),
+              attachments: (e.attachments as { filename: string; url: string }[]) ?? [],
+            }))}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumo de Reuniões</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MeetingNotesList notes={meetingNoteItems} />
         </CardContent>
       </Card>
 

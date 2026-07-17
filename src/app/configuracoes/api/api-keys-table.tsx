@@ -18,7 +18,7 @@ import { toggleApiKeyActiveAction } from "./actions";
 export type ApiKeyRow = {
   id: string;
   label: string;
-  scopes: string[];
+  scope: "operacional" | "admin";
   active: boolean;
   lastUsedAt: string | null;
   createdAt: string;
@@ -91,8 +91,8 @@ export function ApiKeysTable({ apiKeys }: { apiKeys: ApiKeyRow[] }) {
           <TableRow key={key.id}>
             <TableCell>{key.label}</TableCell>
             <TableCell>
-              <Badge variant={key.scopes.includes("escrita") ? "info" : "secondary"}>
-                {key.scopes.includes("escrita") ? "Leitura e escrita" : "Somente leitura"}
+              <Badge variant={key.scope === "admin" ? "info" : "secondary"}>
+                {key.scope === "admin" ? "Admin" : "Operacional"}
               </Badge>
             </TableCell>
             <TableCell>

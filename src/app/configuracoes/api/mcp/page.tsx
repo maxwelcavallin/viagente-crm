@@ -44,9 +44,10 @@ export default function McpDocsPage() {
             <Link href="/configuracoes/api" className="text-primary hover:underline">
               API
             </Link>
-            , crie uma chave com o escopo adequado — <strong>somente leitura</strong> se o agente só
-            vai consultar, ou <strong>leitura e escrita</strong> se ele também vai mover negócios de
-            etapa, criar/concluir tarefas ou enviar mensagens.
+            , crie uma chave com o escopo adequado — <strong>Operacional</strong> cobre negócios,
+            contatos, tarefas, mensagens e emails do dia a dia (leitura e escrita); <strong>Admin</strong>{" "}
+            também libera configurar o CRM (pipelines, campos, tags, templates, automações e
+            webhooks). Toda chamada de escrita fica registrada com a chave usada.
           </p>
         </CardContent>
       </Card>
@@ -101,37 +102,48 @@ export default function McpDocsPage() {
         <CardHeader>
           <CardTitle>Ferramentas (tools) disponíveis</CardTitle>
         </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <code className="font-mono">list_deals</code> — consultar negócios por pipeline, etapa,
-              dono, status, temperatura, tag ou busca
-            </li>
-            <li>
-              <code className="font-mono">get_deal</code> — detalhar um negócio específico
-            </li>
-            <li>
-              <code className="font-mono">get_deal_conversation</code> — histórico de conversa do
-              contato de um negócio
-            </li>
-            <li>
-              <code className="font-mono">move_deal_stage</code> — mover negócio de etapa (escrita)
-            </li>
-            <li>
-              <code className="font-mono">list_tasks</code> — listar tarefas de um negócio
-            </li>
-            <li>
-              <code className="font-mono">create_task</code> — criar tarefa em um negócio (escrita)
-            </li>
-            <li>
-              <code className="font-mono">complete_task</code> — marcar tarefa como concluída
-              (escrita)
-            </li>
-            <li>
-              <code className="font-mono">send_message</code> — enviar mensagem via WhatsApp
-              (escrita)
-            </li>
-          </ul>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="mb-2 text-sm font-medium">Sempre disponíveis (qualquer chave válida)</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
+              <li>
+                <code className="font-mono text-foreground">listar_negocios</code>,{" "}
+                <code className="font-mono text-foreground">detalhar_negocio</code>,{" "}
+                <code className="font-mono text-foreground">historico_conversa_negocio</code>,{" "}
+                <code className="font-mono text-foreground">criar_negocio</code>,{" "}
+                <code className="font-mono text-foreground">editar_negocio</code>,{" "}
+                <code className="font-mono text-foreground">mover_negocio_etapa</code>,{" "}
+                <code className="font-mono text-foreground">adicionar_tag_negocio</code>,{" "}
+                <code className="font-mono text-foreground">remover_tag_negocio</code>,{" "}
+                <code className="font-mono text-foreground">enviar_email_negocio</code>
+              </li>
+              <li>
+                <code className="font-mono text-foreground">listar_contatos</code>,{" "}
+                <code className="font-mono text-foreground">detalhar_contato</code>,{" "}
+                <code className="font-mono text-foreground">criar_contato</code>,{" "}
+                <code className="font-mono text-foreground">editar_contato</code>
+              </li>
+              <li>
+                <code className="font-mono text-foreground">listar_tarefas</code>,{" "}
+                <code className="font-mono text-foreground">criar_tarefa</code>,{" "}
+                <code className="font-mono text-foreground">concluir_tarefa</code>,{" "}
+                <code className="font-mono text-foreground">enviar_mensagem_whatsapp</code>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Só com chave Admin (configuração do CRM)</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
+              <li>Pipelines e etapas: criar/editar/excluir/listar, incluindo tarefas automáticas de etapa</li>
+              <li>Campos customizados, tags, templates de mensagem e email: CRUD completo</li>
+              <li>Automações de tag e sequências de automação: CRUD completo</li>
+              <li>Webhooks de entrada e saída: CRUD completo</li>
+              <li>
+                <code className="font-mono text-foreground">listar_canais</code> — status dos canais
+                conectados (nunca inclui credenciais)
+              </li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Check, ChevronDown, MessagesSquare, Search, Users, X } from "lucide-react";
+import { Check, ChevronDown, Filter, MessagesSquare, Search, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -22,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn, initialOf } from "@/lib/utils";
 import type { ConversationSummary } from "@/lib/conversations";
 import { bulkSetContactOwnerAction } from "@/app/contatos/actions";
@@ -31,6 +34,11 @@ const ALL_CHANNELS = "__todos__";
 const ALL_OWNERS = "__todos__";
 const OWNER_MINE = "__meus__";
 const OWNER_UNASSIGNED = "__sem_dono__";
+
+const LIST_WIDTH_STORAGE_KEY = "atendimento-list-width";
+const MIN_LIST_WIDTH = 280;
+const MAX_LIST_WIDTH = 560;
+const DEFAULT_LIST_WIDTH = 320;
 
 type KindFilter = "all" | "group" | "individual";
 
@@ -88,8 +96,73 @@ export function AtendimentoShell({
   const [channelFilter, setChannelFilter] = useState(ALL_CHANNELS);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState(ALL_OWNERS);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkPending, setIsBulkPending] = useState(false);
+
+  const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [widthLoaded, setWidthLoaded] = useState(false);
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const stored = Number(localStorage.getItem(LIST_WIDTH_STORAGE_KEY));
+      if (!Number.isNaN(stored) && stored > 0) {
+        setListWidth(Math.min(MAX_LIST_WIDTH, Math.max(MIN_LIST_WIDTH, stored)));
+      }
+      setWidthLoaded(true);
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    function handleChange(e: MediaQueryListEvent) {
+      setIsDesktop(e.matches);
+    }
+    const timeout = setTimeout(() => setIsDesktop(mq.matches), 0);
+    mq.addEventListener("change", handleChange);
+    return () => {
+      clearTimeout(timeout);
+      mq.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isResizing || !widthLoaded) return;
+    localStorage.setItem(LIST_WIDTH_STORAGE_KEY, String(listWidth));
+  }, [listWidth, isResizing, widthLoaded]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    function handleMouseMove(e: MouseEvent) {
+      if (!dragStateRef.current) return;
+      const delta = e.clientX - dragStateRef.current.startX;
+      const next = Math.min(
+        MAX_LIST_WIDTH,
+        Math.max(MIN_LIST_WIDTH, dragStateRef.current.startWidth + delta)
+      );
+      setListWidth(next);
+    }
+    function handleMouseUp() {
+      setIsResizing(false);
+      dragStateRef.current = null;
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  function handleResizeStart(e: React.MouseEvent) {
+    e.preventDefault();
+    dragStateRef.current = { startX: e.clientX, startWidth: listWidth };
+    setIsResizing(true);
+  }
 
   function toggleSelect(contactId: string) {
     setSelectedIds((prev) => {
@@ -138,18 +211,25 @@ export function AtendimentoShell({
         c.ownerId !== ownerFilter
       )
         return false;
+      if (unreadOnly && c.unreadCount === 0) return false;
       if (term && !c.contactName.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [conversations, search, channelFilter, kindFilter, ownerFilter, currentUserId]);
+  }, [conversations, search, channelFilter, kindFilter, ownerFilter, unreadOnly, currentUserId]);
+
+  const activeFilterCount =
+    (channelFilter !== ALL_CHANNELS ? 1 : 0) +
+    (ownerFilter !== ALL_OWNERS ? 1 : 0) +
+    (unreadOnly ? 1 : 0);
 
   return (
-    <div className="flex h-full">
+    <div className={cn("flex h-full", isResizing && "select-none")}>
       <aside
         className={cn(
           "w-full shrink-0 flex-col overflow-y-auto border-r border-border lg:flex lg:w-80",
           isListRoute ? "flex" : "hidden"
         )}
+        style={isDesktop ? { width: listWidth, flexBasis: listWidth } : undefined}
       >
         <div className="sticky top-0 z-10 space-y-2 border-b border-border bg-background p-3">
           <div className="relative">
@@ -166,54 +246,92 @@ export function AtendimentoShell({
             />
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              items={Object.fromEntries([
-                [ALL_CHANNELS, "Todos os canais"],
-                ...channelOptions.map((c) => [c.id, c.label]),
-              ])}
-              value={channelFilter}
-              onValueChange={(value) => setChannelFilter(value ?? ALL_CHANNELS)}
-            >
-              <SelectTrigger className="flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_CHANNELS}>Todos os canais</SelectItem>
-                {channelOptions.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select
-              items={Object.fromEntries([
-                [ALL_OWNERS, "Todos os donos"],
-                [OWNER_MINE, "Meus atendimentos"],
-                [OWNER_UNASSIGNED, "Não atribuídos"],
-                ...users.filter((u) => u.id !== currentUserId).map((u) => [u.id, u.name]),
-              ])}
-              value={ownerFilter}
-              onValueChange={(value) => setOwnerFilter(value ?? ALL_OWNERS)}
-            >
-              <SelectTrigger className="flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_OWNERS}>Todos os donos</SelectItem>
-                <SelectItem value={OWNER_MINE}>Meus atendimentos</SelectItem>
-                <SelectItem value={OWNER_UNASSIGNED}>Não atribuídos</SelectItem>
-                {users
-                  .filter((u) => u.id !== currentUserId)
-                  .map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button type="button" variant="outline" size="sm" className="gap-1.5" />
+                }
+              >
+                <Filter size={14} strokeWidth={1.75} />
+                Filtros
+                {activeFilterCount > 0 && (
+                  <Badge variant="info" className="ml-0.5 px-1.5">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 space-y-4">
+                <div className="space-y-2">
+                  <Label>Canal</Label>
+                  <Select
+                    items={Object.fromEntries([
+                      [ALL_CHANNELS, "Todos os canais"],
+                      ...channelOptions.map((c) => [c.id, c.label]),
+                    ])}
+                    value={channelFilter}
+                    onValueChange={(value) => setChannelFilter(value ?? ALL_CHANNELS)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CHANNELS}>Todos os canais</SelectItem>
+                      {channelOptions.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dono</Label>
+                  <Select
+                    items={Object.fromEntries([
+                      [ALL_OWNERS, "Todos os donos"],
+                      [OWNER_MINE, "Meus atendimentos"],
+                      [OWNER_UNASSIGNED, "Não atribuídos"],
+                      ...users.filter((u) => u.id !== currentUserId).map((u) => [u.id, u.name]),
+                    ])}
+                    value={ownerFilter}
+                    onValueChange={(value) => setOwnerFilter(value ?? ALL_OWNERS)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_OWNERS}>Todos os donos</SelectItem>
+                      <SelectItem value={OWNER_MINE}>Meus atendimentos</SelectItem>
+                      <SelectItem value={OWNER_UNASSIGNED}>Não atribuídos</SelectItem>
+                      {users
+                        .filter((u) => u.id !== currentUserId)
+                        .map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <Label htmlFor="unread-only">Mostrar apenas não lidas</Label>
+                  <Switch id="unread-only" checked={unreadOnly} onCheckedChange={setUnreadOnly} />
+                </div>
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChannelFilter(ALL_CHANNELS);
+                      setOwnerFilter(ALL_OWNERS);
+                      setUnreadOnly(false);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="flex gap-1">
             {KIND_OPTIONS.map((opt) => (
@@ -367,9 +485,22 @@ export function AtendimentoShell({
           </ul>
         )}
       </aside>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={handleResizeStart}
+        className="group hidden w-2.5 shrink-0 cursor-col-resize items-center justify-center lg:flex"
+      >
+        <div
+          className={cn(
+            "h-full w-px bg-transparent transition-colors group-hover:bg-primary/40",
+            isResizing && "bg-primary/40"
+          )}
+        />
+      </div>
       <main
         className={cn(
-          "flex-1 overflow-y-auto",
+          "min-w-0 flex-1 overflow-y-auto",
           isListRoute ? "hidden lg:block" : "block"
         )}
       >

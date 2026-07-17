@@ -1,0 +1,1 @@
+ALTER TABLE "messages" DROP COLUMN "z_api_message_id";

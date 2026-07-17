@@ -1,19 +1,31 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
-import { ArrowLeft } from "lucide-react";
+import { asc, desc, eq } from "drizzle-orm";
+import { ArrowLeft, Briefcase } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { contactTags, contacts, customFieldDefinitions, tags } from "@/db/schema";
+import {
+  contactTags,
+  contacts,
+  customFieldDefinitions,
+  meetingNotes,
+  meetingNotesContacts,
+  pipelines,
+  stages,
+  tags,
+  users,
+} from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread } from "@/lib/conversations";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageList } from "@/components/message-list";
+import { MeetingNotesList, type MeetingNoteItem } from "@/components/meeting-notes-list";
 import { ContactFormDialog, type FieldDef, type TagOption } from "../contact-form-dialog";
 import { DeleteContactDialog } from "../delete-contact-dialog";
 import { formatCustomFieldValue } from "../custom-field-format";
 import { Button } from "@/components/ui/button";
+import { DealFormDialog } from "@/app/negocios/deal-form-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -34,20 +46,55 @@ export default async function ContatoDetailPage({
     .limit(1);
   if (!contact) notFound();
 
-  const [fieldDefRows, allTagRows, contactTagRows, allowedChannelIds] =
-    await Promise.all([
-      db
-        .select()
-        .from(customFieldDefinitions)
-        .where(eq(customFieldDefinitions.entity, "contact"))
-        .orderBy(asc(customFieldDefinitions.order)),
-      db.select().from(tags).orderBy(tags.name),
-      db
-        .select({ tagId: contactTags.tagId })
-        .from(contactTags)
-        .where(eq(contactTags.contactId, id)),
-      getAllowedChannelIds(session.user.id, session.user.role),
-    ]);
+  const [
+    fieldDefRows,
+    allTagRows,
+    contactTagRows,
+    allowedChannelIds,
+    dealFieldDefRows,
+    allPipelines,
+    allStages,
+    ownerRows,
+    meetingNoteRows,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(customFieldDefinitions)
+      .where(eq(customFieldDefinitions.entity, "contact"))
+      .orderBy(asc(customFieldDefinitions.order)),
+    db.select().from(tags).orderBy(tags.name),
+    db
+      .select({ tagId: contactTags.tagId })
+      .from(contactTags)
+      .where(eq(contactTags.contactId, id)),
+    getAllowedChannelIds(session.user.id, session.user.role),
+    db
+      .select()
+      .from(customFieldDefinitions)
+      .where(eq(customFieldDefinitions.entity, "deal"))
+      .orderBy(asc(customFieldDefinitions.order)),
+    db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
+    db
+      .select({ id: stages.id, name: stages.name, order: stages.order, pipelineId: stages.pipelineId })
+      .from(stages)
+      .orderBy(asc(stages.order)),
+    db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
+    db
+      .select({
+        id: meetingNotes.id,
+        title: meetingNotes.title,
+        meetingDate: meetingNotes.meetingDate,
+        summary: meetingNotes.summary,
+        actionItems: meetingNotes.actionItems,
+        transcript: meetingNotes.transcript,
+        driveFileUrl: meetingNotes.driveFileUrl,
+        parsedOk: meetingNotes.parsedOk,
+      })
+      .from(meetingNotesContacts)
+      .innerJoin(meetingNotes, eq(meetingNotesContacts.meetingNoteId, meetingNotes.id))
+      .where(eq(meetingNotesContacts.contactId, id))
+      .orderBy(desc(meetingNotes.meetingDate)),
+  ]);
 
   const thread = await getThread(id, allowedChannelIds);
 
@@ -71,6 +118,25 @@ export default async function ContatoDetailPage({
     .filter((tag): tag is TagOption => Boolean(tag));
 
   const customFields = (contact.customFields as Record<string, unknown>) ?? {};
+
+  const dealFieldDefinitions: FieldDef[] = dealFieldDefRows.map((row) => ({
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    type: row.type,
+    options: (row.options as { value: string; label: string }[] | null) ?? null,
+  }));
+
+  const meetingNoteItems: MeetingNoteItem[] = meetingNoteRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    meetingDate: row.meetingDate.toISOString(),
+    summary: row.summary,
+    actionItems: row.actionItems as string[] | null,
+    transcript: row.transcript,
+    driveFileUrl: row.driveFileUrl,
+    parsedOk: row.parsedOk,
+  }));
 
   return (
     <div className="space-y-6">
@@ -100,6 +166,24 @@ export default async function ContatoDetailPage({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <DealFormDialog
+            mode="create"
+            pipelines={allPipelines}
+            stages={allStages}
+            contacts={[{ id: contact.id, name: contact.name, phone: contact.phone }]}
+            owners={ownerRows}
+            fieldDefinitions={dealFieldDefinitions}
+            allTags={allTags}
+            currentUserId={session.user.id}
+            lockedContact={{ id: contact.id, name: contact.name, phone: contact.phone }}
+            trigger={<Button type="button" variant="outline" />}
+            triggerLabel={
+              <>
+                <Briefcase size={14} strokeWidth={1.75} />
+                Criar negócio
+              </>
+            }
+          />
           <ContactFormDialog
             mode="edit"
             contact={{
@@ -140,6 +224,15 @@ export default async function ContatoDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumo de Reuniões</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MeetingNotesList notes={meetingNoteItems} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">

@@ -26,12 +26,11 @@ export async function createApiKeyAction(
     return { status: "error", message: "Informe um nome/rótulo pra chave." };
   }
 
-  const canWrite = formData.get("scope") === "leitura_escrita";
-  const scopes: ApiScope[] = canWrite ? ["leitura", "escrita"] : ["leitura"];
+  const scope: ApiScope = formData.get("scope") === "admin" ? "admin" : "operacional";
 
   const { rawKey } = await createApiKey({
     label: label.trim(),
-    scopes,
+    scope,
     createdByUserId: userId,
   });
 

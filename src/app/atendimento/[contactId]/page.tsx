@@ -2,7 +2,13 @@ import { notFound, redirect } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { contacts, customFieldDefinitions, deals, whatsappChannels } from "@/db/schema";
+import {
+  contacts,
+  customFieldDefinitions,
+  deals,
+  instagramChannels,
+  whatsappChannels,
+} from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread, markContactRead } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
@@ -53,7 +59,7 @@ export default async function ConversationPage({
   // atraso já aceito hoje pra mensagens novas chegando.
   await markContactRead(contactId);
 
-  const [thread, allowedChannels, pendingScheduled, openDealId, fieldDefRows] =
+  const [thread, allowedWhatsappChannels, allowedInstagramChannels, pendingScheduled, openDealId, fieldDefRows] =
     await Promise.all([
       getThread(contactId, allowedChannelIds),
       allowedChannelIds.length > 0
@@ -62,10 +68,21 @@ export default async function ConversationPage({
             .from(whatsappChannels)
             .where(inArray(whatsappChannels.id, allowedChannelIds))
         : Promise.resolve([]),
+      allowedChannelIds.length > 0
+        ? db
+            .select({ id: instagramChannels.id, label: instagramChannels.label, isDefault: instagramChannels.isDefault })
+            .from(instagramChannels)
+            .where(inArray(instagramChannels.id, allowedChannelIds))
+        : Promise.resolve([]),
       getPendingScheduledMessages(contactId),
       findOpenDealIdForContact(contactId),
       db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
     ]);
+
+  const allowedChannels = [
+    ...allowedWhatsappChannels.map((c) => ({ ...c, channelType: "whatsapp" as const })),
+    ...allowedInstagramChannels.map((c) => ({ ...c, channelType: "instagram" as const })),
+  ];
 
   const [openDeal] = openDealId
     ? await db
@@ -124,7 +141,7 @@ export default async function ConversationPage({
       isGroup={contact.isGroup}
       avatarUrl={contact.avatarUrl}
       initialMessages={thread}
-      channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
+      channels={allowedChannels.map((c) => ({ id: c.id, label: c.label, channelType: c.channelType }))}
       preselectedChannelId={preselectedChannelId}
       params={contactParams}
       scheduledMessages={pendingScheduled.map((m) => ({

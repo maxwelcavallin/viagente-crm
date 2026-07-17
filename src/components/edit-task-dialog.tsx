@@ -29,6 +29,7 @@ const TYPE_LABELS: Record<TaskLike["type"], string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 function toDatetimeLocal(iso: string | null): string {

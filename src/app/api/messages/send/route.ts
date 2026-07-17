@@ -12,6 +12,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as {
     channelId?: string;
+    channelType?: "whatsapp" | "instagram";
     contactId?: string;
     message?: string;
     replyToMessageId?: string;
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
 
   const result = await sendTextMessage({
     channelId: body.channelId,
+    channelType: body.channelType,
     contactId: body.contactId,
     message: body.message.trim(),
     replyToMessageId: body.replyToMessageId || null,

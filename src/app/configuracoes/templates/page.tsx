@@ -1,17 +1,19 @@
 import { asc, count, eq } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import { db } from "@/db";
-import { customFieldDefinitions, messageTemplates, stageTasks } from "@/db/schema";
+import { customFieldDefinitions, emailTemplates, messageTemplates, stageTasks } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildVariableCatalog } from "@/lib/templates";
 import { TemplatesList, type TemplateRow } from "./templates-list";
 import { TemplateFormDialog } from "./template-form-dialog";
+import { EmailTemplatesList, type EmailTemplateRow } from "./email-templates-list";
+import { EmailTemplateFormDialog } from "./email-template-form-dialog";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
-  const [templateRows, fieldDefRows] = await Promise.all([
+  const [templateRows, emailTemplateRows, fieldDefRows] = await Promise.all([
     db
       .select({
         id: messageTemplates.id,
@@ -23,10 +25,23 @@ export default async function TemplatesPage() {
       .leftJoin(stageTasks, eq(stageTasks.messageTemplateId, messageTemplates.id))
       .groupBy(messageTemplates.id)
       .orderBy(asc(messageTemplates.name)),
+    db
+      .select({
+        id: emailTemplates.id,
+        name: emailTemplates.name,
+        subject: emailTemplates.subject,
+        content: emailTemplates.content,
+        usageCount: count(stageTasks.id),
+      })
+      .from(emailTemplates)
+      .leftJoin(stageTasks, eq(stageTasks.emailTemplateId, emailTemplates.id))
+      .groupBy(emailTemplates.id)
+      .orderBy(asc(emailTemplates.name)),
     db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
   ]);
 
   const templates: TemplateRow[] = templateRows;
+  const emailTemplateList: EmailTemplateRow[] = emailTemplateRows;
 
   const variableCatalog = buildVariableCatalog(
     fieldDefRows.map((row) => ({
@@ -60,6 +75,29 @@ export default async function TemplatesPage() {
         </CardHeader>
         <CardContent>
           <TemplatesList templates={templates} variableCatalog={variableCatalog} />
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Templates de email</h2>
+        <EmailTemplateFormDialog
+          mode="create"
+          variableCatalog={variableCatalog}
+          trigger={<Button type="button" />}
+          triggerLabel={
+            <>
+              <Plus size={16} strokeWidth={1.75} />
+              Novo template
+            </>
+          }
+        />
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Templates de email cadastrados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmailTemplatesList templates={emailTemplateList} variableCatalog={variableCatalog} />
         </CardContent>
       </Card>
     </div>

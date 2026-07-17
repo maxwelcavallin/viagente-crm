@@ -183,6 +183,69 @@
       "when": 1784224128891,
       "tag": "0025_outstanding_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784262554568,
+      "tag": "0026_shiny_peter_quill",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784265272384,
+      "tag": "0027_long_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784265319382,
+      "tag": "0028_careless_strong_guy",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784295350955,
+      "tag": "0029_illegal_black_bird",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784300844940,
+      "tag": "0030_luxuriant_hardball",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784300889612,
+      "tag": "0031_dizzy_jackpot",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784305670302,
+      "tag": "0032_great_skaar",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784309670686,
+      "tag": "0033_amusing_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784309706448,
+      "tag": "0034_shiny_george_stacy",
+      "breakpoints": true
     }
   ]
 }

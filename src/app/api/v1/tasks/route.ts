@@ -1,4 +1,4 @@
-import { authenticateApiRequest, hasWriteScope } from "@/lib/api-keys";
+import { authenticateApiRequest } from "@/lib/api-keys";
 import { createTaskForApiKey, listTasks } from "@/lib/api-v1";
 
 export const dynamic = "force-dynamic";
@@ -26,14 +26,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await authenticateApiRequest(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
-  if (!hasWriteScope(auth.apiKey)) {
-    return Response.json({ error: "Chave sem escopo de escrita." }, { status: 403 });
-  }
 
   const body = (await request.json().catch(() => null)) as {
     dealId?: string;
     title?: string;
-    type?: "mensagem" | "ligacao" | "agendamento" | "generica";
+    type?: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
     dueAt?: string | null;
   } | null;
   if (!body?.dealId || !body?.title) {

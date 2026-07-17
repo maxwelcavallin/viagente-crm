@@ -27,7 +27,7 @@ function parseDelayMinutes(raw: FormDataEntryValue | null): number | null {
 type TagAutomationFields = {
   tagId: string;
   title: string;
-  type: "mensagem" | "ligacao" | "agendamento" | "generica";
+  type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
   trigger: "tag_adicionada" | "dias_apos_tag";
   delayMinutes: number | null;
   messageTemplateId: string | null;
@@ -76,7 +76,7 @@ async function readTagAutomationFields(
   return {
     tagId,
     title: title.trim(),
-    type: type as "mensagem" | "ligacao" | "agendamento" | "generica",
+    type: type as "mensagem" | "ligacao" | "agendamento" | "generica" | "email",
     trigger: trigger as "tag_adicionada" | "dias_apos_tag",
     delayMinutes: trigger === "dias_apos_tag" ? delayMinutes : null,
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,

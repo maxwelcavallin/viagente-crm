@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  emailTemplates,
   lossReasons,
   messageTemplates,
   pipelineOwnerDistribution,
@@ -41,8 +42,15 @@ export default async function PipelineDetailPage({
     .orderBy(asc(stages.order));
 
   const stageIds = pipelineStages.map((s) => s.id);
-  const [stageTaskRows, templates, channels, pipelineLossReasons, distributionRows, allUsers] =
-    await Promise.all([
+  const [
+    stageTaskRows,
+    templates,
+    emailTemplateOptions,
+    channels,
+    pipelineLossReasons,
+    distributionRows,
+    allUsers,
+  ] = await Promise.all([
     stageIds.length > 0
       ? db
           .select({
@@ -51,6 +59,7 @@ export default async function PipelineDetailPage({
             title: stageTasks.title,
             type: stageTasks.type,
             messageTemplateId: stageTasks.messageTemplateId,
+            emailTemplateId: stageTasks.emailTemplateId,
             order: stageTasks.order,
             daysToComplete: stageTasks.daysToComplete,
             triggerDelayMinutes: stageTasks.triggerDelayMinutes,
@@ -63,6 +72,7 @@ export default async function PipelineDetailPage({
           .orderBy(asc(stageTasks.order))
       : Promise.resolve([]),
     db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
+    db.select({ id: emailTemplates.id, name: emailTemplates.name }).from(emailTemplates),
     db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
     db
       .select({ id: lossReasons.id, label: lossReasons.label })
@@ -92,6 +102,7 @@ export default async function PipelineDetailPage({
       title: row.title,
       type: row.type,
       messageTemplateId: row.messageTemplateId,
+      emailTemplateId: row.emailTemplateId,
       daysToComplete: row.daysToComplete,
       triggerDelayMinutes: row.triggerDelayMinutes,
       isAutomatic: row.isAutomatic,
@@ -124,6 +135,7 @@ export default async function PipelineDetailPage({
               pipelineId={pipeline.id}
               stageTasksByStageId={stageTasksByStageId}
               templates={templates}
+              emailTemplates={emailTemplateOptions}
               channels={channels}
             />
           </CardContent>

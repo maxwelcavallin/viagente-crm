@@ -44,6 +44,7 @@ function StageRow({
   total,
   stageTasks,
   templates,
+  emailTemplates,
   channels,
   isDragging,
   isDropTarget,
@@ -60,6 +61,7 @@ function StageRow({
   total: number;
   stageTasks: StageTask[];
   templates: { id: string; name: string }[];
+  emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
   isDragging: boolean;
   isDropTarget: boolean;
@@ -212,6 +214,7 @@ function StageRow({
         pipelineId={pipelineId}
         tasks={stageTasks}
         templates={templates}
+        emailTemplates={emailTemplates}
         channels={channels}
       />
     </div>
@@ -223,12 +226,14 @@ export function StagesList({
   pipelineId,
   stageTasksByStageId,
   templates,
+  emailTemplates,
   channels,
 }: {
   stages: Stage[];
   pipelineId: string;
   stageTasksByStageId: Record<string, StageTask[]>;
   templates: { id: string; name: string }[];
+  emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
   // O componente é remontado (via `key` no chamador) sempre que a ordem ou
@@ -331,6 +336,7 @@ export function StagesList({
           total={order.length}
           stageTasks={stageTasksByStageId[stage.id] ?? []}
           templates={templates}
+          emailTemplates={emailTemplates}
           channels={channels}
           isDragging={draggedId === stage.id}
           isDropTarget={overIndex === index && draggedId !== stage.id}

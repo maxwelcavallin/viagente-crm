@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { ClonePipelineDialog } from "./clone-pipeline-dialog";
 import { CreatePipelineForm } from "./create-pipeline-form";
+import { DeletePipelineDialog } from "./delete-pipeline-dialog";
+import { RenamePipelineDialog } from "./rename-pipeline-dialog";
 
 export default async function PipelinesPage() {
   const allPipelines = await db
@@ -66,6 +68,14 @@ export default async function PipelinesPage() {
                             Ver etapas
                           </Link>
                           <ClonePipelineDialog
+                            pipelineId={pipeline.id}
+                            pipelineName={pipeline.name}
+                          />
+                          <RenamePipelineDialog
+                            pipelineId={pipeline.id}
+                            pipelineName={pipeline.name}
+                          />
+                          <DeletePipelineDialog
                             pipelineId={pipeline.id}
                             pipelineName={pipeline.name}
                           />

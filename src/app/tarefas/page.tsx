@@ -6,6 +6,7 @@ import {
   contacts,
   customFieldDefinitions,
   deals,
+  emailTemplates,
   messageTemplates,
   pipelines,
   stageTasks,
@@ -43,6 +44,8 @@ export default async function TarefasPage() {
           status: tasks.status,
           dueAt: tasks.dueAt,
           templateContent: messageTemplates.content,
+          emailTemplateSubject: emailTemplates.subject,
+          emailTemplateContent: emailTemplates.content,
           dealId: deals.id,
           dealTitle: deals.title,
           dealCustomFields: deals.customFields,
@@ -60,7 +63,8 @@ export default async function TarefasPage() {
         .innerJoin(contacts, eq(deals.contactId, contacts.id))
         .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
-        .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id)),
+        .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
+        .leftJoin(emailTemplates, eq(stageTasks.emailTemplateId, emailTemplates.id)),
       db
         .select()
         .from(customFieldDefinitions)
@@ -134,6 +138,11 @@ export default async function TarefasPage() {
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
       messagePreview: row.templateContent
         ? substituteTemplate(row.templateContent, variableValues)
+        : row.emailTemplateContent
+          ? substituteTemplate(row.emailTemplateContent, variableValues)
+          : null,
+      emailSubjectPreview: row.emailTemplateSubject
+        ? substituteTemplate(row.emailTemplateSubject, variableValues)
         : null,
       dealId: row.dealId,
       dealTitle: row.dealTitle,

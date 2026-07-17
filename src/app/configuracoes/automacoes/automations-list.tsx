@@ -49,7 +49,7 @@ export type TagAutomationRow = {
   trigger: "tag_adicionada" | "dias_apos_tag";
   delayMinutes: number | null;
   title: string;
-  type: "mensagem" | "ligacao" | "agendamento" | "generica";
+  type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
   messageTemplateId: string | null;
   autoSend: boolean;
   autoSendChannelId: string | null;
@@ -60,6 +60,7 @@ const TYPE_LABELS: Record<TagAutomationRow["type"], string> = {
   ligacao: "Ligação",
   agendamento: "Agendamento",
   generica: "Genérica",
+  email: "Email",
 };
 
 const TRIGGER_LABELS: Record<TagAutomationRow["trigger"], string> = {

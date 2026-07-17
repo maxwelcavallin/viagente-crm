@@ -241,6 +241,7 @@ export async function createStageTaskAction(
   const title = formData.get("title");
   const type = formData.get("type");
   const messageTemplateId = formData.get("messageTemplateId");
+  const emailTemplateId = formData.get("emailTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
   // Reaproveita o mesmo parser (não-negativo ou null) — o cliente já manda
   // o total combinado de dias/horas/minutos em um único campo.
@@ -263,7 +264,8 @@ export async function createStageTaskAction(
     type !== "mensagem" &&
     type !== "ligacao" &&
     type !== "agendamento" &&
-    type !== "generica"
+    type !== "generica" &&
+    type !== "email"
   ) {
     return { status: "error", message: "Tipo inválido." };
   }
@@ -292,6 +294,10 @@ export async function createStageTaskAction(
     title: title.trim(),
     type,
     messageTemplateId: type === "mensagem" ? (messageTemplateId as string) : null,
+    emailTemplateId:
+      type === "email" && typeof emailTemplateId === "string" && emailTemplateId
+        ? emailTemplateId
+        : null,
     order: nextOrder,
     daysToComplete,
     triggerDelayMinutes,
@@ -316,6 +322,7 @@ export async function updateStageTaskAction(
   const pipelineId = formData.get("pipelineId");
   const title = formData.get("title");
   const messageTemplateId = formData.get("messageTemplateId");
+  const emailTemplateId = formData.get("emailTemplateId");
   const daysToComplete = parseDaysToComplete(formData.get("daysToComplete"));
   // Reaproveita o mesmo parser (não-negativo ou null) — o cliente já manda
   // o total combinado de dias/horas/minutos em um único campo.
@@ -361,6 +368,10 @@ export async function updateStageTaskAction(
       title: title.trim(),
       messageTemplateId:
         current.type === "mensagem" ? (messageTemplateId as string) : null,
+      emailTemplateId:
+        current.type === "email" && typeof emailTemplateId === "string" && emailTemplateId
+          ? emailTemplateId
+          : null,
       daysToComplete,
       triggerDelayMinutes,
       isAutomatic,

@@ -33,7 +33,7 @@ function matchesSearch(contact: ContactRow, term: string): boolean {
   const normalized = term.toLowerCase();
   return (
     contact.name.toLowerCase().includes(normalized) ||
-    contact.phone.toLowerCase().includes(normalized) ||
+    (contact.phone ?? "").toLowerCase().includes(normalized) ||
     (contact.email ?? "").toLowerCase().includes(normalized)
   );
 }
@@ -123,7 +123,7 @@ export function ContactsTable({
                     {contact.name}
                   </Link>
                 </TableCell>
-                <TableCell>{contact.phone}</TableCell>
+                <TableCell>{contact.phone ?? "—"}</TableCell>
                 <TableCell>{contact.email ?? "—"}</TableCell>
                 <TableCell>
                   {contact.tags.length === 0 ? (

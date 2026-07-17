@@ -16,7 +16,7 @@ import { formatCurrencyBRL } from "@/lib/deal-format";
 import { sendTextMessage } from "@/lib/send-message";
 import { substituteTemplate } from "@/lib/templates";
 
-type TaskType = "mensagem" | "ligacao" | "agendamento" | "generica";
+type TaskType = "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
 
 // Mesmo catálogo de variáveis usado em /tarefas (nome_contato, valor +
 // custom fields de negócio/contato) — centralizado aqui pra ser reaproveitado

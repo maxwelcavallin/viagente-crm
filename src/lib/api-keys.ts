@@ -4,7 +4,14 @@ import { db } from "@/db";
 import { apiKeys, users } from "@/db/schema";
 import type { VisibilityUser } from "@/lib/visibility";
 
-const RATE_LIMIT_PER_MINUTE = 120;
+export type ApiScope = "operacional" | "admin";
+
+// Admin é mais restrito por natureza (configura o CRM inteiro, não só o dia
+// a dia) — limite mais baixo é intencional, não um bug.
+const RATE_LIMIT_PER_MINUTE: Record<ApiScope, number> = {
+  operacional: 120,
+  admin: 30,
+};
 
 // Prefixo só pra reconhecimento visual (tipo sk_live_ da Stripe) — não tem
 // função criptográfica, ajuda a identificar a chave em logs/scanners de
@@ -15,8 +22,6 @@ function hashKey(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
 }
 
-export type ApiScope = "leitura" | "escrita";
-
 export function generateApiKey(): { rawKey: string; keyHash: string } {
   const rawKey = KEY_PREFIX + randomBytes(24).toString("hex");
   return { rawKey, keyHash: hashKey(rawKey) };
@@ -24,7 +29,7 @@ export function generateApiKey(): { rawKey: string; keyHash: string } {
 
 export async function createApiKey(params: {
   label: string;
-  scopes: ApiScope[];
+  scope: ApiScope;
   createdByUserId: string;
 }): Promise<{ id: string; rawKey: string }> {
   const { rawKey, keyHash } = generateApiKey();
@@ -33,7 +38,7 @@ export async function createApiKey(params: {
     .values({
       label: params.label,
       keyHash,
-      scopes: params.scopes,
+      scope: params.scope,
       createdByUserId: params.createdByUserId,
     })
     .returning({ id: apiKeys.id });
@@ -45,7 +50,7 @@ export async function listApiKeys() {
     .select({
       id: apiKeys.id,
       label: apiKeys.label,
-      scopes: apiKeys.scopes,
+      scope: apiKeys.scope,
       active: apiKeys.active,
       lastUsedAt: apiKeys.lastUsedAt,
       createdAt: apiKeys.createdAt,
@@ -62,7 +67,7 @@ export async function setApiKeyActive(id: string, active: boolean): Promise<void
 
 export type AuthenticatedApiKey = {
   id: string;
-  scopes: ApiScope[];
+  scope: ApiScope;
   actingUser: VisibilityUser;
 };
 
@@ -90,7 +95,7 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
   const [row] = await db
     .select({
       id: apiKeys.id,
-      scopes: apiKeys.scopes,
+      scope: apiKeys.scope,
       active: apiKeys.active,
       rateLimitWindowStart: apiKeys.rateLimitWindowStart,
       userId: users.id,
@@ -106,7 +111,7 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
     return { ok: false, status: 401, error: "API key inválida ou revogada." };
   }
 
-  const withinLimit = await checkAndTouchRateLimit(row.id);
+  const withinLimit = await checkAndTouchRateLimit(row.id, row.scope as ApiScope);
   if (!withinLimit) {
     return { ok: false, status: 429, error: "Rate limit excedido — tente novamente em instantes." };
   }
@@ -117,7 +122,7 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
     ok: true,
     apiKey: {
       id: row.id,
-      scopes: (row.scopes as ApiScope[]) ?? ["leitura"],
+      scope: row.scope as ApiScope,
       actingUser: {
         id: row.userId,
         role: row.role,
@@ -127,15 +132,18 @@ export async function authenticateApiRequest(request: Request): Promise<ApiAuthR
   };
 }
 
-export function hasWriteScope(apiKey: AuthenticatedApiKey): boolean {
-  return apiKey.scopes.includes("escrita");
+// Admin é superset de operacional — qualquer chave válida já passa nas
+// ações "operacionais" (Part A da Etapa 28); só as ações de configuração
+// (Part B) checam este helper.
+export function hasAdminScope(apiKey: AuthenticatedApiKey): boolean {
+  return apiKey.scope === "admin";
 }
 
 // Janela fixa de 1 minuto — reset atômico via CASE dentro do próprio UPDATE
 // (uma única ida ao banco, sem race condition de leitura seguida de escrita
 // separada). "Básico" o bastante pro estágio atual, sem depender de um
 // Redis que este projeto não tem.
-async function checkAndTouchRateLimit(apiKeyId: string): Promise<boolean> {
+async function checkAndTouchRateLimit(apiKeyId: string, scope: ApiScope): Promise<boolean> {
   const [row] = await db
     .update(apiKeys)
     .set({
@@ -144,5 +152,5 @@ async function checkAndTouchRateLimit(apiKeyId: string): Promise<boolean> {
     })
     .where(eq(apiKeys.id, apiKeyId))
     .returning({ count: apiKeys.rateLimitCount });
-  return (row?.count ?? 0) <= RATE_LIMIT_PER_MINUTE;
+  return (row?.count ?? 0) <= RATE_LIMIT_PER_MINUTE[scope];
 }

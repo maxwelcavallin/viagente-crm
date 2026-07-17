@@ -1,7 +1,7 @@
 import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, messages, users, whatsappChannels } from "@/db/schema";
+import { contacts, instagramChannels, messages, users, whatsappChannels } from "@/db/schema";
 import { ownerVisibilityFilter, type VisibilityUser } from "@/lib/visibility";
 
 const replyToMessages = alias(messages, "reply_to_messages");
@@ -75,14 +75,24 @@ export async function listConversations(
   const channelIds = latest
     .map((m) => m.channelId)
     .filter((id): id is string => Boolean(id));
-  const channelRows =
+  // channelId não é FK'd a uma tabela só (mensagem pode ser de um canal
+  // WhatsApp OU Instagram, ver Etapa 25) — busca nas duas e junta.
+  const [whatsappChannelRows, instagramChannelRows] =
     channelIds.length > 0
-      ? await db
-          .select({ id: whatsappChannels.id, label: whatsappChannels.label })
-          .from(whatsappChannels)
-          .where(inArray(whatsappChannels.id, channelIds))
-      : [];
-  const channelById = new Map(channelRows.map((c) => [c.id, c]));
+      ? await Promise.all([
+          db
+            .select({ id: whatsappChannels.id, label: whatsappChannels.label })
+            .from(whatsappChannels)
+            .where(inArray(whatsappChannels.id, channelIds)),
+          db
+            .select({ id: instagramChannels.id, label: instagramChannels.label })
+            .from(instagramChannels)
+            .where(inArray(instagramChannels.id, channelIds)),
+        ])
+      : [[], []];
+  const channelById = new Map(
+    [...whatsappChannelRows, ...instagramChannelRows].map((c) => [c.id, c])
+  );
 
   // Não lida = mensagem de entrada mais nova que a última leitura registrada
   // pra aquele contato (contacts.lastReadAt) — marca compartilhada por toda a
@@ -178,7 +188,7 @@ export async function getThread(
       isFavorite: messages.isFavorite,
       createdAt: messages.createdAt,
       channelId: messages.channelId,
-      channelLabel: whatsappChannels.label,
+      channelLabel: sql<string | null>`coalesce(${whatsappChannels.label}, ${instagramChannels.label})`,
       dealId: messages.dealId,
       replyToMessageId: messages.replyToMessageId,
       replyToCreatedAt: messages.replyToCreatedAt,
@@ -190,6 +200,7 @@ export async function getThread(
     })
     .from(messages)
     .leftJoin(whatsappChannels, eq(messages.channelId, whatsappChannels.id))
+    .leftJoin(instagramChannels, eq(messages.channelId, instagramChannels.id))
     .leftJoin(
       replyToMessages,
       and(

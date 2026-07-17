@@ -5,6 +5,7 @@ import { messages, whatsappChannels } from "@/db/schema";
 import { mediaPrefix, uploadMediaToR2, type MediaKind } from "@/lib/storage";
 import { findOpenDealIdForContact, findOrCreateContactByPhone } from "@/lib/messaging";
 import { notifyNewMessage } from "@/lib/notifications";
+import { maybeCreateAutoDeal } from "@/lib/auto-deal";
 
 export const dynamic = "force-dynamic";
 
@@ -93,14 +94,14 @@ async function handleStatusCallback(payload: ZapiStatusCallback) {
   await db
     .update(messages)
     .set({ status })
-    .where(inArray(messages.zApiMessageId, payload.ids));
+    .where(inArray(messages.externalMessageId, payload.ids));
 }
 
 async function handleIncomingMessage(
   channelId: string,
   payload: ZapiIncomingMessage
 ) {
-  // fromMe=true e já existe uma linha com esse zApiMessageId: foi o próprio
+  // fromMe=true e já existe uma linha com esse externalMessageId: foi o próprio
   // /api/messages/send que gravou na hora do envio, este webhook só está
   // confirmando o que já sabemos — ignora pra não duplicar. fromMe=true SEM
   // registro prévio é mensagem mandada direto do aparelho conectado (fora do
@@ -109,7 +110,7 @@ async function handleIncomingMessage(
     const [existing] = await db
       .select({ id: messages.id })
       .from(messages)
-      .where(eq(messages.zApiMessageId, payload.messageId))
+      .where(eq(messages.externalMessageId, payload.messageId))
       .limit(1);
     if (existing) return;
   }
@@ -119,7 +120,15 @@ async function handleIncomingMessage(
     payload.isGroup ? payload.chatName : payload.senderName,
     { isGroup: payload.isGroup, avatarUrl: payload.photo }
   );
-  const dealId = await findOpenDealIdForContact(contact.id);
+  const contactName =
+    (payload.isGroup ? payload.chatName : payload.senderName)?.trim() || payload.phone;
+
+  let dealId = await findOpenDealIdForContact(contact.id);
+  // Só cria negócio automaticamente pra conversa individual nova (nunca
+  // grupo) e nunca a partir de uma mensagem que o próprio atendente mandou.
+  if (!dealId && !payload.fromMe && !payload.isGroup) {
+    dealId = await maybeCreateAutoDeal(contact.id, contactName);
+  }
   const messageId = randomUUID();
   const createdAt = payload.momment ? new Date(payload.momment) : new Date();
 
@@ -166,7 +175,7 @@ async function handleIncomingMessage(
     type,
     content,
     mediaUrl,
-    zApiMessageId: payload.messageId,
+    externalMessageId: payload.messageId,
     senderName: payload.isGroup ? payload.senderName : null,
     senderPhone: payload.isGroup ? payload.participantPhone : null,
     senderAvatarUrl: payload.isGroup ? payload.senderPhoto : null,
@@ -178,8 +187,6 @@ async function handleIncomingMessage(
   // notificar ninguém (ele já sabe que mandou).
   if (payload.fromMe) return;
 
-  const contactName =
-    (payload.isGroup ? payload.chatName : payload.senderName)?.trim() || payload.phone;
   await notifyNewMessage({
     messageId,
     dealId,

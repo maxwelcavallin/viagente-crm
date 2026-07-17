@@ -108,11 +108,17 @@ export async function POST(request: Request) {
   if (!contact) {
     return Response.json({ error: "Contato não encontrado" }, { status: 404 });
   }
+  if (!contact.phone) {
+    return Response.json(
+      { error: "Contato não tem telefone (WhatsApp)" },
+      { status: 400 }
+    );
+  }
 
   const type = body.type as MediaKind;
   const key = `${mediaPrefix(type)}/${channel.id}/${body.messageId}`;
 
-  let zApiMessageId: string;
+  let externalMessageId: string;
   try {
     const signedUrl = await getMediaSignedUrl(key, { expiresInSeconds: 300 });
     const { messageId } = await dispatchToZapi(
@@ -127,7 +133,7 @@ export async function POST(request: Request) {
       body.caption?.trim() || undefined,
       body.fileName || undefined
     );
-    zApiMessageId = messageId;
+    externalMessageId = messageId;
   } catch (error) {
     console.error("[messages/send-media] falha ao enviar via Z-API", error);
     return Response.json(
@@ -150,7 +156,8 @@ export async function POST(request: Request) {
       content: body.caption?.trim() || body.fileName || null,
       mediaUrl: `/api/media/${body.messageId}`,
       status: "enviado",
-      zApiMessageId,
+      channelType: "whatsapp",
+      externalMessageId,
       replyToMessageId: body.replyToMessageId || null,
       replyToCreatedAt: body.replyToCreatedAt
         ? new Date(body.replyToCreatedAt)
