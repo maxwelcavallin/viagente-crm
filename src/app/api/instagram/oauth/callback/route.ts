@@ -6,7 +6,7 @@ import { encryptCredential } from "@/lib/credentials-crypto";
 import {
   exchangeCodeForUserToken,
   exchangeForLongLivedToken,
-  getInstagramUsername,
+  getInstagramAccountInfo,
   subscribeInstagramWebhook,
 } from "@/lib/instagram-graph";
 
@@ -41,12 +41,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { accessToken: shortLivedToken, instagramUserId } = await exchangeCodeForUserToken(
-      code,
-      callbackUrl(request)
-    );
+    const { accessToken: shortLivedToken } = await exchangeCodeForUserToken(code, callbackUrl(request));
     const { accessToken, expiresAt } = await exchangeForLongLivedToken(shortLivedToken);
-    const username = await getInstagramUsername(accessToken).catch(() => null);
+    // userId vem de GET /me?fields=user_id — não da troca do code (ver
+    // comentário em getInstagramAccountInfo: é o único valor que bate com
+    // recipient.id/sender.id dos eventos de webhook).
+    const { userId: instagramUserId, username } = await getInstagramAccountInfo(accessToken);
     // Passo obrigatório e separado da URL de webhook cadastrada no painel do
     // app — sem isso a conta nunca recebe evento nenhum (ver
     // subscribeInstagramWebhook). Falha aqui não deve travar a conexão em

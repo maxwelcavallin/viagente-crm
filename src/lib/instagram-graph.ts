@@ -58,12 +58,13 @@ export function getInstagramAuthorizeUrl(redirectUri: string, state: string): st
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
-export type CodeExchangeResult = { accessToken: string; instagramUserId: string };
-
-export async function exchangeCodeForUserToken(
-  code: string,
-  redirectUri: string
-): Promise<CodeExchangeResult> {
+// O user_id devolvido aqui é DELIBERADAMENTE ignorado — confirmado contra
+// payload real de webhook que esse valor não é o mesmo usado em
+// recipient.id/sender.id das mensagens (namespace de ID diferente; ver
+// getInstagramAccountInfo). Também vem como número cru no JSON dessa
+// resposta, arriscando perda de precisão em process.json() pra IDs de 17+
+// dígitos — mais uma razão pra nunca confiar nesse campo.
+export async function exchangeCodeForUserToken(code: string, redirectUri: string): Promise<{ accessToken: string }> {
   const res = await fetch(CODE_EXCHANGE_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -79,11 +80,11 @@ export async function exchangeCodeForUserToken(
     const text = await res.text().catch(() => "");
     throw new Error(`Falha ao trocar code por token (status ${res.status}): ${text}`);
   }
-  const data = (await res.json()) as { access_token?: string; user_id?: string | number };
-  if (!data.access_token || data.user_id == null) {
-    throw new Error("Instagram não retornou access_token/user_id");
+  const data = (await res.json()) as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error("Instagram não retornou access_token");
   }
-  return { accessToken: data.access_token, instagramUserId: String(data.user_id) };
+  return { accessToken: data.access_token };
 }
 
 export type LongLivedTokenResult = { accessToken: string; expiresAt: Date };
@@ -126,14 +127,22 @@ async function refreshLongLivedToken(token: string): Promise<LongLivedTokenResul
   return { accessToken: data.access_token, expiresAt: new Date(Date.now() + data.expires_in * 1000) };
 }
 
-// Só busca o username (a conta em si — instagramUserId — já veio direto da
-// troca do code, sem precisar de outra chamada pra descobrir).
-export async function getInstagramUsername(accessToken: string): Promise<string | null> {
-  const data = await graphInstagramGet<{ username?: string }>(`${GRAPH_BASE}/me`, {
-    fields: "username",
+export type InstagramAccountInfo = { userId: string; username: string | null };
+
+// Fonte da verdade pro instagramUserId salvo no canal — NÃO usar o user_id
+// devolvido pela troca do code (api.instagram.com/oauth/access_token):
+// confirmado contra um payload real de webhook que esse valor pertence a um
+// namespace de ID diferente do usado em recipient.id/sender.id das
+// mensagens (e do usado na Conversations API). O campo `user_id` de
+// GET /me (graph.instagram.com) é o que bate com o webhook; o campo `id`
+// do mesmo /me é ainda um terceiro valor, também não usado aqui.
+export async function getInstagramAccountInfo(accessToken: string): Promise<InstagramAccountInfo> {
+  const data = await graphInstagramGet<{ user_id?: string; username?: string }>(`${GRAPH_BASE}/me`, {
+    fields: "user_id,username",
     access_token: accessToken,
   });
-  return data.username ?? null;
+  if (!data.user_id) throw new Error("Instagram não retornou user_id em /me");
+  return { userId: data.user_id, username: data.username ?? null };
 }
 
 // Passo obrigatório e separado da configuração da URL de webhook no painel

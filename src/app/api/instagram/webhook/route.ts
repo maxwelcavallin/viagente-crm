@@ -162,11 +162,6 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as InstagramWebhookPayload | null;
   if (!payload) return Response.json({ error: "Payload inválido" }, { status: 400 });
 
-  // Diagnóstico temporário — confirmar o formato real do payload entregue
-  // pelo Meta pro Instagram API with Instagram Login (a doc oficial não
-  // documenta o shape exato pra esse fluxo novo, só pro antigo via Página).
-  console.log("[webhook instagram] payload recebido", JSON.stringify(payload));
-
   try {
     for (const entry of payload.entry ?? []) {
       for (const event of entry.messaging ?? []) {
