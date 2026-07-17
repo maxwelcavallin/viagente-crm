@@ -61,7 +61,13 @@ async function handleMessagingEvent(event: InstagramMessagingEvent) {
     .from(instagramChannels)
     .where(eq(instagramChannels.instagramUserId, ourInstagramUserId))
     .limit(1);
-  if (!channel) return; // não é uma conta conectada neste CRM
+  if (!channel) {
+    // Diagnóstico: se o ID que o Meta manda no payload (recipient/sender,
+    // dependendo de eco) não bater com o instagramUserId salvo no canal
+    // (vindo do /me da troca OAuth), a mensagem cai aqui silenciosamente.
+    console.error("[webhook instagram] nenhum canal conectado com instagramUserId =", ourInstagramUserId);
+    return;
+  }
 
   if (isEcho) {
     const [existing] = await db
@@ -155,6 +161,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as InstagramWebhookPayload | null;
   if (!payload) return Response.json({ error: "Payload inválido" }, { status: 400 });
+
+  // Diagnóstico temporário — confirmar o formato real do payload entregue
+  // pelo Meta pro Instagram API with Instagram Login (a doc oficial não
+  // documenta o shape exato pra esse fluxo novo, só pro antigo via Página).
+  console.log("[webhook instagram] payload recebido", JSON.stringify(payload));
 
   try {
     for (const entry of payload.entry ?? []) {
