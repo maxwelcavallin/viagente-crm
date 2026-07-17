@@ -99,7 +99,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // API pública e servidor MCP (Etapa 28) — autenticados por API key
         // própria (Authorization: Bearer), não por sessão de usuário.
         pathname.startsWith("/api/v1") ||
-        pathname === "/api/mcp";
+        pathname === "/api/mcp" ||
+        // Pesquisa pública de NPS (Etapa 27) — respondida pelo cliente
+        // final, sem login. Faltava aqui (bug pré-existente: um cliente
+        // anônimo era redirecionado pro /login em vez de ver a pesquisa).
+        pathname.startsWith("/nps/") ||
+        // Páginas legais exigidas pelo processo de publicação do app no
+        // Meta (URL de Política de Privacidade, Termos de Serviço e
+        // instruções de exclusão de dados) — públicas por natureza.
+        pathname === "/privacidade" ||
+        pathname === "/termos" ||
+        pathname === "/exclusao-de-dados";
 
       if (!auth) {
         return isPublic;
