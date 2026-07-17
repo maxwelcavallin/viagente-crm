@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { db } from "@/db";
-import { whatsappChannelRestrictions, whatsappChannels } from "@/db/schema";
+import { users, whatsappChannelRestrictions, whatsappChannels } from "@/db/schema";
 
 // Modelo de bloqueio (não de liberação): por padrão todo atendente vê todos
 // os canais; uma linha em whatsapp_channel_restrictions BLOQUEIA o usuário
@@ -24,6 +24,24 @@ export async function getAllowedChannelIds(
   const blockedIds = new Set(restrictions.map((r) => r.channelId));
 
   return allIds.filter((id) => !blockedIds.has(id));
+}
+
+// Inverso de getAllowedChannelIds: dado um canal, quem tem acesso a ele —
+// todo admin, mais todo atendente que não tenha uma linha de restrição
+// pra esse canal específico (ver modelo de bloqueio no topo do arquivo).
+export async function getUsersWithChannelAccess(channelId: string): Promise<string[]> {
+  const restricted = await db
+    .select({ userId: whatsappChannelRestrictions.userId })
+    .from(whatsappChannelRestrictions)
+    .where(eq(whatsappChannelRestrictions.channelId, channelId));
+  const restrictedIds = restricted.map((r) => r.userId);
+
+  const allowed = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(restrictedIds.length > 0 ? notInArray(users.id, restrictedIds) : undefined);
+
+  return allowed.map((u) => u.id);
 }
 
 export async function userHasChannelAccess(

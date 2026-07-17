@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, initialOf } from "@/lib/utils";
 import type { ConversationSummary } from "@/lib/conversations";
 import { bulkSetContactOwnerAction } from "@/app/contatos/actions";
 
@@ -54,7 +54,7 @@ function ConversationAvatar({ conversation }: { conversation: ConversationSummar
         {conversation.isGroup ? (
           <Users size={14} strokeWidth={1.75} />
         ) : (
-          conversation.contactName.charAt(0).toUpperCase()
+          initialOf(conversation.contactName)
         )}
       </AvatarFallback>
     </Avatar>

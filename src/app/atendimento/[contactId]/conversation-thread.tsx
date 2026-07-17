@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Clock, Paperclip, Reply, Star, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, initialOf } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -177,7 +177,7 @@ export function ConversationThread({
               {isGroup ? (
                 <Users size={16} strokeWidth={1.75} />
               ) : (
-                contactName.charAt(0).toUpperCase()
+                initialOf(contactName)
               )}
             </AvatarFallback>
           </Avatar>

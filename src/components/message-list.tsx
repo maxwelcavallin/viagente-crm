@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, initialOf } from "@/lib/utils";
 import type { ThreadMessage } from "@/lib/conversations";
 
 // Paleta fixa pra distinguir participantes de um grupo pelo nome, no estilo
@@ -126,7 +126,7 @@ function ReplyQuoteCard({
       onClick={onClick}
       className="mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-black/5 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15"
     >
-      <p className="line-clamp-2">{replyPreviewLabel(replyTo)}</p>
+      <p className="line-clamp-2 break-words">{replyPreviewLabel(replyTo)}</p>
     </button>
   );
 }
@@ -214,6 +214,9 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
             className="max-w-xs rounded-lg transition hover:opacity-90"
           />
         </button>
+        {message.content && (
+          <p className="mt-1 break-words whitespace-pre-wrap">{message.content}</p>
+        )}
         <div className="mt-1">
           <DownloadLink message={message} />
         </div>
@@ -260,6 +263,9 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
             <Maximize2 size={14} strokeWidth={1.75} />
           </button>
         </div>
+        {message.content && (
+          <p className="mt-1 break-words whitespace-pre-wrap">{message.content}</p>
+        )}
         <div className="mt-1">
           <DownloadLink message={message} />
         </div>
@@ -305,7 +311,7 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
         href={message.mediaUrl}
         target="_blank"
         rel="noreferrer"
-        className="text-primary underline"
+        className="break-words text-primary underline"
       >
         📎 Documento
         {message.content ? ` — ${message.content}` : ""}
@@ -378,12 +384,12 @@ export function MessageList({
                 <AvatarImage src={message.senderAvatarUrl} alt={message.senderName ?? ""} />
               )}
               <AvatarFallback>
-                {(message.senderName ?? "?").charAt(0).toUpperCase()}
+                {initialOf(message.senderName ?? "?")}
               </AvatarFallback>
             </Avatar>
           )}
           <div
-            className={`max-w-md rounded-lg px-3 py-2 text-sm ${
+            className={`max-w-md min-w-0 rounded-lg px-3 py-2 text-sm ${
               message.direction === "saida" ? "bg-accent" : "bg-muted"
             }`}
           >
@@ -399,7 +405,7 @@ export function MessageList({
               />
             )}
             {message.type === "texto" ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <p className="break-words whitespace-pre-wrap">{message.content}</p>
             ) : (
               <MessageMedia message={message} />
             )}

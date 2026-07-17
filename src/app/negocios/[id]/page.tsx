@@ -23,6 +23,7 @@ import {
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { getThread } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
+import { getDealActivityLogPage } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { resolveConnectionOwner } from "@/lib/google-calendar";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
@@ -40,6 +41,7 @@ import { ScheduleMeetingDialog } from "@/components/schedule-meeting-dialog";
 import { ContactFormDialog } from "@/app/contatos/contact-form-dialog";
 import { DealFormDialog } from "../deal-form-dialog";
 import { DeleteDealDialog } from "../delete-deal-dialog";
+import { DealActivityLogCard } from "./deal-activity-log-card";
 import { DealStatusActions } from "./deal-status-actions";
 import { DealTasksPanel, type DealTask, type ManualStageTask } from "./deal-tasks-panel";
 
@@ -144,6 +146,7 @@ export default async function DealDetailPage({
     allowedChannels,
     pendingScheduled,
     googleConnectionOwner,
+    activityLogPage,
   ] = await Promise.all([
       getThread(contact.id, allowedChannelIds),
       db
@@ -187,6 +190,7 @@ export default async function DealDetailPage({
         : Promise.resolve([]),
       getPendingScheduledMessages(contact.id),
       resolveConnectionOwner(session.user.id),
+      getDealActivityLogPage(id),
     ]);
 
   const isGoogleConnected = googleConnectionOwner != null;
@@ -528,6 +532,19 @@ export default async function DealDetailPage({
             manualStageTasks={manualStageTasks}
             channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
             preselectedChannelId={preselectedChannelId}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Histórico de alterações</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DealActivityLogCard
+            dealId={deal.id}
+            initialItems={activityLogPage.items}
+            initialHasMore={activityLogPage.hasMore}
           />
         </CardContent>
       </Card>

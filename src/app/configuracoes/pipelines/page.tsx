@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ClonePipelineDialog } from "./clone-pipeline-dialog";
 import { CreatePipelineForm } from "./create-pipeline-form";
 
 export default async function PipelinesPage() {
@@ -57,12 +58,18 @@ export default async function PipelinesPage() {
                       <TableCell>{pipeline.name}</TableCell>
                       <TableCell>{pipeline.stageCount}</TableCell>
                       <TableCell>
-                        <Link
-                          href={`/configuracoes/pipelines/${pipeline.id}`}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          Ver etapas
-                        </Link>
+                        <div className="flex items-center justify-end gap-3">
+                          <Link
+                            href={`/configuracoes/pipelines/${pipeline.id}`}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            Ver etapas
+                          </Link>
+                          <ClonePipelineDialog
+                            pipelineId={pipeline.id}
+                            pipelineName={pipeline.name}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

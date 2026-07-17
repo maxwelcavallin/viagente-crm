@@ -10,6 +10,7 @@ import {
   tagAutomations,
   tasks,
 } from "@/db/schema";
+import { fireTagSequenceTriggers } from "@/lib/automation-sequences";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { sendTextMessage } from "@/lib/send-message";
@@ -114,8 +115,11 @@ export async function maybeAutoSendTask(params: {
 
 // Chamado sincronamente logo após anexar tags novas a um negócio (form de
 // negócio, ação em massa, webhook de entrada, importação CSV). Cria as
-// tasks de automações com trigger='tag_adicionada' pras tags recém-anexadas
-// e dispara o auto-send na hora, se configurado.
+// tasks de automações com trigger='tag_adicionada' pras tags recém-anexadas,
+// dispara o auto-send na hora se configurado, e também as sequências da
+// Etapa 22 com gatilho por tag (fireTagSequenceTriggers) — mesmo evento,
+// mesmo choke point, pra nenhum call site precisar lembrar de disparar os
+// dois motores separadamente.
 export async function fireTagAddedAutomations(
   dealId: string,
   newlyAddedTagIds: string[]
@@ -127,7 +131,6 @@ export async function fireTagAddedAutomations(
     .from(tagAutomations)
     .where(eq(tagAutomations.trigger, "tag_adicionada"));
   const matching = rules.filter((r) => newlyAddedTagIds.includes(r.tagId));
-  if (matching.length === 0) return;
 
   for (const rule of matching) {
     const [created] = await db
@@ -151,6 +154,8 @@ export async function fireTagAddedAutomations(
       messageTemplateId: rule.messageTemplateId,
     });
   }
+
+  await fireTagSequenceTriggers(dealId, newlyAddedTagIds);
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

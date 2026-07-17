@@ -87,6 +87,56 @@ export const scheduledMessageStatusEnum = pgEnum("scheduled_message_status", [
   "cancelada",
   "erro",
 ]);
+export const leaddeltaProfileEnum = pgEnum("leaddelta_profile", [
+  "Perfil 1",
+  "Perfil 2",
+  "Sem perfil",
+]);
+export const sequenceTriggerTypeEnum = pgEnum("sequence_trigger_type", [
+  "etapa",
+  "tag",
+  "sem_resposta",
+]);
+export const sequenceStepTypeEnum = pgEnum("sequence_step_type", [
+  "mensagem",
+  "tarefa_generica",
+  "tag",
+  "mudar_etapa",
+]);
+export const sequenceRunStatusEnum = pgEnum("sequence_run_status", [
+  "em_andamento",
+  "concluida",
+  "cancelada",
+]);
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "mensagem_nova",
+  "tarefa_vencida",
+  "tarefa_atribuida",
+]);
+export const dealActivityActionEnum = pgEnum("deal_activity_action", [
+  "criado",
+  "editado",
+  "etapa_alterada",
+  "tag_adicionada",
+  "tag_removida",
+  "ganho",
+  "perdido",
+  "excluido",
+  "campo_alterado",
+]);
+export const dealActivitySourceEnum = pgEnum("deal_activity_source", [
+  "manual",
+  "automacao",
+  "webhook",
+  // Mutação feita via API pública/MCP (Etapa 28) — distinta de 'webhook'
+  // (entrada passiva de terceiros) e 'automacao' (motores internos do
+  // próprio CRM): aqui é uma chamada ativa e autenticada por api_key.
+  "api",
+]);
+// 'email' ainda não tem canal implementado (Etapa 26, não feita) — enum já
+// preparado pra quando existir, igual a outros enums desta base com valor
+// ainda não emitido por nenhum call site (ver notificationTypeEnum).
+export const npsChannelEnum = pgEnum("nps_channel", ["whatsapp", "email"]);
 
 // ---------- Usuários ----------
 
@@ -340,6 +390,13 @@ export const tasks = pgTable(
     // gatilho "dias_apos_tag" (não recriar a mesma task a cada varredura).
     tagAutomationId: uuid("tag_automation_id").references(
       () => tagAutomations.id,
+      { onDelete: "set null" }
+    ),
+    // Preenchido quando a task nasce de um passo de automation_sequence
+    // (Etapa 22) — mesma função de rastreio de origem que stageTaskId/
+    // tagAutomationId têm pros outros dois motores de automação.
+    sequenceStepId: uuid("sequence_step_id").references(
+      () => automationSequenceSteps.id,
       { onDelete: "set null" }
     ),
     title: text("title").notNull(),
@@ -746,3 +803,303 @@ export const googleCalendarShares = pgTable(
     ),
   ]
 );
+
+// ---------- LinkedIn via LeadDelta (Etapa 20) ----------
+// Configuração única (1 registro só, igual a whatsapp_channels mas sem
+// suportar múltiplos). API key criptografada em repouso com a mesma chave
+// das demais integrações (ver src/lib/credentials-crypto.ts).
+export const leaddeltaSettings = pgTable("leaddelta_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  apiKey: text("api_key").notNull(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Snapshot sincronizado das conexões da LeadDelta — nunca consultado ao vivo
+// (ver decisão de arquitetura da Etapa 20). funnelStage/profile/
+// locationNormalized são recalculados a cada sync a partir de tags/location
+// brutas, pela lógica portada em src/lib/leaddelta-analytics.ts.
+export const leaddeltaConnections = pgTable(
+  "leaddelta_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    leaddeltaId: text("leaddelta_id").notNull(),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    headline: text("headline").notNull().default(""),
+    company: text("company").notNull().default(""),
+    jobTitle: text("job_title").notNull().default(""),
+    location: text("location").notNull().default(""),
+    locationNormalized: text("location_normalized").notNull().default(""),
+    email: text("email").notNull().default(""),
+    linkedinUrl: text("linkedin_url").notNull().default(""),
+    workspaceName: text("workspace_name").notNull().default(""),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    funnelStage: text("funnel_stage").notNull().default("Sem estágio"),
+    profile: leaddeltaProfileEnum("profile").notNull().default("Sem perfil"),
+    hasEmail: boolean("has_email").notNull().default(false),
+    hasNotes: boolean("has_notes").notNull().default(false),
+    hasPhone: boolean("has_phone").notNull().default(false),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("leaddelta_connections_leaddelta_id_idx").on(t.leaddeltaId),
+  ]
+);
+
+export const leaddeltaSyncLog = pgTable("leaddelta_sync_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  connectionsCount: integer("connections_count").notNull().default(0),
+  status: webhookLogStatusEnum("status").notNull(),
+  errorMessage: text("error_message"),
+});
+
+// ---------- Automações inteligentes (Etapa 22) ----------
+// Expande a Etapa 13 (stage_tasks/tag_automations, gatilho único + atraso)
+// com sequências de múltiplos passos, condição opcional sobre o negócio, e
+// um terceiro gatilho ("sem_resposta") que não existe nos outros dois
+// motores. Reaproveita o mesmo cron horário da Etapa 13 pra avançar passos
+// vencidos e detectar o gatilho de falta de resposta (ver runSequenceSweep
+// em src/lib/automation-sequences.ts).
+export const automationSequences = pgTable("automation_sequences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  triggerType: sequenceTriggerTypeEnum("trigger_type").notNull(),
+  triggerStageId: uuid("trigger_stage_id").references(() => stages.id, {
+    onDelete: "cascade",
+  }),
+  triggerTagId: uuid("trigger_tag_id").references(() => tags.id, {
+    onDelete: "cascade",
+  }),
+  // Só usado quando triggerType='sem_resposta'. Em dias (não minutos) —
+  // diferente do delay entre passos, esse número tende a ser falado em dias
+  // corridos pelo usuário ("5 dias sem resposta"), sem necessidade de
+  // granularidade menor.
+  noResponseDays: integer("no_response_days"),
+  // Condição simples opcional sobre o negócio no momento do gatilho —
+  // { field: 'temperature'|'tags'|<custom_field_key>, operator: 'eq'|'gt'|'lt'|'contains', value: string }.
+  // Null = sem condição, sequência sempre inicia quando o gatilho bate.
+  conditions: jsonb("conditions").$type<{
+    field: string;
+    operator: "eq" | "gt" | "lt" | "contains";
+    value: string;
+  } | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const automationSequenceSteps = pgTable(
+  "automation_sequence_steps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sequenceId: uuid("sequence_id")
+      .notNull()
+      .references(() => automationSequences.id, { onDelete: "cascade" }),
+    order: integer("order").notNull().default(0),
+    // Desde o passo anterior — ou desde o disparo do gatilho, se for o
+    // primeiro passo da sequência (order=0).
+    delayMinutes: integer("delay_minutes").notNull().default(0),
+    type: sequenceStepTypeEnum("type").notNull(),
+    // Título da tarefa criada — usado por 'tarefa_generica' e por 'mensagem'
+    // quando autoSend=false (a task fica pendente pra alguém completar/
+    // enviar manualmente, igual ao padrão de stage_tasks/tag_automations).
+    // Não está no esboço de migration da etapa, mas é indispensável: sem
+    // título não dá pra criar a linha em `tasks`.
+    title: text("title"),
+    messageTemplateId: uuid("message_template_id").references(
+      () => messageTemplates.id,
+      { onDelete: "set null" }
+    ),
+    autoSend: boolean("auto_send").notNull().default(false),
+    autoSendChannelId: uuid("auto_send_channel_id").references(
+      () => whatsappChannels.id,
+      { onDelete: "set null" }
+    ),
+    addTagId: uuid("add_tag_id").references(() => tags.id, {
+      onDelete: "cascade",
+    }),
+    moveToStageId: uuid("move_to_stage_id").references(() => stages.id, {
+      onDelete: "cascade",
+    }),
+  },
+  (t) => [index("automation_sequence_steps_sequence_id_idx").on(t.sequenceId)]
+);
+
+export const automationSequenceRuns = pgTable(
+  "automation_sequence_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sequenceId: uuid("sequence_id")
+      .notNull()
+      .references(() => automationSequences.id, { onDelete: "cascade" }),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    currentStepOrder: integer("current_step_order").notNull().default(0),
+    status: sequenceRunStatusEnum("status").notNull().default("em_andamento"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    nextStepAt: timestamp("next_step_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("automation_sequence_runs_deal_id_idx").on(t.dealId),
+    index("automation_sequence_runs_sequence_id_idx").on(t.sequenceId),
+  ]
+);
+
+// ---------- Notificações (Etapa 23) ----------
+// messageId é só informativo (sem FK): messages é particionada por
+// created_at, a PK real é o par (id, created_at) — replicar essa FK composta
+// aqui só pra rastreio não compensa a complexidade, quem precisa navegar até
+// a conversa usa contactId.
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: notificationTypeEnum("type").notNull(),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    read: boolean("read").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt),
+    index("notifications_user_id_read_idx").on(t.userId, t.read),
+  ]
+);
+
+// ---------- Auditoria de negócios (Etapa 24) ----------
+// dealId sem FK, de propósito: ao contrário das demais tabelas filhas de
+// deals (que cascade e somem junto com o negócio), o registro 'excluido'
+// só cumpre sua função de auditoria se sobreviver à própria exclusão do
+// negócio que ele documenta — deals não tem soft-delete.
+export const dealActivityLog = pgTable(
+  "deal_activity_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id").notNull(),
+    // Nullable: alterações vindas de webhook/automação não têm um usuário
+    // humano por trás (ver dealActivitySourceEnum).
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    action: dealActivityActionEnum("action").notNull(),
+    fieldName: text("field_name"),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    source: dealActivitySourceEnum("source").notNull().default("manual"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("deal_activity_log_deal_id_created_at_idx").on(t.dealId, t.createdAt)]
+);
+
+// ---------- Pós-venda / NPS (Etapa 27) ----------
+// Config única (1 registro só, igual a leaddelta_settings) — não está no
+// esboço de migration da etapa, mas é indispensável: "atraso configurável"
+// e "reaproveitar o composer/canal já configurado" exigem algum lugar pra
+// guardar qual etapa/canal/template usar, e não existe um motor de
+// automação pronto pro gatilho "negócio ganho" (automation_sequences só
+// cobre etapa/tag/sem_resposta, ver sequenceTriggerTypeEnum).
+export const npsSettings = pgTable("nps_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  active: boolean("active").notNull().default(false),
+  // Etapa "Cliente ativo" (ou equivalente) — null = não dispara por etapa.
+  triggerStageId: uuid("trigger_stage_id").references(() => stages.id, {
+    onDelete: "set null",
+  }),
+  triggerOnWon: boolean("trigger_on_won").notNull().default(true),
+  // Em dias — mesmo raciocínio de stageTasks.daysToComplete, mas contado a
+  // partir de stageEnteredAt (gatilho por etapa) ou wonAt (gatilho por
+  // ganho), o que disparou.
+  delayDays: integer("delay_days").notNull().default(3),
+  channelId: uuid("channel_id").references(() => whatsappChannels.id, {
+    onDelete: "set null",
+  }),
+  // Conteúdo deve incluir {{link_pesquisa}} — substituído no envio (ver
+  // src/lib/nps.ts). Mesma engine de variáveis dos demais templates
+  // (substituteTemplate), variável a mais só usada aqui.
+  messageTemplateId: uuid("message_template_id").references(
+    () => messageTemplates.id,
+    { onDelete: "set null" }
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const npsSurveys = pgTable(
+  "nps_surveys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+    channel: npsChannelEnum("channel").notNull(),
+    token: text("token").notNull(),
+    score: integer("score"),
+    feedback: text("feedback"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("nps_surveys_token_idx").on(t.token),
+    // Um envio por negócio, no máximo (ver "fora de escopo" da Etapa 27) —
+    // a varredura do cron consulta por dealId pra decidir se já disparou.
+    uniqueIndex("nps_surveys_deal_id_idx").on(t.dealId),
+  ]
+);
+
+// ---------- API pública / MCP (Etapa 28) ----------
+// keyHash guarda sha256(chave) em hex, nunca a chave em si — mesma lógica
+// de um token de acesso pessoal (GitHub/Stripe): a chave só existe em texto
+// puro no momento da criação (mostrada uma única vez pro admin), e a busca
+// por hash é uma igualdade indexada direta, sem precisar de bcrypt (a chave
+// já nasce com entropia alta, ao contrário de senha escolhida por humano).
+// scopes é array pra deixar aberto a granularidade futura, mas por ora só
+// dois valores emitidos: ["leitura"] ou ["leitura","escrita"] (ver
+// requireWriteScope em src/lib/api-keys.ts).
+// rateLimitWindowStart/rateLimitCount não estão no esboço de migration da
+// etapa, mas são o jeito mais simples de fazer "rate limiting básico por
+// chave" sem depender de um serviço externo (Redis) que este projeto não
+// tem — janela fixa de 1 minuto, reiniciada quando expira.
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  label: text("label").notNull(),
+  keyHash: text("key_hash").notNull(),
+  scopes: jsonb("scopes").$type<string[]>().notNull().default(["leitura"]),
+  createdByUserId: uuid("created_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  active: boolean("active").notNull().default(true),
+  rateLimitWindowStart: timestamp("rate_limit_window_start", { withTimezone: true }),
+  rateLimitCount: integer("rate_limit_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (t) => [uniqueIndex("api_keys_key_hash_idx").on(t.keyHash)]);

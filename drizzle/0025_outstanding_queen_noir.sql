@@ -1,0 +1,1 @@
+ALTER TYPE "public"."deal_activity_source" ADD VALUE 'api';

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
+import { NotificationBell } from "@/components/notification-bell";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -18,6 +19,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-base font-bold">CRM Viagente</span>
         </div>
         <div className="flex items-center gap-3">
+          <NotificationBell />
           <ThemeToggle />
           <span className="hidden text-sm text-muted-foreground sm:inline">
             {name} ({role})

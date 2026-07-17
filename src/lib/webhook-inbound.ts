@@ -7,6 +7,7 @@ import {
   temperatureRules,
   webhookLogs,
 } from "@/db/schema";
+import { logDealActivity } from "@/lib/deal-activity-log";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -203,6 +204,13 @@ export async function processInboundPayload(
   // Só propaga quando a distribuição de fato escolheu alguém — um negócio
   // novo sem dono não deve apagar o dono que o contato já tinha.
   if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
+
+  await logDealActivity({
+    dealId: createdDeal.id,
+    userId: null,
+    source: "webhook",
+    action: "criado",
+  });
 
   if (contactTagIds.length > 0) {
     await attachTagsToContact(contactId, contactTagIds);

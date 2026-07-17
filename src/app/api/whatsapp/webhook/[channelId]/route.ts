@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { messages, whatsappChannels } from "@/db/schema";
 import { mediaPrefix, uploadMediaToR2, type MediaKind } from "@/lib/storage";
 import { findOpenDealIdForContact, findOrCreateContactByPhone } from "@/lib/messaging";
+import { notifyNewMessage } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,20 @@ async function handleIncomingMessage(
   channelId: string,
   payload: ZapiIncomingMessage
 ) {
+  // fromMe=true e já existe uma linha com esse zApiMessageId: foi o próprio
+  // /api/messages/send que gravou na hora do envio, este webhook só está
+  // confirmando o que já sabemos — ignora pra não duplicar. fromMe=true SEM
+  // registro prévio é mensagem mandada direto do aparelho conectado (fora do
+  // CRM) — precisa ser gravada aqui, senão some da conversa em /atendimento.
+  if (payload.fromMe) {
+    const [existing] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.zApiMessageId, payload.messageId))
+      .limit(1);
+    if (existing) return;
+  }
+
   const contact = await findOrCreateContactByPhone(
     payload.phone,
     payload.isGroup ? payload.chatName : payload.senderName,
@@ -147,7 +162,7 @@ async function handleIncomingMessage(
     dealId,
     contactId: contact.id,
     channelId,
-    direction: "entrada",
+    direction: payload.fromMe ? "saida" : "entrada",
     type,
     content,
     mediaUrl,
@@ -156,6 +171,23 @@ async function handleIncomingMessage(
     senderPhone: payload.isGroup ? payload.participantPhone : null,
     senderAvatarUrl: payload.isGroup ? payload.senderPhoto : null,
     createdAt,
+  });
+
+  // Notificação de "mensagem nova" é só pro que o contato mandou pra gente —
+  // uma mensagem que o próprio atendente mandou do celular não precisa
+  // notificar ninguém (ele já sabe que mandou).
+  if (payload.fromMe) return;
+
+  const contactName =
+    (payload.isGroup ? payload.chatName : payload.senderName)?.trim() || payload.phone;
+  await notifyNewMessage({
+    messageId,
+    dealId,
+    contactId: contact.id,
+    contactName,
+    channelId,
+    type,
+    content,
   });
 }
 
@@ -195,11 +227,12 @@ export async function POST(
   try {
     if ("type" in payload && payload.type === "MessageStatusCallback") {
       await handleStatusCallback(payload);
-    } else if ("messageId" in payload && !payload.fromMe) {
+    } else if ("messageId" in payload) {
+      // fromMe=true também passa por aqui — handleIncomingMessage faz o
+      // dedupe contra o que o nosso próprio /api/messages/send já gravou e
+      // só insere de fato mensagens mandadas de outro aparelho conectado.
       await handleIncomingMessage(channelId, payload);
     }
-    // fromMe=true é ignorado: mensagens enviadas pelo nosso próprio
-    // /api/messages/send já são gravadas na hora do envio.
   } catch (error) {
     console.error("[webhook whatsapp] erro ao processar payload", error);
     return Response.json({ error: "Erro ao processar webhook" }, { status: 500 });

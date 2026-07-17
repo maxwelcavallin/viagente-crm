@@ -12,6 +12,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { LinkedinIcon } from "@/components/icons/linkedin-icon";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -27,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/tarefas", label: "Tarefas", icon: ListTodo },
   { href: "/atendimento", label: "Atendimento", icon: MessagesSquare },
   { href: "/contatos", label: "Contatos", icon: Users },
+  { href: "/linkedin", label: "LinkedIn", icon: LinkedinIcon },
   { href: "/perfil", label: "Meu Perfil", icon: UserCircle },
   { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
 ];

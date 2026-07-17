@@ -22,6 +22,7 @@ import {
   resolveDashboardRange,
   type DashboardPeriod,
 } from "@/lib/dashboard";
+import { getNpsSummary } from "@/lib/nps";
 import { cn } from "@/lib/utils";
 
 const PERIOD_LABELS: Record<DashboardPeriod, string> = {
@@ -61,10 +62,11 @@ export default async function HomePage({
   const pipelineId = rawPipelineId || null;
   const tagId = rawTagId || null;
 
-  const [summary, allPipelines, allTags] = await Promise.all([
+  const [summary, allPipelines, allTags, npsSummary] = await Promise.all([
     getDashboardSummary(resolveDashboardRange(period), { pipelineId, tagId }),
     db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
     db.select({ id: tags.id, name: tags.name }).from(tags).orderBy(asc(tags.name)),
+    getNpsSummary(),
   ]);
 
   const conversionRate =
@@ -333,6 +335,77 @@ export default async function HomePage({
                     <span className="font-medium">{reason.count}</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>NPS pós-venda</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Todas as respostas registradas — não é filtrado por período.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {npsSummary.responseCount === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma resposta de NPS registrada ainda.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-4">
+                  <div>
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                      Nota média
+                    </p>
+                    <p className="text-3xl font-bold">
+                      {npsSummary.average != null ? npsSummary.average.toFixed(1) : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                      Promotores (9-10)
+                    </p>
+                    <p className="text-2xl font-bold text-status-success">{npsSummary.promoters}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                      Neutros (7-8)
+                    </p>
+                    <p className="text-2xl font-bold text-status-warning">{npsSummary.passives}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                      Detratores (0-6)
+                    </p>
+                    <p className="text-2xl font-bold text-status-danger">{npsSummary.detractors}</p>
+                  </div>
+                </div>
+                {npsSummary.recentWithFeedback.length > 0 && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                      Respostas recentes com comentário
+                    </p>
+                    {npsSummary.recentWithFeedback.map((r) => (
+                      <div key={r.dealId} className="flex items-start gap-2 text-sm">
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                            r.score <= 6
+                              ? "bg-status-danger/10 text-status-danger"
+                              : r.score <= 8
+                                ? "bg-status-warning/10 text-status-warning"
+                                : "bg-status-success/10 text-status-success"
+                          )}
+                        >
+                          {r.score}
+                        </span>
+                        <p className="text-muted-foreground">{r.feedback}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

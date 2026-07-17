@@ -134,6 +134,55 @@
       "when": 1783655281819,
       "tag": "0018_brainy_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784153949774,
+      "tag": "0019_whole_jackpot",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784170647123,
+      "tag": "0020_mute_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784172521992,
+      "tag": "0021_first_captain_britain",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784207617832,
+      "tag": "0022_jazzy_daimon_hellstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784222309691,
+      "tag": "0023_neat_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784223646323,
+      "tag": "0024_sparkling_black_panther",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784224128891,
+      "tag": "0025_outstanding_queen_noir",
+      "breakpoints": true
     }
   ]
 }

@@ -93,7 +93,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         pathname === "/api/cron/cleanup-media" ||
         pathname === "/api/cron/send-scheduled-messages" ||
         pathname === "/api/cron/task-automation" ||
-        pathname.startsWith("/api/webhooks/inbound");
+        pathname.startsWith("/api/webhooks/inbound") ||
+        // API pública e servidor MCP (Etapa 28) — autenticados por API key
+        // própria (Authorization: Bearer), não por sessão de usuário.
+        pathname.startsWith("/api/v1") ||
+        pathname === "/api/mcp";
 
       if (!auth) {
         return isPublic;

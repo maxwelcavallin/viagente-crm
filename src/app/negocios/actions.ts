@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -10,11 +10,19 @@ import {
   customFieldDefinitions,
   dealTags,
   deals,
+  lossReasons,
+  pipelines,
   stages,
   stageTasks,
+  tags,
   tasks,
+  users,
 } from "@/db/schema";
+import { cancelActiveSequenceRuns } from "@/lib/automation-sequences";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
+import { logDealActivity, type DealActivitySource } from "@/lib/deal-activity-log";
+import { formatCurrencyBRL } from "@/lib/deal-format";
+import { moveDealStage } from "@/lib/deal-mutations";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -35,8 +43,14 @@ export type DealFormState =
 // Diff real (não delete-tudo-reinsere-tudo) — além de evitar reescrever
 // linhas que não mudaram, preserva dealTags.createdAt das tags que já
 // estavam lá (usado pelo gatilho "dias com a tag") e retorna só as tags
-// genuinamente novas, pra disparar a automação de "tag adicionada".
-async function syncDealTags(dealId: string, tagIds: string[]): Promise<string[]> {
+// genuinamente novas, pra disparar a automação de "tag adicionada". Também
+// grava tag_adicionada/tag_removida no histórico (Etapa 24) pra cada tag
+// que de fato mudou.
+async function syncDealTags(
+  dealId: string,
+  tagIds: string[],
+  logCtx: { userId: string | null; source: DealActivitySource }
+): Promise<string[]> {
   const uniqueTagIds = Array.from(new Set(tagIds));
   const current = await db
     .select({ tagId: dealTags.tagId })
@@ -48,14 +62,138 @@ async function syncDealTags(dealId: string, tagIds: string[]): Promise<string[]>
   const toRemove = Array.from(currentIds).filter((id) => !uniqueTagIds.includes(id));
 
   if (toRemove.length > 0) {
+    const removedTags = await db
+      .select({ id: tags.id, name: tags.name })
+      .from(tags)
+      .where(inArray(tags.id, toRemove));
     await db
       .delete(dealTags)
       .where(and(eq(dealTags.dealId, dealId), inArray(dealTags.tagId, toRemove)));
+    for (const tag of removedTags) {
+      await logDealActivity({
+        dealId,
+        userId: logCtx.userId,
+        source: logCtx.source,
+        action: "tag_removida",
+        oldValue: tag.name,
+      });
+    }
   }
   if (toAdd.length > 0) {
+    const addedTags = await db
+      .select({ id: tags.id, name: tags.name })
+      .from(tags)
+      .where(inArray(tags.id, toAdd));
     await db.insert(dealTags).values(toAdd.map((tagId) => ({ dealId, tagId })));
+    for (const tag of addedTags) {
+      await logDealActivity({
+        dealId,
+        userId: logCtx.userId,
+        source: logCtx.source,
+        action: "tag_adicionada",
+        newValue: tag.name,
+      });
+    }
   }
   return toAdd;
+}
+
+// Diff campo a campo entre o negócio antes e depois de um updateDealAction —
+// só grava entrada pra quem de fato mudou, com fieldName já traduzido pra
+// label humana (não a chave raw) e valores formatados pra leitura (moeda,
+// nome em vez de id). Etapa alterada sai como ação própria ('etapa_alterada'),
+// não 'campo_alterado', pra diferenciar visualmente no histórico.
+async function logDealFieldDiffs(
+  userId: string,
+  dealId: string,
+  before: typeof deals.$inferSelect,
+  after: {
+    contactId: string;
+    pipelineId: string;
+    stageId: string;
+    title: string;
+    ownerId: string | null;
+    value: string | null;
+    customFields: Record<string, string>;
+  }
+): Promise<void> {
+  const log = (fieldName: string, oldValue: string | null, newValue: string | null) =>
+    logDealActivity({
+      dealId,
+      userId,
+      source: "manual",
+      action: "campo_alterado",
+      fieldName,
+      oldValue,
+      newValue,
+    });
+
+  if (before.title !== after.title) {
+    await log("Título", before.title, after.title);
+  }
+  if ((before.value ?? null) !== (after.value ?? null)) {
+    await log("Valor", formatCurrencyBRL(before.value), formatCurrencyBRL(after.value));
+  }
+  if (before.ownerId !== after.ownerId) {
+    const ids = [before.ownerId, after.ownerId].filter((v): v is string => v != null);
+    const rows =
+      ids.length > 0
+        ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, ids))
+        : [];
+    const nameOf = (uid: string | null) =>
+      uid ? (rows.find((r) => r.id === uid)?.name ?? "—") : "Sem dono";
+    await log("Dono", nameOf(before.ownerId), nameOf(after.ownerId));
+  }
+  if (before.contactId !== after.contactId) {
+    const rows = await db
+      .select({ id: contacts.id, name: contacts.name })
+      .from(contacts)
+      .where(inArray(contacts.id, [before.contactId, after.contactId]));
+    const nameOf = (cid: string) => rows.find((r) => r.id === cid)?.name ?? "—";
+    await log("Contato", nameOf(before.contactId), nameOf(after.contactId));
+  }
+  if (before.pipelineId !== after.pipelineId) {
+    const rows = await db
+      .select({ id: pipelines.id, name: pipelines.name })
+      .from(pipelines)
+      .where(inArray(pipelines.id, [before.pipelineId, after.pipelineId]));
+    const nameOf = (pid: string) => rows.find((r) => r.id === pid)?.name ?? "—";
+    await log("Pipeline", nameOf(before.pipelineId), nameOf(after.pipelineId));
+  }
+  if (before.stageId !== after.stageId) {
+    const rows = await db
+      .select({ id: stages.id, name: stages.name })
+      .from(stages)
+      .where(inArray(stages.id, [before.stageId, after.stageId]));
+    const nameOf = (sid: string) => rows.find((r) => r.id === sid)?.name ?? "—";
+    await logDealActivity({
+      dealId,
+      userId,
+      source: "manual",
+      action: "etapa_alterada",
+      fieldName: "Etapa",
+      oldValue: nameOf(before.stageId),
+      newValue: nameOf(after.stageId),
+    });
+  }
+
+  const beforeCustom = (before.customFields as Record<string, unknown>) ?? {};
+  const changedKeys = new Set([...Object.keys(beforeCustom), ...Object.keys(after.customFields)]);
+  if (changedKeys.size > 0) {
+    const defs = await db
+      .select({ key: customFieldDefinitions.key, label: customFieldDefinitions.label })
+      .from(customFieldDefinitions)
+      .where(eq(customFieldDefinitions.entity, "deal"));
+    const labelOf = (key: string) => defs.find((d) => d.key === key)?.label ?? key;
+
+    for (const key of changedKeys) {
+      const oldVal = beforeCustom[key] != null ? String(beforeCustom[key]) : null;
+      const newVal = after.customFields[key] != null ? String(after.customFields[key]) : null;
+      if (oldVal !== newVal) {
+        await log(labelOf(key), oldVal, newVal);
+      }
+    }
+  }
 }
 
 function parseValue(raw: FormDataEntryValue | null): string | null {
@@ -174,7 +312,11 @@ export async function createDealAction(
   // negócio novo sem dono não deve apagar o dono que o contato já tinha de
   // um negócio anterior.
   if (ownerId) await syncContactOwnerFromDeal(fields.contactId, ownerId);
-  const newTagIds = await syncDealTags(created.id, fields.tagIds);
+  await logDealActivity({ dealId: created.id, userId: user.id, source: "manual", action: "criado" });
+  const newTagIds = await syncDealTags(created.id, fields.tagIds, {
+    userId: user.id,
+    source: "manual",
+  });
   await fireTagAddedAutomations(created.id, newTagIds);
   void dispatchOutboundWebhooks("negocio_criado", created.id);
 
@@ -197,12 +339,9 @@ export async function updateDealAction(
   const fields = await readDealFields(formData);
   if ("error" in fields) return { status: "error", message: fields.error };
 
-  const [current] = await db
-    .select({ stageId: deals.stageId })
-    .from(deals)
-    .where(eq(deals.id, id))
-    .limit(1);
-  const stageChanged = current != null && current.stageId !== fields.stageId;
+  const [current] = await db.select().from(deals).where(eq(deals.id, id)).limit(1);
+  if (!current) return { status: "error", message: "Negócio não encontrado." };
+  const stageChanged = current.stageId !== fields.stageId;
 
   await db
     .update(deals)
@@ -223,7 +362,8 @@ export async function updateDealAction(
     .where(eq(deals.id, id));
 
   await syncContactOwnerFromDeal(fields.contactId, fields.ownerId);
-  const newTagIds = await syncDealTags(id, fields.tagIds);
+  await logDealFieldDiffs(user.id, id, current, fields);
+  const newTagIds = await syncDealTags(id, fields.tagIds, { userId: user.id, source: "manual" });
   await fireTagAddedAutomations(id, newTagIds);
 
   revalidatePath("/negocios");
@@ -248,6 +388,20 @@ export async function deleteDealAction(
     return { status: "error", message: "Negócio inválido." };
   }
 
+  const [deal] = await db.select({ title: deals.title }).from(deals).where(eq(deals.id, id)).limit(1);
+  // Gravado antes do delete — como deal_activity_log.deal_id não tem FK
+  // pra deals (de propósito, ver schema.ts), essa entrada sobrevive à
+  // exclusão que ela mesma documenta.
+  if (deal) {
+    await logDealActivity({
+      dealId: id,
+      userId: user.id,
+      source: "manual",
+      action: "excluido",
+      oldValue: deal.title,
+    });
+  }
+
   await db.delete(deals).where(eq(deals.id, id));
 
   revalidatePath("/negocios");
@@ -264,76 +418,7 @@ export async function moveDealStageAction(
   const user = await requireSession();
   if (!user) return { ok: false };
 
-  await db
-    .update(deals)
-    .set({ stageId, updatedAt: new Date(), stageEnteredAt: new Date() })
-    .where(eq(deals.id, dealId));
-
-  // Cria as tarefas automáticas da etapa de destino (Etapa 9). Só as
-  // marcadas isAutomatic=true — as demais ficam como modelo disponível pra
-  // adicionar manualmente (ver addStageTaskToDealAction). Se o negócio já
-  // visitou essa etapa antes, cria de novo — não reaproveita tarefas antigas
-  // já concluídas (regra explícita do critério de aceite). Tarefas com
-  // triggerDelayMinutes setado NÃO entram aqui — ficam pro cron de automação
-  // varrer quando o tempo configurado na etapa for atingido.
-  const tasksForStage = await db
-    .select({
-      id: stageTasks.id,
-      title: stageTasks.title,
-      type: stageTasks.type,
-      daysToComplete: stageTasks.daysToComplete,
-      autoSend: stageTasks.autoSend,
-      autoSendChannelId: stageTasks.autoSendChannelId,
-      messageTemplateId: stageTasks.messageTemplateId,
-    })
-    .from(stageTasks)
-    .where(
-      and(
-        eq(stageTasks.stageId, stageId),
-        eq(stageTasks.isAutomatic, true),
-        isNull(stageTasks.triggerDelayMinutes)
-      )
-    );
-
-  if (tasksForStage.length > 0) {
-    const now = Date.now();
-    const inserted = await db
-      .insert(tasks)
-      .values(
-        tasksForStage.map((st) => ({
-          dealId,
-          stageTaskId: st.id,
-          title: st.title,
-          type: st.type,
-          status: "pendente" as const,
-          dueAt:
-            st.daysToComplete != null
-              ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
-              : null,
-        }))
-      )
-      .returning({ id: tasks.id, stageTaskId: tasks.stageTaskId, dueAt: tasks.dueAt });
-
-    for (const task of inserted) {
-      const source = tasksForStage.find((st) => st.id === task.stageTaskId);
-      if (!source) continue;
-      await maybeAutoSendTask({
-        taskId: task.id,
-        dealId,
-        type: source.type,
-        dueAt: task.dueAt,
-        autoSend: source.autoSend,
-        autoSendChannelId: source.autoSendChannelId,
-        messageTemplateId: source.messageTemplateId,
-      });
-    }
-  }
-
-  void dispatchOutboundWebhooks("etapa_alterada", dealId);
-
-  revalidatePath("/negocios");
-  revalidatePath(`/negocios/${dealId}`);
-  return { ok: true };
+  return moveDealStage(dealId, stageId, { userId: user.id, source: "manual" });
 }
 
 // "perdido" saiu daqui — precisa de motivo obrigatório, ver setDealLostAction.
@@ -346,6 +431,12 @@ export async function setDealStatusAction(
   const user = await requireSession();
   if (!user) return { ok: false };
 
+  const [previous] = await db
+    .select({ status: deals.status })
+    .from(deals)
+    .where(eq(deals.id, dealId))
+    .limit(1);
+
   await db
     .update(deals)
     .set({
@@ -357,7 +448,25 @@ export async function setDealStatusAction(
     })
     .where(eq(deals.id, dealId));
 
-  if (status === "ganho") void dispatchOutboundWebhooks("negocio_ganho", dealId);
+  if (previous && previous.status !== status) {
+    await logDealActivity({
+      dealId,
+      userId: user.id,
+      source: "manual",
+      // 'ganho' tem ação própria pra aparecer com destaque no histórico;
+      // reabrir um negócio (voltar pra 'aberto') não tem ação dedicada no
+      // enum, cai no fallback genérico 'editado'.
+      action: status === "ganho" ? "ganho" : "editado",
+      fieldName: "Status",
+      oldValue: previous.status,
+      newValue: status,
+    });
+  }
+
+  if (status === "ganho") {
+    await cancelActiveSequenceRuns(dealId);
+    void dispatchOutboundWebhooks("negocio_ganho", dealId);
+  }
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
@@ -371,6 +480,11 @@ export async function setDealLostAction(
   const user = await requireSession();
   if (!user || !lossReasonId) return { ok: false };
 
+  const [[previous], [reason]] = await Promise.all([
+    db.select({ status: deals.status }).from(deals).where(eq(deals.id, dealId)).limit(1),
+    db.select({ label: lossReasons.label }).from(lossReasons).where(eq(lossReasons.id, lossReasonId)).limit(1),
+  ]);
+
   await db
     .update(deals)
     .set({
@@ -382,6 +496,17 @@ export async function setDealLostAction(
     })
     .where(eq(deals.id, dealId));
 
+  await logDealActivity({
+    dealId,
+    userId: user.id,
+    source: "manual",
+    action: "perdido",
+    fieldName: "Status",
+    oldValue: previous?.status ?? null,
+    newValue: reason ? `Perdido — ${reason.label}` : "Perdido",
+  });
+
+  await cancelActiveSequenceRuns(dealId);
   void dispatchOutboundWebhooks("negocio_perdido", dealId);
 
   revalidatePath("/negocios");
@@ -514,10 +639,35 @@ export async function bulkMoveDealsAction(
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
 
+  const before = await db
+    .select({ id: deals.id, stageId: deals.stageId })
+    .from(deals)
+    .where(inArray(deals.id, dealIds));
+
   await db
     .update(deals)
     .set({ stageId, updatedAt: new Date(), stageEnteredAt: new Date() })
     .where(inArray(deals.id, dealIds));
+
+  const changed = before.filter((d) => d.stageId !== stageId);
+  if (changed.length > 0) {
+    const stageRows = await db
+      .select({ id: stages.id, name: stages.name })
+      .from(stages)
+      .where(inArray(stages.id, [...new Set(changed.map((d) => d.stageId)), stageId]));
+    const nameOf = (sid: string) => stageRows.find((s) => s.id === sid)?.name ?? "—";
+    for (const deal of changed) {
+      await logDealActivity({
+        dealId: deal.id,
+        userId: user.id,
+        source: "manual",
+        action: "etapa_alterada",
+        fieldName: "Etapa",
+        oldValue: nameOf(deal.stageId),
+        newValue: nameOf(stageId),
+      });
+    }
+  }
 
   revalidatePath("/negocios");
   return { ok: true };
@@ -555,6 +705,11 @@ export async function bulkSetStatusAction(
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
 
+  const before = await db
+    .select({ id: deals.id, status: deals.status })
+    .from(deals)
+    .where(inArray(deals.id, dealIds));
+
   await db
     .update(deals)
     .set({
@@ -565,6 +720,19 @@ export async function bulkSetStatusAction(
       lossReasonId: null,
     })
     .where(inArray(deals.id, dealIds));
+
+  for (const deal of before) {
+    if (deal.status === status) continue;
+    await logDealActivity({
+      dealId: deal.id,
+      userId: user.id,
+      source: "manual",
+      action: status === "ganho" ? "ganho" : "editado",
+      fieldName: "Status",
+      oldValue: deal.status,
+      newValue: status,
+    });
+  }
 
   revalidatePath("/negocios");
   return { ok: true };
@@ -577,6 +745,11 @@ export async function bulkSetLostAction(
   const user = await requireSession();
   if (!user || dealIds.length === 0 || !lossReasonId) return { ok: false };
 
+  const [before, [reason]] = await Promise.all([
+    db.select({ id: deals.id, status: deals.status }).from(deals).where(inArray(deals.id, dealIds)),
+    db.select({ label: lossReasons.label }).from(lossReasons).where(eq(lossReasons.id, lossReasonId)).limit(1),
+  ]);
+
   await db
     .update(deals)
     .set({
@@ -587,6 +760,18 @@ export async function bulkSetLostAction(
       wonAt: null,
     })
     .where(inArray(deals.id, dealIds));
+
+  for (const deal of before) {
+    await logDealActivity({
+      dealId: deal.id,
+      userId: user.id,
+      source: "manual",
+      action: "perdido",
+      fieldName: "Status",
+      oldValue: deal.status,
+      newValue: reason ? `Perdido — ${reason.label}` : "Perdido",
+    });
+  }
 
   revalidatePath("/negocios");
   return { ok: true };
@@ -609,8 +794,18 @@ export async function bulkAddTagAction(
     .onConflictDoNothing()
     .returning({ dealId: dealTags.dealId });
 
-  for (const row of inserted) {
-    await fireTagAddedAutomations(row.dealId, [tagId]);
+  if (inserted.length > 0) {
+    const [tag] = await db.select({ name: tags.name }).from(tags).where(eq(tags.id, tagId)).limit(1);
+    for (const row of inserted) {
+      await logDealActivity({
+        dealId: row.dealId,
+        userId: user.id,
+        source: "manual",
+        action: "tag_adicionada",
+        newValue: tag?.name ?? null,
+      });
+      await fireTagAddedAutomations(row.dealId, [tagId]);
+    }
   }
 
   revalidatePath("/negocios");
@@ -622,6 +817,17 @@ export async function bulkDeleteDealsAction(
 ): Promise<{ ok: boolean }> {
   const user = await requireSession();
   if (!user || dealIds.length === 0) return { ok: false };
+
+  const before = await db.select({ id: deals.id, title: deals.title }).from(deals).where(inArray(deals.id, dealIds));
+  for (const deal of before) {
+    await logDealActivity({
+      dealId: deal.id,
+      userId: user.id,
+      source: "manual",
+      action: "excluido",
+      oldValue: deal.title,
+    });
+  }
 
   await db.delete(deals).where(inArray(deals.id, dealIds));
 
