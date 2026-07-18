@@ -60,13 +60,15 @@ export async function findOrCreateContactByPhone(
 export async function findOrCreateContactByInstagramUserId(
   instagramUserId: string,
   name?: string,
-  avatarUrl?: string
+  avatarUrl?: string,
+  username?: string
 ): Promise<{ id: string }> {
   const [existing] = await db
     .select({
       id: contacts.id,
       name: contacts.name,
       avatarUrl: contacts.avatarUrl,
+      instagramUsername: contacts.instagramUsername,
     })
     .from(contacts)
     .where(eq(contacts.instagramUserId, instagramUserId))
@@ -76,12 +78,14 @@ export async function findOrCreateContactByInstagramUserId(
     const trimmedName = name?.trim();
     const nextName = trimmedName && trimmedName !== existing.name ? trimmedName : undefined;
     const nextAvatar = avatarUrl && avatarUrl !== existing.avatarUrl ? avatarUrl : undefined;
-    if (nextName || nextAvatar) {
+    const nextUsername = username && username !== existing.instagramUsername ? username : undefined;
+    if (nextName || nextAvatar || nextUsername) {
       await db
         .update(contacts)
         .set({
           ...(nextName ? { name: nextName } : {}),
           ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
+          ...(nextUsername ? { instagramUsername: nextUsername } : {}),
         })
         .where(eq(contacts.id, existing.id));
     }
@@ -94,6 +98,7 @@ export async function findOrCreateContactByInstagramUserId(
       instagramUserId,
       name: name?.trim() || instagramUserId,
       avatarUrl,
+      instagramUsername: username,
     })
     .returning({ id: contacts.id });
 

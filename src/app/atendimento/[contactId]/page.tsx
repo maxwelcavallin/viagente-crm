@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
@@ -17,6 +17,7 @@ import { findOpenDealIdForContact } from "@/lib/messaging";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
 import { canViewOwnedRecord } from "@/lib/visibility";
 import type { ContactDealParam } from "@/components/insert-param-button";
+import type { LinkContactTarget } from "./link-contact-dialog";
 import { ConversationThread } from "./conversation-thread";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,8 @@ export default async function ConversationPage({
       email: contacts.email,
       isGroup: contacts.isGroup,
       avatarUrl: contacts.avatarUrl,
+      instagramUserId: contacts.instagramUserId,
+      instagramUsername: contacts.instagramUsername,
       customFields: contacts.customFields,
       ownerId: contacts.ownerId,
     })
@@ -83,6 +86,42 @@ export default async function ConversationPage({
     ...allowedWhatsappChannels.map((c) => ({ ...c, channelType: "whatsapp" as const })),
     ...allowedInstagramChannels.map((c) => ({ ...c, channelType: "instagram" as const })),
   ];
+
+  // Alvos pra "vincular a contato existente" (ver Etapa 25) — só monta a
+  // lista quando faz sentido (contato veio do Instagram), já que exige duas
+  // queries extras. Só contatos sem instagramUserId entram como alvo válido
+  // (mergeInstagramContactInto recusa destino que já tenha um vinculado).
+  let linkTargets: LinkContactTarget[] = [];
+  if (contact.instagramUserId) {
+    const [otherContacts, openDeals] = await Promise.all([
+      db
+        .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
+        .from(contacts)
+        .where(and(ne(contacts.id, contactId), isNull(contacts.instagramUserId))),
+      db
+        .select({
+          id: deals.id,
+          title: deals.title,
+          contactId: deals.contactId,
+          contactName: contacts.name,
+        })
+        .from(deals)
+        .innerJoin(contacts, eq(contacts.id, deals.contactId))
+        .where(and(eq(deals.status, "aberto"), isNull(contacts.instagramUserId))),
+    ]);
+    linkTargets = [
+      ...otherContacts.map((c) => ({
+        contactId: c.id,
+        label: c.name,
+        sublabel: c.phone ?? undefined,
+      })),
+      ...openDeals.map((d) => ({
+        contactId: d.contactId,
+        label: d.title,
+        sublabel: d.contactName,
+      })),
+    ];
+  }
 
   const [openDeal] = openDealId
     ? await db
@@ -138,6 +177,9 @@ export default async function ConversationPage({
       contactId={contact.id}
       contactName={contact.name}
       contactPhone={contact.phone}
+      instagramUsername={contact.instagramUsername}
+      isInstagramContact={Boolean(contact.instagramUserId)}
+      linkTargets={linkTargets}
       isGroup={contact.isGroup}
       avatarUrl={contact.avatarUrl}
       initialMessages={thread}

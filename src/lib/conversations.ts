@@ -16,6 +16,7 @@ export type ConversationSummary = {
   contactId: string;
   contactName: string;
   contactPhone: string;
+  instagramUsername: string | null;
   isGroup: boolean;
   avatarUrl: string | null;
   channelId: string | null;
@@ -62,6 +63,7 @@ export async function listConversations(
       id: contacts.id,
       name: contacts.name,
       phone: contacts.phone,
+      instagramUsername: contacts.instagramUsername,
       isGroup: contacts.isGroup,
       avatarUrl: contacts.avatarUrl,
       ownerId: contacts.ownerId,
@@ -122,6 +124,7 @@ export async function listConversations(
       contactId: m.contactId,
       contactName: contact?.name ?? "Contato",
       contactPhone: contact?.phone ?? "",
+      instagramUsername: contact?.instagramUsername ?? null,
       isGroup: contact?.isGroup ?? false,
       avatarUrl: contact?.avatarUrl ?? null,
       channelId: m.channelId,

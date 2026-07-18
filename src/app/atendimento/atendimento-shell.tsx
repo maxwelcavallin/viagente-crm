@@ -52,6 +52,16 @@ function formatTime(date: Date): string {
   }).format(date);
 }
 
+// Limite rígido além do truncate por CSS: uma palavra única muito longa (URL,
+// nome de arquivo) não quebra linha, então só overflow-hidden/truncate não
+// garante largura — cortar a string em si evita rolagem lateral em qualquer
+// cenário, independente da largura da coluna.
+const MESSAGE_PREVIEW_MAX_CHARS = 60;
+
+function truncateChars(text: string, maxChars: number): string {
+  return text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}…` : text;
+}
+
 function ConversationAvatar({ conversation }: { conversation: ConversationSummary }) {
   return (
     <Avatar>
@@ -449,33 +459,42 @@ export function AtendimentoShell({
                             isUnread ? "font-semibold" : "font-medium"
                           )}
                         >
+                          {conversation.instagramUsername && (
+                            <span className="text-muted-foreground">@{conversation.instagramUsername} </span>
+                          )}
                           {conversation.contactName}
                         </span>
                         <span className="shrink-0 text-xs text-muted-foreground">
                           {formatTime(conversation.lastMessageAt)}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1 flex items-center gap-1.5">
                         {conversation.channelLabel && (
-                          <Badge variant="secondary">{conversation.channelLabel}</Badge>
+                          <Badge
+                            variant="secondary"
+                            className="max-w-24 shrink truncate px-1.5 text-[10px]"
+                          >
+                            {conversation.channelLabel}
+                          </Badge>
                         )}
                         {conversation.isGroup && (
                           <Users size={12} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
                         )}
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 truncate text-xs text-muted-foreground",
-                            isUnread && "font-medium text-foreground"
-                          )}
-                        >
-                          {senderPrefix}
-                          {conversation.lastMessagePreview}
-                        </span>
+                        <span className="min-w-0 flex-1" />
                         {isUnread && (
                           <span className="flex size-4.5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
                             {conversation.unreadCount > 9 ? "9+" : conversation.unreadCount}
                           </span>
                         )}
+                      </div>
+                      <div
+                        className={cn(
+                          "mt-0.5 truncate text-xs text-muted-foreground",
+                          isUnread && "font-medium text-foreground"
+                        )}
+                      >
+                        {senderPrefix}
+                        {truncateChars(conversation.lastMessagePreview, MESSAGE_PREVIEW_MAX_CHARS)}
                       </div>
                     </div>
                   </Link>

@@ -246,6 +246,20 @@
       "when": 1784309706448,
       "tag": "0034_shiny_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784342861792,
+      "tag": "0035_chubby_shadowcat",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784344332862,
+      "tag": "0036_romantic_iron_man",
+      "breakpoints": true
     }
   ]
 }

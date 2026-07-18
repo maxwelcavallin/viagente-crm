@@ -1,6 +1,7 @@
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { scheduledMessages } from "@/db/schema";
+import { getChannelType } from "@/lib/channel-access";
 import { sendTextMessage } from "@/lib/send-message";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +31,20 @@ export async function GET(request: Request) {
   let failed = 0;
 
   for (const item of due) {
+    const channelType = await getChannelType(item.channelId);
+    if (!channelType) {
+      failed += 1;
+      console.error(`[cron/send-scheduled-messages] canal não encontrado pra ${item.id}`);
+      await db
+        .update(scheduledMessages)
+        .set({ status: "erro", errorMessage: "Canal não encontrado" })
+        .where(eq(scheduledMessages.id, item.id));
+      continue;
+    }
+
     const result = await sendTextMessage({
       channelId: item.channelId,
+      channelType,
       contactId: item.contactId,
       message: item.content,
     });

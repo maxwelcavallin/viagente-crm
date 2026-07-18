@@ -15,6 +15,14 @@
 //   header Client-Token, resposta { link } — funciona tanto pra contato
 //   individual quanto pra grupo (o "phone" aceita ID de grupo também,
 //   igual ao parâmetro de send-text) — idem, confirmado ao vivo.
+// - update-notify-sent-by-me: PUT /instances/{id}/token/{token}/update-notify-sent-by-me,
+//   header Client-Token, body { notifySentByMe: true } — sem isso, a Z-API
+//   nunca chama o webhook "ao receber" pra mensagens que a própria conta
+//   manda de outro aparelho (fora do CRM); só entrega os callbacks de status
+//   (SENT/DELIVERED/READ) dessas mensagens, nunca o conteúdo. Confirmado
+//   via teste real: 3 POSTs chegaram no webhook logo após enviar de outro
+//   aparelho, mas nenhuma linha nova em "messages" — eram só status
+//   callbacks. Documentação: developer.z-api.io/webhooks/update-notify-sent-by-me.
 
 export type ZapiChannelCredentials = {
   zapiInstanceId: string;
@@ -31,6 +39,31 @@ export type ZapiStatus = {
   error?: string;
   smartphoneConnected?: boolean;
 };
+
+// Precisa ser chamada uma vez por instância pra que mensagens mandadas de
+// outro aparelho conectado ao mesmo número (fora do CRM) cheguem no webhook
+// com o conteúdo (ver comentário no topo do arquivo) — mesmo padrão do
+// subscribeInstagramWebhook: chamada tanto ao cadastrar o canal quanto a
+// cada "Testar conexão" (idempotente, self-healing sem precisar reconectar).
+export async function enableZapiNotifySentByMe(
+  creds: ZapiChannelCredentials
+): Promise<void> {
+  const res = await fetch(`${baseUrl(creds)}/update-notify-sent-by-me`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "Client-Token": creds.zapiClientToken,
+    },
+    body: JSON.stringify({ notifySentByMe: true }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Falha ao habilitar notifySentByMe na Z-API (status ${res.status}): ${text}`
+    );
+  }
+}
 
 export async function checkZapiStatus(
   creds: ZapiChannelCredentials

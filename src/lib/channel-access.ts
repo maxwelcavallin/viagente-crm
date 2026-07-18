@@ -73,6 +73,21 @@ export async function getUsersWithChannelAccess(channelId: string): Promise<stri
   return allowed.map((u) => u.id);
 }
 
+// channelId não é FK'd a uma tabela só (ver comentário no topo do arquivo) —
+// usado por quem precisa saber pra qual provedor despachar (ex: cron de
+// mensagens agendadas, que não guarda channelType na própria linha).
+export async function getChannelType(
+  channelId: string
+): Promise<"whatsapp" | "instagram" | null> {
+  const [[whatsapp], [instagram]] = await Promise.all([
+    db.select({ id: whatsappChannels.id }).from(whatsappChannels).where(eq(whatsappChannels.id, channelId)).limit(1),
+    db.select({ id: instagramChannels.id }).from(instagramChannels).where(eq(instagramChannels.id, channelId)).limit(1),
+  ]);
+  if (whatsapp) return "whatsapp";
+  if (instagram) return "instagram";
+  return null;
+}
+
 export async function userHasChannelAccess(
   userId: string,
   role: "admin" | "atendente",

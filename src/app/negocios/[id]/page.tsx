@@ -12,6 +12,7 @@ import {
   deals,
   emailsSent,
   emailTemplates,
+  instagramChannels,
   lossReasons,
   meetingNotes,
   meetingNotesContacts,
@@ -150,7 +151,8 @@ export default async function DealDetailPage({
     contactTagRows,
     taskRows,
     manualStageTaskRows,
-    allowedChannels,
+    allowedWhatsappChannels,
+    allowedInstagramChannels,
     pendingScheduled,
     googleConnectionOwner,
     activityLogPage,
@@ -201,6 +203,16 @@ export default async function DealDetailPage({
             .from(whatsappChannels)
             .where(inArray(whatsappChannels.id, allowedChannelIds))
         : Promise.resolve([]),
+      allowedChannelIds.length > 0
+        ? db
+            .select({
+              id: instagramChannels.id,
+              label: instagramChannels.label,
+              isDefault: instagramChannels.isDefault,
+            })
+            .from(instagramChannels)
+            .where(inArray(instagramChannels.id, allowedChannelIds))
+        : Promise.resolve([]),
       getPendingScheduledMessages(contact.id),
       resolveConnectionOwner(session.user.id),
       getDealActivityLogPage(id),
@@ -234,6 +246,11 @@ export default async function DealDetailPage({
         .where(eq(meetingNotesContacts.dealId, id))
         .orderBy(desc(meetingNotes.meetingDate)),
     ]);
+
+  const allowedChannels = [
+    ...allowedWhatsappChannels.map((c) => ({ ...c, channelType: "whatsapp" as const })),
+    ...allowedInstagramChannels.map((c) => ({ ...c, channelType: "instagram" as const })),
+  ];
 
   const isGoogleConnected = googleConnectionOwner != null;
 

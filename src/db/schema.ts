@@ -374,6 +374,9 @@ export const contacts = pgTable(
     // Identidade do contato quando vem do Instagram Direct (IGSID) — ver
     // src/lib/messaging.ts findOrCreateContactByInstagramUserId.
     instagramUserId: text("instagram_user_id"),
+    // @ do Instagram (username público) — só pra exibição na UI (Atendimento),
+    // não é usado pra identidade/matching (isso é sempre via instagramUserId).
+    instagramUsername: text("instagram_username"),
     // Foto do contato ou do grupo (campo "photo"/"senderPhoto" da Z-API).
     avatarUrl: text("avatar_url"),
     // Marca de leitura compartilhada pela equipe (inbox único, não por
@@ -788,9 +791,10 @@ export const scheduledMessages = pgTable(
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
-    channelId: uuid("channel_id")
-      .notNull()
-      .references(() => whatsappChannels.id, { onDelete: "cascade" }),
+    // Sem FK de propósito (mesmo padrão de messages.channelId): pode apontar
+    // pra whatsapp_channels OU instagram_channels — channelType é resolvido
+    // em runtime via getChannelType (ver cron de envio agendado).
+    channelId: uuid("channel_id").notNull(),
     content: text("content").notNull(),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     status: scheduledMessageStatusEnum("status").notNull().default("pendente"),

@@ -80,17 +80,20 @@ async function handleMessagingEvent(event: InstagramMessagingEvent) {
 
   let profileName: string | null = null;
   let profilePic: string | null = null;
+  let profileUsername: string | null = null;
   const accessToken = decryptCredential(channel.accessToken);
   if (!isEcho) {
     const profile = await getInstagramUserProfile(accessToken, contactIgsid);
     profileName = profile?.name ?? null;
     profilePic = profile?.profilePic ?? null;
+    profileUsername = profile?.username ?? null;
   }
 
   const contact = await findOrCreateContactByInstagramUserId(
     contactIgsid,
     profileName ?? undefined,
-    profilePic ?? undefined
+    profilePic ?? undefined,
+    profileUsername ?? undefined
   );
 
   let dealId = await findOpenDealIdForContact(contact.id);

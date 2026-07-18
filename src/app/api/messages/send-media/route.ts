@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { contacts, messages, whatsappChannels } from "@/db/schema";
+import { contacts, instagramChannels, messages, whatsappChannels } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
 import { decryptCredential } from "@/lib/credentials-crypto";
+import { sendInstagramAttachment } from "@/lib/instagram-graph";
 import { findOpenDealIdForContact } from "@/lib/messaging";
 import { getMediaSignedUrl, mediaPrefix, type MediaKind } from "@/lib/storage";
 import {
@@ -17,6 +18,13 @@ import {
 export const dynamic = "force-dynamic";
 
 const VALID_TYPES: MediaKind[] = ["imagem", "audio", "documento", "video"];
+
+// Instagram Messaging não tem tipo "document" (ver sendInstagramAttachment).
+const INSTAGRAM_ATTACHMENT_TYPE: Partial<Record<MediaKind, "image" | "video" | "audio">> = {
+  imagem: "image",
+  video: "video",
+  audio: "audio",
+};
 
 function extensionFromFileName(fileName: string): string {
   const ext = fileName.split(".").pop();
@@ -91,53 +99,79 @@ export async function POST(request: Request) {
     );
   }
 
-  const [channel] = await db
-    .select()
-    .from(whatsappChannels)
-    .where(eq(whatsappChannels.id, body.channelId))
-    .limit(1);
+  // channelId não é FK'd a uma tabela só (canal pode ser WhatsApp OU
+  // Instagram, ver Etapa 25) — tenta achar nas duas.
+  const [[whatsappChannel], [instagramChannel]] = await Promise.all([
+    db.select().from(whatsappChannels).where(eq(whatsappChannels.id, body.channelId)).limit(1),
+    db.select().from(instagramChannels).where(eq(instagramChannels.id, body.channelId)).limit(1),
+  ]);
+  const channel = whatsappChannel ?? instagramChannel;
   if (!channel) {
     return Response.json({ error: "Canal não encontrado" }, { status: 404 });
   }
+  const channelType: "whatsapp" | "instagram" = whatsappChannel ? "whatsapp" : "instagram";
+
+  const type = body.type as MediaKind;
+  if (channelType === "instagram" && !INSTAGRAM_ATTACHMENT_TYPE[type]) {
+    return Response.json(
+      { error: "Instagram não suporta envio de documentos — só imagem, vídeo e áudio" },
+      { status: 400 }
+    );
+  }
 
   const [contact] = await db
-    .select({ id: contacts.id, phone: contacts.phone })
+    .select({ id: contacts.id, phone: contacts.phone, instagramUserId: contacts.instagramUserId })
     .from(contacts)
     .where(eq(contacts.id, body.contactId))
     .limit(1);
   if (!contact) {
     return Response.json({ error: "Contato não encontrado" }, { status: 404 });
   }
-  if (!contact.phone) {
+  if (channelType === "whatsapp" && !contact.phone) {
     return Response.json(
       { error: "Contato não tem telefone (WhatsApp)" },
       { status: 400 }
     );
   }
+  if (channelType === "instagram" && !contact.instagramUserId) {
+    return Response.json(
+      { error: "Contato não tem conta do Instagram vinculada" },
+      { status: 400 }
+    );
+  }
 
-  const type = body.type as MediaKind;
   const key = `${mediaPrefix(type)}/${channel.id}/${body.messageId}`;
 
   let externalMessageId: string;
   try {
     const signedUrl = await getMediaSignedUrl(key, { expiresInSeconds: 300 });
-    const { messageId } = await dispatchToZapi(
-      type,
-      {
-        zapiInstanceId: channel.zapiInstanceId,
-        zapiToken: decryptCredential(channel.zapiToken),
-        zapiClientToken: decryptCredential(channel.zapiClientToken),
-      },
-      contact.phone,
-      signedUrl,
-      body.caption?.trim() || undefined,
-      body.fileName || undefined
-    );
-    externalMessageId = messageId;
+    if (channelType === "instagram") {
+      const { messageId } = await sendInstagramAttachment(
+        decryptCredential(instagramChannel.accessToken),
+        contact.instagramUserId!,
+        INSTAGRAM_ATTACHMENT_TYPE[type]!,
+        signedUrl
+      );
+      externalMessageId = messageId;
+    } else {
+      const { messageId } = await dispatchToZapi(
+        type,
+        {
+          zapiInstanceId: whatsappChannel.zapiInstanceId,
+          zapiToken: decryptCredential(whatsappChannel.zapiToken),
+          zapiClientToken: decryptCredential(whatsappChannel.zapiClientToken),
+        },
+        contact.phone!,
+        signedUrl,
+        body.caption?.trim() || undefined,
+        body.fileName || undefined
+      );
+      externalMessageId = messageId;
+    }
   } catch (error) {
-    console.error("[messages/send-media] falha ao enviar via Z-API", error);
+    console.error(`[messages/send-media] falha ao enviar via ${channelType}`, error);
     return Response.json(
-      { error: "Falha ao enviar mídia via WhatsApp" },
+      { error: `Falha ao enviar mídia via ${channelType === "instagram" ? "Instagram" : "WhatsApp"}` },
       { status: 502 }
     );
   }
@@ -156,7 +190,7 @@ export async function POST(request: Request) {
       content: body.caption?.trim() || body.fileName || null,
       mediaUrl: `/api/media/${body.messageId}`,
       status: "enviado",
-      channelType: "whatsapp",
+      channelType,
       externalMessageId,
       replyToMessageId: body.replyToMessageId || null,
       replyToCreatedAt: body.replyToCreatedAt

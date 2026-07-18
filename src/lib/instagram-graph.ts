@@ -186,6 +186,39 @@ export async function sendInstagramText(
   return { messageId: data.message_id };
 }
 
+// Envia mídia via anexo por URL (Meta busca o arquivo na url informada) —
+// mesmo padrão de mediaUrl assinada já usado pra Z-API. Só image/video/audio:
+// a Messaging API do Instagram não tem um tipo "document" genérico (ver
+// developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging).
+export async function sendInstagramAttachment(
+  accessToken: string,
+  recipientIgsid: string,
+  type: "image" | "video" | "audio",
+  mediaUrl: string
+): Promise<{ messageId: string }> {
+  const url = `${GRAPH_BASE}/me/messages?${new URLSearchParams({ access_token: accessToken }).toString()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      recipient: { id: recipientIgsid },
+      message: { attachment: { type, payload: { url: mediaUrl } } },
+    }),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Falha ao enviar mídia via Instagram (status ${res.status}): ${errText}`);
+  }
+
+  const data = (await res.json()) as { message_id?: string };
+  if (!data.message_id) {
+    throw new Error("Graph API não retornou message_id na resposta de envio de mídia");
+  }
+  return { messageId: data.message_id };
+}
+
 // Perfil de quem mandou a mensagem — o payload do webhook só traz o IGSID,
 // sem nome/foto, então isso é uma chamada extra (só feita ao criar um
 // contato novo, ver /api/instagram/webhook). Retorna null em qualquer falha,
@@ -193,13 +226,17 @@ export async function sendInstagramText(
 export async function getInstagramUserProfile(
   accessToken: string,
   igsid: string
-): Promise<{ name: string | null; profilePic: string | null } | null> {
+): Promise<{ name: string | null; profilePic: string | null; username: string | null } | null> {
   try {
-    const data = await graphInstagramGet<{ name?: string; profile_pic?: string }>(
+    const data = await graphInstagramGet<{ name?: string; profile_pic?: string; username?: string }>(
       `${GRAPH_BASE}/${igsid}`,
-      { fields: "name,profile_pic", access_token: accessToken }
+      { fields: "name,profile_pic,username", access_token: accessToken }
     );
-    return { name: data.name ?? null, profilePic: data.profile_pic ?? null };
+    return {
+      name: data.name ?? null,
+      profilePic: data.profile_pic ?? null,
+      username: data.username ?? null,
+    };
   } catch {
     return null;
   }

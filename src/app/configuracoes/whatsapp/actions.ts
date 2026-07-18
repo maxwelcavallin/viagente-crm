@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { whatsappChannels } from "@/db/schema";
 import { decryptCredential, encryptCredential } from "@/lib/credentials-crypto";
-import { checkZapiStatus } from "@/lib/zapi";
+import { checkZapiStatus, enableZapiNotifySentByMe } from "@/lib/zapi";
 
 async function requireAdmin() {
   const session = await auth();
@@ -49,12 +49,24 @@ export async function createChannelAction(
     };
   }
 
+  const creds = {
+    zapiInstanceId: zapiInstanceId.trim(),
+    zapiToken: zapiToken.trim(),
+    zapiClientToken: zapiClientToken.trim(),
+  };
+
   await db.insert(whatsappChannels).values({
     label: label.trim(),
-    zapiInstanceId: zapiInstanceId.trim(),
-    zapiToken: encryptCredential(zapiToken.trim()),
-    zapiClientToken: encryptCredential(zapiClientToken.trim()),
+    zapiInstanceId: creds.zapiInstanceId,
+    zapiToken: encryptCredential(creds.zapiToken),
+    zapiClientToken: encryptCredential(creds.zapiClientToken),
     phoneNumber: typeof phoneNumber === "string" && phoneNumber.trim() ? phoneNumber.trim() : null,
+  });
+
+  // Best-effort — token já é válido nesse ponto (canal já foi criado); só
+  // loga se falhar, não bloqueia a criação do canal em si.
+  await enableZapiNotifySentByMe(creds).catch((error) => {
+    console.error("[whatsapp createChannelAction] falha ao habilitar notifySentByMe", error);
   });
 
   revalidatePath("/configuracoes/whatsapp");
@@ -83,11 +95,21 @@ export async function testConnectionAction(
     return { status: "error", message: "Canal não encontrado." };
   }
 
-  const result = await checkZapiStatus({
+  const creds = {
     zapiInstanceId: channel.zapiInstanceId,
     zapiToken: decryptCredential(channel.zapiToken),
     zapiClientToken: decryptCredential(channel.zapiClientToken),
-  });
+  };
+  const result = await checkZapiStatus(creds);
+
+  // Reafirma a cada teste — idempotente do lado da Z-API, e conserta de
+  // graça um canal que ficou conectado mas nunca teve isso habilitado (bug
+  // corrigido nesta sessão), sem precisar recriar o canal.
+  if (result.connected) {
+    await enableZapiNotifySentByMe(creds).catch((error) => {
+      console.error("[whatsapp testConnectionAction] falha ao habilitar notifySentByMe", error);
+    });
+  }
 
   await db
     .update(whatsappChannels)

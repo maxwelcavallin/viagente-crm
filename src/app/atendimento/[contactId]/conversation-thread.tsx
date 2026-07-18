@@ -25,14 +25,21 @@ import {
 } from "@/components/scheduled-messages-list";
 import { inferMediaKind, uploadAndSendMedia } from "@/lib/upload-media-client";
 import type { ThreadMessage } from "@/lib/conversations";
+import { LinkContactDialog, type LinkContactTarget } from "./link-contact-dialog";
 
 const ATTACHMENT_ACCEPT =
   "image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
+// Instagram Messaging só aceita imagem/vídeo/áudio como anexo — sem tipo
+// "document" genérico (ver sendInstagramAttachment em instagram-graph.ts).
+const INSTAGRAM_ATTACHMENT_ACCEPT = "image/*,video/*,audio/*";
 
 export function ConversationThread({
   contactId,
   contactName,
   contactPhone,
+  instagramUsername,
+  isInstagramContact,
+  linkTargets,
   isGroup,
   avatarUrl,
   initialMessages,
@@ -44,6 +51,9 @@ export function ConversationThread({
   contactId: string;
   contactName: string;
   contactPhone: string | null;
+  instagramUsername: string | null;
+  isInstagramContact: boolean;
+  linkTargets: LinkContactTarget[];
   isGroup: boolean;
   avatarUrl: string | null;
   initialMessages: ThreadMessage[];
@@ -66,7 +76,6 @@ export function ConversationThread({
 
   const selectedChannel = channels.find((c) => c.id === channelId);
   const isInstagramChannel = selectedChannel?.channelType === "instagram";
-  const whatsappChannels = channels.filter((c) => c.channelType !== "instagram");
 
   async function handleSend() {
     const message = text.trim();
@@ -102,18 +111,23 @@ export function ConversationThread({
   }
 
   async function sendMediaFile(file: File | Blob, fileName?: string) {
-    // Envio de mídia é WhatsApp-only nesta etapa (Instagram só texto, ver
-    // Etapa 25) — o botão de anexo/áudio já fica desabilitado nesse caso.
-    if (!channelId || isInstagramChannel) return;
+    if (!channelId) return;
+    const contentType = file.type || "application/octet-stream";
+    const kind = inferMediaKind(contentType);
+    // Instagram Messaging não tem tipo "document" — ver
+    // INSTAGRAM_ATTACHMENT_ACCEPT e sendInstagramAttachment.
+    if (isInstagramChannel && kind === "documento") {
+      setUploadError("Instagram não suporta esse tipo de arquivo — só imagem, vídeo e áudio.");
+      return;
+    }
     setIsUploading(true);
     setUploadError(null);
     try {
-      const contentType = file.type || "application/octet-stream";
       await uploadAndSendMedia({
         file,
         contentType,
         fileName,
-        kind: inferMediaKind(contentType),
+        kind,
         channelId,
         contactId,
         replyToMessageId: replyingTo?.id,
@@ -196,6 +210,8 @@ export function ConversationThread({
                   <Users size={12} strokeWidth={1.75} />
                   Grupo
                 </>
+              ) : instagramUsername ? (
+                `@${instagramUsername}`
               ) : (
                 contactPhone
               )}
@@ -203,6 +219,9 @@ export function ConversationThread({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {isInstagramContact && (
+            <LinkContactDialog sourceContactId={contactId} targets={linkTargets} />
+          )}
           <button
             type="button"
             onClick={() => setShowFavoritesOnly((v) => !v)}
@@ -289,8 +308,8 @@ export function ConversationThread({
                 variant="ghost"
                 size="icon"
                 aria-label="Anexar arquivo"
-                disabled={isUploading || isInstagramChannel}
-                title={isInstagramChannel ? "Envio de mídia ainda não disponível pro Instagram" : undefined}
+                disabled={isUploading}
+                title={isInstagramChannel ? "Instagram só aceita imagem, vídeo e áudio como anexo" : undefined}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={18} strokeWidth={1.75} />
@@ -300,16 +319,16 @@ export function ConversationThread({
                 type="file"
                 multiple
                 hidden
-                accept={ATTACHMENT_ACCEPT}
+                accept={isInstagramChannel ? INSTAGRAM_ATTACHMENT_ACCEPT : ATTACHMENT_ACCEPT}
                 onChange={handleFileChange}
               />
               <AudioRecorderButton
                 onRecorded={handleAudioRecorded}
-                disabled={isUploading || isInstagramChannel}
+                disabled={isUploading}
               />
               <ScheduleMessageDialog
                 contactId={contactId}
-                channels={whatsappChannels}
+                channels={channels}
                 defaultChannelId={channelId || preselectedChannelId}
                 defaultMessage={text}
                 onScheduled={() => setText("")}
