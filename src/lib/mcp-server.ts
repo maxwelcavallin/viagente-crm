@@ -64,6 +64,12 @@ import {
   updateWebhookForApiKey,
 } from "@/lib/api-v1-admin";
 import { hasAdminScope, type AuthenticatedApiKey } from "@/lib/api-keys";
+import {
+  getReferenceArticle,
+  listHelpCategories,
+  listReferenceArticlesByCategory,
+  searchHelpArticles,
+} from "@/lib/help";
 
 function textResult(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -384,6 +390,70 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
       const result = await completeTaskForApiKey(apiKey, taskId);
       if (!result.ok) return errorResult(result.error);
       return textResult(result.data);
+    }
+  );
+
+  // ---------- Central de Ajuda (Etapa 30) ----------
+  // Disponível em QUALQUER escopo (operacional ou admin) — é conteúdo de
+  // ajuda, não dado sensível do CRM. actingUser.role filtra artigos
+  // admin-only (mesmo critério usado nas páginas /ajuda).
+
+  server.registerTool(
+    "listar_categorias_ajuda",
+    {
+      title: "Listar categorias de ajuda",
+      description: "Lista as categorias da Central de Ajuda, cada uma com seus artigos de referência.",
+      inputSchema: {},
+    },
+    async () => {
+      const categories = await listHelpCategories();
+      const articlesByCategory = await listReferenceArticlesByCategory(apiKey.actingUser.role);
+      return textResult({
+        categories: categories
+          .map((c) => ({
+            name: c.name,
+            slug: c.slug,
+            articles: (articlesByCategory.get(c.id) ?? []).map((a) => ({ title: a.title, slug: a.slug })),
+          }))
+          .filter((c) => c.articles.length > 0),
+      });
+    }
+  );
+
+  server.registerTool(
+    "buscar_artigos_ajuda",
+    {
+      title: "Buscar artigos de ajuda",
+      description: "Busca artigos de referência da Central de Ajuda por palavra-chave no título ou conteúdo.",
+      inputSchema: { query: z.string().min(1) },
+    },
+    async ({ query }) => {
+      const results = await searchHelpArticles(query, apiKey.actingUser.role);
+      return textResult({
+        results: results.map((r) => ({
+          title: r.title,
+          categoria: r.categorySlug,
+          slug: r.slug,
+        })),
+      });
+    }
+  );
+
+  server.registerTool(
+    "obter_artigo_ajuda",
+    {
+      title: "Obter artigo de ajuda",
+      description: "Retorna o conteúdo completo de um artigo de referência da Central de Ajuda.",
+      inputSchema: { categoria: z.string(), slug: z.string() },
+    },
+    async ({ categoria, slug }) => {
+      const article = await getReferenceArticle(categoria, slug, apiKey.actingUser.role);
+      if (!article) return errorResult("Artigo não encontrado.");
+      return textResult({
+        title: article.title,
+        categoria: article.categorySlug,
+        conteudo: article.content,
+      });
     }
   );
 

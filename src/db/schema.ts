@@ -1338,3 +1338,62 @@ export const autoDealSettings = pgTable("auto_deal_settings", {
     .notNull()
     .defaultNow(),
 });
+
+// ---------- Central de Ajuda (Etapa 30) ----------
+// Conteúdo escrito e mantido via script de seed (scripts/seed-help-articles.ts),
+// não por uma tela de administração — mesmo espírito de "rascunho técnico
+// nascido da própria spec/código atual" da etapa. "referencia" é buscável e
+// não-sequencial (um artigo por funcionalidade); as duas trilhas de
+// "primeiros_passos" são sequenciais (usam "order" pra navegação
+// anterior/próximo). Sem tabela de screenshots nesta etapa — fica pra uma
+// etapa futura quando o pipeline de captura automática for implementado.
+export const helpTrackEnum = pgEnum("help_track", [
+  "primeiros_passos_admin",
+  "primeiros_passos_atendente",
+  "referencia",
+]);
+export const helpRoleVisibilityEnum = pgEnum("help_role_visibility", [
+  "todos",
+  "admin",
+  "atendente",
+]);
+
+export const helpCategories = pgTable(
+  "help_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    // Nome de ícone lucide-react (ex: "MessagesSquare") — resolvido pra
+    // componente numa tabela fixa no frontend, não é um valor livre do
+    // usuário (só o seed script cria categoria).
+    icon: text("icon").notNull(),
+    order: integer("order").notNull().default(0),
+  },
+  (t) => [uniqueIndex("help_categories_slug_idx").on(t.slug)]
+);
+
+export const helpArticles = pgTable(
+  "help_articles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: uuid("category_id").references(() => helpCategories.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    content: text("content").notNull(),
+    track: helpTrackEnum("track").notNull().default("referencia"),
+    // Só relevante dentro de uma trilha sequencial (primeiros_passos_*) —
+    // define a ordem de navegação anterior/próximo.
+    order: integer("order"),
+    roleVisibility: helpRoleVisibilityEnum("role_visibility").notNull().default("todos"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("help_articles_slug_idx").on(t.slug),
+    index("help_articles_category_id_idx").on(t.categoryId),
+    index("help_articles_track_idx").on(t.track),
+  ]
+);

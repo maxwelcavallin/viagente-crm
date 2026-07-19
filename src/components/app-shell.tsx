@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { HelpCircle } from "lucide-react";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { CollapsibleSidebar } from "@/components/collapsible-sidebar";
@@ -19,6 +21,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-base font-bold">CRM Viagente</span>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Central de Ajuda"
+            render={<Link href="/ajuda" />}
+          >
+            <HelpCircle strokeWidth={1.75} />
+          </Button>
           <NotificationBell />
           <ThemeToggle />
           <span className="hidden text-sm text-muted-foreground sm:inline">

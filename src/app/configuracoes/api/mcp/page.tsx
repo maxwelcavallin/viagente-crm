@@ -129,6 +129,12 @@ export default function McpDocsPage() {
                 <code className="font-mono text-foreground">concluir_tarefa</code>,{" "}
                 <code className="font-mono text-foreground">enviar_mensagem_whatsapp</code>
               </li>
+              <li>
+                <code className="font-mono text-foreground">listar_categorias_ajuda</code>,{" "}
+                <code className="font-mono text-foreground">buscar_artigos_ajuda</code>,{" "}
+                <code className="font-mono text-foreground">obter_artigo_ajuda</code> — conteúdo da
+                Central de Ajuda
+              </li>
             </ul>
           </div>
           <div>
