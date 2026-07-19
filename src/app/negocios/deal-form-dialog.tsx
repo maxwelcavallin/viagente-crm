@@ -105,10 +105,26 @@ function ContactPicker({
       formData
     );
     setIsPending(false);
-    if (result.status !== "success") {
-      if (result.status === "error") setCreatingError(result.message);
+    if (result.status === "error") {
+      setCreatingError(result.message);
       return;
     }
+    if (result.status === "duplicate") {
+      // Já existe um contato com esse telefone/email — usa ele em vez de
+      // criar duplicado (mesma lógica de "vincular" em vez de duplicar).
+      const existing = contacts.find((c) => c.id === result.existingContactId);
+      onSelect({
+        id: result.existingContactId,
+        name: existing?.name ?? result.existingContactName,
+        phone: existing?.phone ?? null,
+      });
+      setCreating(false);
+      setNewName("");
+      setNewPhone("");
+      setOpen(false);
+      return;
+    }
+    if (result.status !== "success") return;
     onSelect({ id: result.contactId, name: newName.trim(), phone: newPhone.trim() });
     setCreating(false);
     setNewName("");

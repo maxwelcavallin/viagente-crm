@@ -25,6 +25,10 @@ import {
 } from "@/components/scheduled-messages-list";
 import { inferMediaKind, uploadAndSendMedia } from "@/lib/upload-media-client";
 import type { ThreadMessage } from "@/lib/conversations";
+import {
+  DuplicateContactBanner,
+  type DuplicateContactInfo,
+} from "@/components/duplicate-contact-banner";
 import { LinkContactDialog, type LinkContactTarget } from "./link-contact-dialog";
 
 const ATTACHMENT_ACCEPT =
@@ -39,6 +43,7 @@ export function ConversationThread({
   contactPhone,
   instagramUsername,
   isInstagramContact,
+  duplicateContact,
   linkTargets,
   isGroup,
   avatarUrl,
@@ -53,6 +58,7 @@ export function ConversationThread({
   contactPhone: string | null;
   instagramUsername: string | null;
   isInstagramContact: boolean;
+  duplicateContact: DuplicateContactInfo | null;
   linkTargets: LinkContactTarget[];
   isGroup: boolean;
   avatarUrl: string | null;
@@ -239,13 +245,19 @@ export function ConversationThread({
             Favoritas
           </button>
           <a
-            href={`/api/conversations/${contactId}/export`}
+            href={`/api/conversations/${contactId}/export?channel=${preselectedChannelId ?? "none"}`}
             className="text-sm text-primary hover:underline"
           >
             Exportar conversa (.md)
           </a>
         </div>
       </div>
+
+      {duplicateContact && (
+        <div className="border-b border-border p-3">
+          <DuplicateContactBanner contactId={contactId} duplicate={duplicateContact} />
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4">
         <MessageList
@@ -286,7 +298,15 @@ export function ConversationThread({
               <Select
                 items={Object.fromEntries(channels.map((c) => [c.id, c.label]))}
                 value={channelId}
-                onValueChange={(value) => setChannelId(value ?? "")}
+                onValueChange={(value) => {
+                  setChannelId(value ?? "");
+                  // Cada canal é uma conversa separada (ver conversations.ts)
+                  // — trocar o canal aqui troca de conversa, não só o canal
+                  // de envio. A página recarrega as mensagens desse canal
+                  // (ConversationThread remonta via key={channelId} no
+                  // page.tsx).
+                  if (value) router.push(`/atendimento/${contactId}?channel=${value}`);
+                }}
               >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Canal" />

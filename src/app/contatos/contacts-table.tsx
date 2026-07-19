@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Users } from "lucide-react";
+import { Plus, Search, TriangleAlert, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
 
 export type ContactRow = ContactData & {
   tags: TagOption[];
+  duplicateName: string | null;
 };
 
 function matchesSearch(contact: ContactRow, term: string): boolean {
@@ -116,12 +117,24 @@ export function ContactsTable({
             {filtered.map((contact) => (
               <TableRow key={contact.id}>
                 <TableCell>
-                  <Link
-                    href={`/contatos/${contact.id}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {contact.name}
-                  </Link>
+                  <div className="flex items-center gap-1.5">
+                    <Link
+                      href={`/contatos/${contact.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {contact.name}
+                    </Link>
+                    {contact.duplicateName && (
+                      <TriangleAlert
+                        size={14}
+                        strokeWidth={1.75}
+                        className="shrink-0 text-status-warning"
+                        aria-label={`Possível duplicata de ${contact.duplicateName}`}
+                      >
+                        <title>{`Possível duplicata de ${contact.duplicateName}`}</title>
+                      </TriangleAlert>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>{contact.phone ?? "—"}</TableCell>
                 <TableCell>{contact.email ?? "—"}</TableCell>

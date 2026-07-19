@@ -30,18 +30,25 @@ export type ConversationSummary = {
   ownerName: string | null;
 };
 
+// Uma "conversa" é o par (contato, canal) — não o contato sozinho: um
+// contato pode ter várias conversas separadas (ex: WhatsApp e Instagram),
+// igual pode ter vários negócios ou várias notas de reunião. Nunca
+// misturamos o histórico de canais diferentes numa única lista de
+// mensagens (ver decisão explícita do usuário — antes disso, um contato
+// com >1 canal tinha as mensagens intercaladas numa thread só).
 export async function listConversations(
   allowedChannelIds: string[],
   currentUser: VisibilityUser
 ): Promise<ConversationSummary[]> {
   const channelFilter = buildChannelFilter(allowedChannelIds);
 
-  // DISTINCT ON exige que o primeiro ORDER BY seja a própria coluna do
-  // agrupamento (contactId); reordenamos por data no JS depois, sobre um
-  // conjunto já reduzido a 1 linha por contato. Junta contacts aqui só pra
-  // poder aplicar a restrição de visibilidade por dono direto na query.
+  // DISTINCT ON exige que o primeiro ORDER BY seja as próprias colunas do
+  // agrupamento (contactId, channelId); reordenamos por data no JS depois,
+  // sobre um conjunto já reduzido a 1 linha por (contato, canal). Junta
+  // contacts aqui só pra poder aplicar a restrição de visibilidade por dono
+  // direto na query.
   const latest = await db
-    .selectDistinctOn([messages.contactId], {
+    .selectDistinctOn([messages.contactId, messages.channelId], {
       contactId: messages.contactId,
       channelId: messages.channelId,
       content: messages.content,
@@ -53,7 +60,7 @@ export async function listConversations(
     .from(messages)
     .innerJoin(contacts, eq(contacts.id, messages.contactId))
     .where(and(channelFilter, ownerVisibilityFilter(contacts.ownerId, currentUser)))
-    .orderBy(messages.contactId, desc(messages.createdAt));
+    .orderBy(messages.contactId, messages.channelId, desc(messages.createdAt));
 
   if (latest.length === 0) return [];
 
@@ -98,10 +105,14 @@ export async function listConversations(
 
   // Não lida = mensagem de entrada mais nova que a última leitura registrada
   // pra aquele contato (contacts.lastReadAt) — marca compartilhada por toda a
-  // equipe, não por usuário (ver markContactRead).
+  // equipe, não por usuário (ver markContactRead). Continua por CONTATO
+  // (não por canal) de propósito: é uma simplificação deliberada, já que
+  // lastReadAt é uma coluna só por contato — abrir qualquer uma das
+  // conversas do contato marca todas como lidas por ora.
   const unreadRows = await db
     .select({
       contactId: messages.contactId,
+      channelId: messages.channelId,
       count: sql<number>`count(*)::int`,
     })
     .from(messages)
@@ -114,8 +125,10 @@ export async function listConversations(
         or(isNull(contacts.lastReadAt), gt(messages.createdAt, contacts.lastReadAt))
       )
     )
-    .groupBy(messages.contactId);
-  const unreadByContact = new Map(unreadRows.map((r) => [r.contactId, r.count]));
+    .groupBy(messages.contactId, messages.channelId);
+  const unreadByKey = new Map(
+    unreadRows.map((r) => [`${r.contactId}:${r.channelId}`, r.count])
+  );
 
   const summaries: ConversationSummary[] = latest.map((m) => {
     const contact = contactById.get(m.contactId);
@@ -133,7 +146,7 @@ export async function listConversations(
       lastMessagePreview: m.type === "texto" ? m.content ?? "" : `📎 ${m.type}`,
       lastMessageDirection: m.direction,
       lastMessageSenderName: m.senderName,
-      unreadCount: unreadByContact.get(m.contactId) ?? 0,
+      unreadCount: unreadByKey.get(`${m.contactId}:${m.channelId}`) ?? 0,
       ownerId: contact?.ownerId ?? null,
       ownerName: contact?.ownerName ?? null,
     };
@@ -175,11 +188,25 @@ export type ThreadMessage = {
   senderAvatarUrl: string | null;
 };
 
+// channelId identifica QUAL conversa do contato mostrar (ver comentário em
+// listConversations): um id real filtra pra aquele canal só, null filtra só
+// mensagens sem canal (raro, mas messages.channel_id é nullable), e
+// undefined não filtra por canal — traz tudo junto (usado só pelas telas
+// que ainda mostram o histórico mesclado como referência: contato, negócio,
+// API pública). allowedChannelIds continua sendo a checagem de
+// permissão/visibilidade, independente da conversa escolhida.
 export async function getThread(
   contactId: string,
+  channelId: string | null | undefined,
   allowedChannelIds: string[]
 ): Promise<ThreadMessage[]> {
   const channelFilter = buildChannelFilter(allowedChannelIds);
+  const conversationFilter =
+    channelId === undefined
+      ? undefined
+      : channelId
+        ? eq(messages.channelId, channelId)
+        : isNull(messages.channelId);
   const rows = await db
     .select({
       id: messages.id,
@@ -211,7 +238,7 @@ export async function getThread(
         eq(messages.replyToCreatedAt, replyToMessages.createdAt)
       )
     )
-    .where(and(eq(messages.contactId, contactId), channelFilter))
+    .where(and(eq(messages.contactId, contactId), conversationFilter, channelFilter))
     .orderBy(asc(messages.createdAt));
 
   return rows.map(({ replyToType, replyToContent, ...row }) => ({
@@ -220,4 +247,23 @@ export async function getThread(
       ? { type: replyToType!, content: replyToContent }
       : null,
   }));
+}
+
+// Canal da conversa mais recente de um contato — usado como padrão de qual
+// conversa abrir quando não vem um ?channel= explícito na URL (ex: link de
+// notificação, ou primeira visita). Não é o único critério: o caller ainda
+// cai pro canal padrão/primeiro permitido se o contato não tiver nenhuma
+// mensagem ainda.
+export async function getMostRecentChannelId(
+  contactId: string,
+  allowedChannelIds: string[]
+): Promise<string | null> {
+  const channelFilter = buildChannelFilter(allowedChannelIds);
+  const [row] = await db
+    .select({ channelId: messages.channelId })
+    .from(messages)
+    .where(and(eq(messages.contactId, contactId), channelFilter))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  return row?.channelId ?? null;
 }

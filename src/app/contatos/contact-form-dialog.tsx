@@ -60,18 +60,54 @@ export function ContactFormDialog({
     new Set(contact?.tagIds ?? [])
   );
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<{
+    contactId: string;
+    name: string;
+    field: string;
+  } | null>(null);
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [isPending, setIsPending] = useState(false);
   const action = mode === "create" ? createContactAction : updateContactAction;
 
   async function handleSubmit(formData: FormData) {
     setIsPending(true);
     setError(null);
+    setDuplicate(null);
     const result = await action(idleState, formData);
     setIsPending(false);
     if (result.status === "error") {
       setError(result.message);
       return;
     }
+    if (result.status === "duplicate") {
+      setDuplicate({
+        contactId: result.existingContactId,
+        name: result.existingContactName,
+        field: result.matchedField,
+      });
+      setPendingFormData(formData);
+      return;
+    }
+    setOpen(false);
+    router.refresh();
+  }
+
+  // Só existe em modo "edit": os dois contatos já existem de verdade, então
+  // em vez de bloquear a edição, oferece mesclar (ver mergeContactsInto).
+  async function handleConfirmMerge() {
+    if (!pendingFormData) return;
+    setIsPending(true);
+    setError(null);
+    pendingFormData.set("confirmMerge", "true");
+    const result = await action(idleState, pendingFormData);
+    setIsPending(false);
+    if (result.status === "error") {
+      setError(result.message);
+      setDuplicate(null);
+      return;
+    }
+    setDuplicate(null);
+    setPendingFormData(null);
     setOpen(false);
     router.refresh();
   }
@@ -136,6 +172,43 @@ export function ContactFormDialog({
           />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {duplicate && (
+            <div className="space-y-2 rounded-md border border-status-warning/40 bg-status-warning/10 p-2.5 text-sm">
+              <p>
+                Já existe um contato com esse {duplicate.field}:{" "}
+                <span className="font-medium">{duplicate.name}</span>.
+              </p>
+              {mode === "create" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/contatos/${duplicate.contactId}`)}
+                >
+                  Ver contato existente
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={handleConfirmMerge}
+                  >
+                    {isPending ? "Mesclando..." : "Mesclar e salvar"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDuplicate(null)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               Cancelar

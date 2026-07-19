@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, ne } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -12,6 +12,7 @@ import {
   deals,
   messages,
 } from "@/db/schema";
+import { findDuplicateContact, mergeContactsInto } from "@/lib/contact-merge";
 import { syncDealOwnerFromContact } from "@/lib/owner-distribution";
 
 async function requireSession() {
@@ -22,6 +23,12 @@ async function requireSession() {
 export type ContactFormState =
   | { status: "idle" }
   | { status: "error"; message: string }
+  | {
+      status: "duplicate";
+      existingContactId: string;
+      existingContactName: string;
+      matchedField: "telefone" | "email";
+    }
   | { status: "success"; contactId: string };
 
 async function buildCustomFields(
@@ -40,19 +47,6 @@ async function buildCustomFields(
     }
   }
   return customFields;
-}
-
-async function phoneConflicts(phone: string, excludeId?: string) {
-  const [existing] = await db
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(
-      excludeId
-        ? and(eq(contacts.phone, phone), ne(contacts.id, excludeId))
-        : eq(contacts.phone, phone)
-    )
-    .limit(1);
-  return Boolean(existing);
 }
 
 async function syncTags(contactId: string, tagIds: string[]) {
@@ -92,10 +86,18 @@ export async function createContactAction(
   }
 
   const normalizedPhone = phone.trim();
-  if (await phoneConflicts(normalizedPhone)) {
+  const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
+
+  // Nunca cria um contato duplicado por telefone ou email já existente —
+  // sempre pede pra usar/vincular o contato encontrado em vez de criar um
+  // novo (decisão explícita do usuário).
+  const duplicate = await findDuplicateContact(normalizedPhone, normalizedEmail);
+  if (duplicate) {
     return {
-      status: "error",
-      message: "Já existe um contato com esse telefone.",
+      status: "duplicate",
+      existingContactId: duplicate.id,
+      existingContactName: duplicate.name,
+      matchedField: duplicate.matchedField,
     };
   }
 
@@ -106,7 +108,7 @@ export async function createContactAction(
     .values({
       name: name.trim(),
       phone: normalizedPhone,
-      email: typeof email === "string" && email.trim() ? email.trim() : null,
+      email: normalizedEmail,
       customFields,
     })
     .returning({ id: contacts.id });
@@ -141,11 +143,24 @@ export async function updateContactAction(
   }
 
   const normalizedPhone = phone.trim();
-  if (await phoneConflicts(normalizedPhone, id)) {
+  const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
+  const confirmMerge = formData.get("confirmMerge") === "true";
+
+  const duplicate = await findDuplicateContact(normalizedPhone, normalizedEmail, id);
+  if (duplicate && !confirmMerge) {
+    // Aqui os dois contatos já existem de verdade (não é criação) — em vez
+    // de bloquear, oferece mesclar: o form reenvia com confirmMerge=true
+    // pra confirmar.
     return {
-      status: "error",
-      message: "Já existe um contato com esse telefone.",
+      status: "duplicate",
+      existingContactId: duplicate.id,
+      existingContactName: duplicate.name,
+      matchedField: duplicate.matchedField,
     };
+  }
+  if (duplicate && confirmMerge) {
+    const merged = await mergeContactsInto(duplicate.id, id);
+    if (!merged.ok) return { status: "error", message: merged.error };
   }
 
   const customFields = await buildCustomFields(formData);
@@ -155,7 +170,7 @@ export async function updateContactAction(
     .set({
       name: name.trim(),
       phone: normalizedPhone,
-      email: typeof email === "string" && email.trim() ? email.trim() : null,
+      email: normalizedEmail,
       customFields,
     })
     .where(eq(contacts.id, id));

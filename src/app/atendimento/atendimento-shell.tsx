@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronDown, Filter, MessagesSquare, Search, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,13 @@ function truncateChars(text: string, maxChars: number): string {
   return text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}…` : text;
 }
 
+// "none" é o valor literal do param ?channel= pra conversas sem canal (raro,
+// mas messages.channel_id é nullable) — distingue de "sem param nenhum"
+// (que faz o servidor escolher um canal padrão, ver [contactId]/page.tsx).
+function conversationHref(contactId: string, channelId: string | null): string {
+  return `/atendimento/${contactId}?channel=${channelId ?? "none"}`;
+}
+
 function ConversationAvatar({ conversation }: { conversation: ConversationSummary }) {
   return (
     <Avatar>
@@ -98,6 +105,7 @@ export function AtendimentoShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   // Abaixo de `lg`, navegação de duas telas (lista ↔ conversa em tela
   // cheia), no padrão do WhatsApp mobile — ver seção 6 do design system.
   const isListRoute = pathname === "/atendimento";
@@ -411,7 +419,9 @@ export function AtendimentoShell({
         ) : (
           <ul>
             {filteredConversations.map((conversation) => {
-              const isActive = pathname === `/atendimento/${conversation.contactId}`;
+              const isActive =
+                pathname === `/atendimento/${conversation.contactId}` &&
+                searchParams.get("channel") === (conversation.channelId ?? "none");
               const isUnread = conversation.unreadCount > 0;
               const senderPrefix =
                 conversation.lastMessageDirection === "saida"
@@ -421,7 +431,10 @@ export function AtendimentoShell({
                     : "";
               const isSelected = selectedIds.has(conversation.contactId);
               return (
-                <li key={conversation.contactId} className="flex items-stretch">
+                <li
+                  key={`${conversation.contactId}-${conversation.channelId ?? "none"}`}
+                  className="flex items-stretch"
+                >
                   <button
                     type="button"
                     onClick={() => toggleSelect(conversation.contactId)}
@@ -444,7 +457,7 @@ export function AtendimentoShell({
                     </span>
                   </button>
                   <Link
-                    href={`/atendimento/${conversation.contactId}`}
+                    href={conversationHref(conversation.contactId, conversation.channelId)}
                     className={cn(
                       "flex flex-1 items-start gap-2.5 border-b border-border p-3 hover:bg-accent",
                       isActive && "bg-accent"

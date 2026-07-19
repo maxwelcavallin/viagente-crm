@@ -556,7 +556,10 @@ export async function getDealConversation(
   }
 
   const allowedChannelIds = await getAllowedChannelIds(actingUser.id, actingUser.role);
-  const thread = await getThread(deal.contactId, allowedChannelIds);
+  // undefined = sem filtro de canal — API pública continua devolvendo o
+  // histórico mesclado (consumidor externo decide o que fazer com
+  // channelId/channelLabel por mensagem).
+  const thread = await getThread(deal.contactId, undefined, allowedChannelIds);
   return { ok: true, data: thread };
 }
 

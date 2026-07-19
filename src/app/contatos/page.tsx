@@ -43,6 +43,26 @@ export default async function ContatosPage() {
     tagIdsByContact.set(row.contactId, list);
   }
 
+  // Duplicidade por telefone/email: já vem tudo carregado em memória acima
+  // (mesmo padrão de outras listas do app), então agrupar aqui é mais barato
+  // que uma query por contato — telefone tem prioridade sobre email quando
+  // os dois batem em contatos diferentes.
+  const byPhone = new Map<string, typeof contactRows>();
+  const byEmail = new Map<string, typeof contactRows>();
+  for (const c of contactRows) {
+    if (c.phone) byPhone.set(c.phone, [...(byPhone.get(c.phone) ?? []), c]);
+    if (c.email) byEmail.set(c.email, [...(byEmail.get(c.email) ?? []), c]);
+  }
+  const duplicateNameByContact = new Map<string, string>();
+  for (const group of [...byPhone.values(), ...byEmail.values()]) {
+    if (group.length < 2) continue;
+    for (const c of group) {
+      if (duplicateNameByContact.has(c.id)) continue;
+      const other = group.find((o) => o.id !== c.id);
+      if (other) duplicateNameByContact.set(c.id, other.name);
+    }
+  }
+
   const rows: ContactRow[] = contactRows.map((contact) => {
     const tagIds = tagIdsByContact.get(contact.id) ?? [];
     return {
@@ -52,6 +72,7 @@ export default async function ContatosPage() {
       email: contact.email,
       customFields: (contact.customFields as Record<string, unknown>) ?? {},
       tagIds,
+      duplicateName: duplicateNameByContact.get(contact.id) ?? null,
       tags: tagIds
         .map((id) => tagById.get(id))
         .filter((tag): tag is TagOption => Boolean(tag)),

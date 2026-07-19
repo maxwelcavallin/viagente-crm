@@ -95,7 +95,7 @@ export function LinkContactDialog({
         <Link2 size={14} strokeWidth={1.75} />
         Vincular a contato existente
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Vincular contato do Instagram</DialogTitle>
           <DialogDescription>
@@ -104,7 +104,7 @@ export function LinkContactDialog({
             duplicado do Instagram.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="min-h-0 space-y-3">
           <div className="relative">
             <Search
               size={14}
@@ -112,7 +112,6 @@ export function LinkContactDialog({
               className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
             />
             <Input
-              autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar contato ou negócio..."

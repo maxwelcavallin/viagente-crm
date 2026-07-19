@@ -10,7 +10,8 @@ import {
   whatsappChannels,
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
-import { getThread, markContactRead } from "@/lib/conversations";
+import { findDuplicateContact } from "@/lib/contact-merge";
+import { getMostRecentChannelId, getThread, markContactRead } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { findOpenDealIdForContact } from "@/lib/messaging";
@@ -22,15 +23,22 @@ import { ConversationThread } from "./conversation-thread";
 
 export const dynamic = "force-dynamic";
 
+// "none" é o valor literal do param ?channel= pra conversas sem canal (raro,
+// mas messages.channel_id é nullable) — distingue de "sem param nenhum".
+const NO_CHANNEL_PARAM = "none";
+
 export default async function ConversationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ contactId: string }>;
+  searchParams: Promise<{ channel?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { contactId } = await params;
+  const { channel: channelParam } = await searchParams;
 
   const [contact] = await db
     .select({
@@ -56,15 +64,8 @@ export default async function ConversationPage({
     session.user.role
   );
 
-  // Marca lida pra equipe inteira ao abrir a conversa (inbox compartilhado).
-  // Só reflete no contador da lista no próximo router.refresh() do polling
-  // em AtendimentoShell, não instantaneamente — mesmo comportamento de
-  // atraso já aceito hoje pra mensagens novas chegando.
-  await markContactRead(contactId);
-
-  const [thread, allowedWhatsappChannels, allowedInstagramChannels, pendingScheduled, openDealId, fieldDefRows] =
+  const [allowedWhatsappChannels, allowedInstagramChannels, pendingScheduled, openDealId, fieldDefRows] =
     await Promise.all([
-      getThread(contactId, allowedChannelIds),
       allowedChannelIds.length > 0
         ? db
             .select({ id: whatsappChannels.id, label: whatsappChannels.label, isDefault: whatsappChannels.isDefault })
@@ -86,6 +87,31 @@ export default async function ConversationPage({
     ...allowedWhatsappChannels.map((c) => ({ ...c, channelType: "whatsapp" as const })),
     ...allowedInstagramChannels.map((c) => ({ ...c, channelType: "instagram" as const })),
   ];
+  const defaultChannel = allowedChannels.find((c) => c.isDefault);
+
+  // Cada (contato, canal) é uma conversa separada (ver conversations.ts) —
+  // sem ?channel= explícito, resolve qual conversa abrir por padrão (a mais
+  // recente, senão o canal padrão, senão o primeiro permitido) e redireciona
+  // pra URL canônica, pra sempre refletir no ativo da lista e no histórico
+  // do navegador.
+  let selectedChannelId: string | null;
+  if (channelParam === undefined) {
+    const mostRecentChannelId = await getMostRecentChannelId(contactId, allowedChannelIds);
+    selectedChannelId = mostRecentChannelId ?? defaultChannel?.id ?? allowedChannels[0]?.id ?? null;
+    redirect(`/atendimento/${contactId}?channel=${selectedChannelId ?? NO_CHANNEL_PARAM}`);
+  } else {
+    selectedChannelId = channelParam === NO_CHANNEL_PARAM ? null : channelParam;
+  }
+
+  // Marca lida pra equipe inteira ao abrir a conversa (inbox compartilhado).
+  // Só reflete no contador da lista no próximo router.refresh() do polling
+  // em AtendimentoShell, não instantaneamente — mesmo comportamento de
+  // atraso já aceito hoje pra mensagens novas chegando. Continua por
+  // CONTATO (não por conversa) — simplificação deliberada, ver comentário
+  // em listConversations.
+  await markContactRead(contactId);
+
+  const thread = await getThread(contactId, selectedChannelId, allowedChannelIds);
 
   // Alvos pra "vincular a contato existente" (ver Etapa 25) — só monta a
   // lista quando faz sentido (contato veio do Instagram), já que exige duas
@@ -164,21 +190,22 @@ export default async function ConversationPage({
     });
   }
 
-  const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
-  const defaultChannel = allowedChannels.find((c) => c.isDefault);
+  // A conversa atual já fixa o canal do envio — só cai pro padrão/primeiro
+  // permitido no caso raro de a conversa aberta não ter canal (null).
   const preselectedChannelId =
-    (lastChannelId && allowedChannels.some((c) => c.id === lastChannelId) ? lastChannelId : null) ??
-    defaultChannel?.id ??
-    allowedChannels[0]?.id ??
-    null;
+    selectedChannelId ?? defaultChannel?.id ?? allowedChannels[0]?.id ?? null;
+
+  const duplicateContact = await findDuplicateContact(contact.phone, contact.email, contact.id);
 
   return (
     <ConversationThread
+      key={selectedChannelId ?? NO_CHANNEL_PARAM}
       contactId={contact.id}
       contactName={contact.name}
       contactPhone={contact.phone}
       instagramUsername={contact.instagramUsername}
       isInstagramContact={Boolean(contact.instagramUserId)}
+      duplicateContact={duplicateContact}
       linkTargets={linkTargets}
       isGroup={contact.isGroup}
       avatarUrl={contact.avatarUrl}

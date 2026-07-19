@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, customFieldDefinitions, deals } from "@/db/schema";
+import { findDuplicateContact } from "@/lib/contact-merge";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -101,22 +102,27 @@ export async function importCsvBatch(params: {
       Object.entries(resolved.dealCustomFields).filter(([key]) => knownDealKeys.has(key))
     );
 
-    const [existingContact] = await db
-      .select({ id: contacts.id, customFields: contacts.customFields })
-      .from(contacts)
-      .where(eq(contacts.phone, phone))
-      .limit(1);
+    // Telefone OU email já cadastrado em outro contato: nunca cria
+    // duplicado — atualiza o contato existente e cria só um negócio novo
+    // pra ele (decisão explícita do usuário, mesmo padrão de "vincular em
+    // vez de duplicar").
+    const duplicate = await findDuplicateContact(phone, resolved.contactEmail);
 
     let contactId: string;
-    if (existingContact) {
-      contactId = existingContact.id;
+    if (duplicate) {
+      contactId = duplicate.id;
+      const [existingContact] = await db
+        .select({ customFields: contacts.customFields })
+        .from(contacts)
+        .where(eq(contacts.id, contactId))
+        .limit(1);
       await db
         .update(contacts)
         .set({
           ...(resolved.contactName ? { name: resolved.contactName } : {}),
           ...(resolved.contactEmail ? { email: resolved.contactEmail } : {}),
           customFields: {
-            ...((existingContact.customFields as Record<string, unknown>) ?? {}),
+            ...((existingContact?.customFields as Record<string, unknown>) ?? {}),
             ...filteredContactCustom,
           },
         })

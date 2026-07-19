@@ -16,9 +16,11 @@ import {
   users,
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
+import { findDuplicateContact } from "@/lib/contact-merge";
 import { getThread } from "@/lib/conversations";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DuplicateContactBanner } from "@/components/duplicate-contact-banner";
 import { MessageList } from "@/components/message-list";
 import { MeetingNotesList, type MeetingNoteItem } from "@/components/meeting-notes-list";
 import { ContactFormDialog, type FieldDef, type TagOption } from "../contact-form-dialog";
@@ -96,7 +98,10 @@ export default async function ContatoDetailPage({
       .orderBy(desc(meetingNotes.meetingDate)),
   ]);
 
-  const thread = await getThread(id, allowedChannelIds);
+  // undefined = sem filtro de canal — esta página mostra o histórico como
+  // referência mesclada, diferente do Atendimento (que separa por canal).
+  const thread = await getThread(id, undefined, allowedChannelIds);
+  const duplicate = await findDuplicateContact(contact.phone, contact.email, id);
 
   const fieldDefinitions: FieldDef[] = fieldDefRows.map((row) => ({
     id: row.id,
@@ -147,6 +152,8 @@ export default async function ContatoDetailPage({
         <ArrowLeft size={16} strokeWidth={1.75} />
         Contatos
       </Link>
+
+      {duplicate && <DuplicateContactBanner contactId={contact.id} duplicate={duplicate} />}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">

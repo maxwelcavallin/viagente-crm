@@ -26,6 +26,7 @@ import {
   whatsappChannels,
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
+import { findDuplicateContact } from "@/lib/contact-merge";
 import { getThread } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { getDealActivityLogPage } from "@/lib/deal-activity-log";
@@ -39,6 +40,7 @@ import type { TagOption } from "@/lib/tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DuplicateContactBanner } from "@/components/duplicate-contact-banner";
 import { MessageList } from "@/components/message-list";
 import { ScheduleMessageDialog } from "@/components/schedule-message-dialog";
 import { ScheduledMessagesList } from "@/components/scheduled-messages-list";
@@ -160,7 +162,10 @@ export default async function DealDetailPage({
     emailsSentRows,
     meetingNoteRows,
   ] = await Promise.all([
-      getThread(contact.id, allowedChannelIds),
+      // undefined = sem filtro de canal — esta página mostra o histórico
+      // como referência mesclada, diferente do Atendimento (que separa por
+      // canal).
+      getThread(contact.id, undefined, allowedChannelIds),
       db
         .select()
         .from(customFieldDefinitions)
@@ -251,6 +256,8 @@ export default async function DealDetailPage({
     ...allowedWhatsappChannels.map((c) => ({ ...c, channelType: "whatsapp" as const })),
     ...allowedInstagramChannels.map((c) => ({ ...c, channelType: "instagram" as const })),
   ];
+
+  const duplicateContact = await findDuplicateContact(contact.phone, contact.email, contact.id);
 
   const isGoogleConnected = googleConnectionOwner != null;
 
@@ -507,7 +514,10 @@ export default async function DealDetailPage({
               triggerLabel="Editar contato"
             />
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {duplicateContact && (
+              <DuplicateContactBanner contactId={contact.id} duplicate={duplicateContact} />
+            )}
             <dl className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-0.5">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">

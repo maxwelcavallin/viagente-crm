@@ -35,6 +35,11 @@ export async function GET(
   }
 
   const { contactId } = await params;
+  // ?channel= exporta só aquela conversa (ver Etapa "não misturar canais");
+  // sem o param, mantém o comportamento antigo de mesclar tudo (link antigo
+  // ou uso direto da rota).
+  const channelParam = new URL(request.url).searchParams.get("channel");
+  const channelId = channelParam === null ? undefined : channelParam === "none" ? null : channelParam;
 
   const [contact] = await db
     .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
@@ -50,7 +55,7 @@ export async function GET(
     session.user.role
   );
 
-  const thread = await getThread(contactId, allowedChannelIds);
+  const thread = await getThread(contactId, channelId, allowedChannelIds);
 
   const channelLabels = Array.from(
     new Set(thread.map((m) => m.channelLabel).filter((label): label is string => Boolean(label)))
