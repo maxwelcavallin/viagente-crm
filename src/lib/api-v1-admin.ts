@@ -199,6 +199,32 @@ export async function listLossReasonsForApiKey(
   return { ok: true, data: rows };
 }
 
+// Espelha createLossReasonAction (src/app/configuracoes/pipelines/[id]/actions.ts)
+// — mesma regra de lá: sem checagem de nome duplicado (motivos de perda não
+// são únicos por label), só acumula no fim da ordem da pipeline.
+export async function createLossReasonForApiKey(
+  apiKey: AuthenticatedApiKey,
+  params: { pipelineId: string; label: string }
+): Promise<ApiResult<{ id: string }>> {
+  const forbidden = requireAdminScope(apiKey);
+  if (forbidden) return forbidden;
+  if (!params.label.trim()) return { ok: false, status: 400, error: "label é obrigatório." };
+
+  const existing = await db
+    .select({ order: lossReasons.order })
+    .from(lossReasons)
+    .where(eq(lossReasons.pipelineId, params.pipelineId));
+  const nextOrder = existing.length > 0 ? Math.max(...existing.map((r) => r.order)) + 1 : 0;
+
+  const [created] = await db
+    .insert(lossReasons)
+    .values({ pipelineId: params.pipelineId, label: params.label.trim(), order: nextOrder })
+    .returning({ id: lossReasons.id });
+
+  void logApiWrite(apiKey.id, "loss_reason", created.id, "create");
+  return { ok: true, data: { id: created.id } };
+}
+
 // ---------- Stage tasks (tarefas automáticas de etapa) ----------
 
 type StageTaskInput = {

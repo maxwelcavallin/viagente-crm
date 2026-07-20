@@ -23,6 +23,7 @@ import {
   createAutomationSequenceForApiKey,
   createCustomFieldForApiKey,
   createEmailTemplateForApiKey,
+  createLossReasonForApiKey,
   createMessageTemplateForApiKey,
   createPipelineForApiKey,
   createStageForApiKey,
@@ -602,6 +603,19 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
         const result = await listLossReasonsForApiKey(apiKey, pipelineId);
         if (!result.ok) return errorResult(result.error);
         return textResult({ lossReasons: result.data });
+      }
+    );
+    server.registerTool(
+      "criar_motivo_perda",
+      {
+        title: "Criar motivo de perda",
+        description: "Cria um novo motivo de perda numa pipeline (usado ao marcar negócio como perdido).",
+        inputSchema: { pipelineId: z.string().uuid(), label: z.string().min(1) },
+      },
+      async (args) => {
+        const result = await createLossReasonForApiKey(apiKey, args);
+        if (!result.ok) return errorResult(result.error);
+        return textResult(result.data);
       }
     );
 
