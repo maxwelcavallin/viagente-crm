@@ -8,6 +8,7 @@ import {
   deals,
   emailTemplates,
   instagramChannels,
+  lossReasons,
   messageTemplates,
   pipelines,
   stages,
@@ -178,6 +179,24 @@ export async function deleteStageForApiKey(
   await db.delete(stages).where(eq(stages.id, stageId));
   void logApiWrite(apiKey.id, "stage", stageId, "delete");
   return { ok: true, data: { id: stageId } };
+}
+
+// ---------- Motivos de perda ----------
+// Catálogo por pipeline (ver deals.lossReasonId) — lido aqui pra permitir
+// que quem chama editar_negocio/updateDealForApiKey com status "perdido"
+// descubra um lossReasonId válido antes de mandar a chamada.
+export async function listLossReasonsForApiKey(
+  apiKey: AuthenticatedApiKey,
+  pipelineId: string
+): Promise<ApiResult<(typeof lossReasons.$inferSelect)[]>> {
+  const forbidden = requireAdminScope(apiKey);
+  if (forbidden) return forbidden;
+  const rows = await db
+    .select()
+    .from(lossReasons)
+    .where(eq(lossReasons.pipelineId, pipelineId))
+    .orderBy(asc(lossReasons.order));
+  return { ok: true, data: rows };
 }
 
 // ---------- Stage tasks (tarefas automáticas de etapa) ----------

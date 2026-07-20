@@ -22,19 +22,22 @@ export async function GET(request: Request) {
   return Response.json({ contacts });
 }
 
-// POST /api/v1/contacts  { name, phone, email?, customFields? }
+// POST /api/v1/contacts  { name, phone?, email?, customFields? } — phone e/ou email
 export async function POST(request: Request) {
   const auth = await authenticateApiRequest(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
   const body = (await request.json().catch(() => null)) as {
     name?: string;
-    phone?: string;
+    phone?: string | null;
     email?: string | null;
     customFields?: Record<string, unknown>;
   } | null;
-  if (!body?.name || !body?.phone) {
-    return Response.json({ error: "name e phone são obrigatórios." }, { status: 400 });
+  if (!body?.name) {
+    return Response.json({ error: "name é obrigatório." }, { status: 400 });
+  }
+  if (!body.phone?.trim() && !body.email?.trim()) {
+    return Response.json({ error: "Informe phone e/ou email." }, { status: 400 });
   }
 
   const result = await createContactForApiKey(auth.apiKey, {

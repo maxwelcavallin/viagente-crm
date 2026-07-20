@@ -3,7 +3,17 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, Filter, MessagesSquare, Search, Users, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Filter,
+  MailOpen,
+  MessagesSquare,
+  MoreVertical,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -27,7 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { cn, initialOf } from "@/lib/utils";
 import type { ConversationSummary } from "@/lib/conversations";
-import { bulkSetContactOwnerAction } from "@/app/contatos/actions";
+import { bulkSetContactOwnerAction, setContactReadStateAction } from "@/app/contatos/actions";
 
 const POLL_INTERVAL_MS = 4000;
 const ALL_CHANNELS = "__todos__";
@@ -196,6 +206,11 @@ export function AtendimentoShell({
     await bulkSetContactOwnerAction(Array.from(selectedIds), ownerId);
     setIsBulkPending(false);
     setSelectedIds(new Set());
+    router.refresh();
+  }
+
+  async function handleToggleRead(contactId: string, currentlyUnread: boolean) {
+    await setContactReadStateAction(contactId, currentlyUnread);
     router.refresh();
   }
 
@@ -433,7 +448,7 @@ export function AtendimentoShell({
               return (
                 <li
                   key={`${conversation.contactId}-${conversation.channelId ?? "none"}`}
-                  className="flex items-stretch"
+                  className="group flex items-stretch"
                 >
                   <button
                     type="button"
@@ -477,8 +492,37 @@ export function AtendimentoShell({
                           )}
                           {conversation.contactName}
                         </span>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {formatTime(conversation.lastMessageAt)}
+                        <span className="flex shrink-0 items-center gap-1">
+                          <span className="text-xs text-muted-foreground">
+                            {formatTime(conversation.lastMessageAt)}
+                          </span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="Mais opções da conversa"
+                                  className="size-5 opacity-0 group-hover:opacity-100 data-popup-open:opacity-100"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                />
+                              }
+                            >
+                              <MoreVertical size={13} strokeWidth={1.75} />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleToggleRead(conversation.contactId, isUnread)}
+                              >
+                                <MailOpen size={14} strokeWidth={1.75} />
+                                {isUnread ? "Marcar como lida" : "Marcar como não lida"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </span>
                       </div>
                       <div className="mt-1 flex items-center gap-1.5">

@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "marked_unread" boolean DEFAULT false NOT NULL;

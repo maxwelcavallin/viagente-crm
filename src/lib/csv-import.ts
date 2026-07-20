@@ -59,15 +59,19 @@ export async function importCsvBatch(params: {
     const rowNumber = startRowNumber + i;
     const resolved = resolveRow(headers, rows[i], mapping);
 
-    if (!resolved.contactPhone) {
-      result.errors.push({ row: rowNumber, message: "Telefone do contato não informado." });
+    let phone: string | null = null;
+    if (resolved.contactPhone) {
+      phone = normalizePhone(resolved.contactPhone);
+      if (!phone) {
+        result.errors.push({ row: rowNumber, message: "Telefone do contato inválido." });
+        continue;
+      }
+    }
+    if (!phone && !resolved.contactEmail) {
+      result.errors.push({ row: rowNumber, message: "Informe telefone e/ou email do contato." });
       continue;
     }
-    const phone = normalizePhone(resolved.contactPhone);
-    if (!phone) {
-      result.errors.push({ row: rowNumber, message: "Telefone do contato inválido." });
-      continue;
-    }
+    const identity = phone || resolved.contactEmail!;
 
     let pipelineId: string;
     let stageId: string;
@@ -132,7 +136,7 @@ export async function importCsvBatch(params: {
       const [created] = await db
         .insert(contacts)
         .values({
-          name: resolved.contactName || phone,
+          name: resolved.contactName || identity,
           phone,
           email: resolved.contactEmail,
           customFields: filteredContactCustom,
@@ -150,7 +154,7 @@ export async function importCsvBatch(params: {
         contactId,
         pipelineId,
         stageId,
-        title: resolved.dealTitle || resolved.contactName || phone,
+        title: resolved.dealTitle || resolved.contactName || identity,
         value: resolved.dealValue,
         customFields: filteredDealCustom,
         ownerId: distributedOwnerId,

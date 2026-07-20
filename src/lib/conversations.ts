@@ -75,6 +75,7 @@ export async function listConversations(
       avatarUrl: contacts.avatarUrl,
       ownerId: contacts.ownerId,
       ownerName: users.name,
+      markedUnread: contacts.markedUnread,
     })
     .from(contacts)
     .leftJoin(users, eq(users.id, contacts.ownerId))
@@ -133,6 +134,12 @@ export async function listConversations(
   const summaries: ConversationSummary[] = latest.map((m) => {
     const contact = contactById.get(m.contactId);
     const channel = m.channelId ? channelById.get(m.channelId) : undefined;
+    const naturalUnreadCount = unreadByKey.get(`${m.contactId}:${m.channelId}`) ?? 0;
+    // markedUnread (marcação manual) garante badge mesmo sem mensagem nova
+    // real — nunca reduz uma contagem natural já maior.
+    const unreadCount = contact?.markedUnread
+      ? Math.max(naturalUnreadCount, 1)
+      : naturalUnreadCount;
     return {
       contactId: m.contactId,
       contactName: contact?.name ?? "Contato",
@@ -146,7 +153,7 @@ export async function listConversations(
       lastMessagePreview: m.type === "texto" ? m.content ?? "" : `📎 ${m.type}`,
       lastMessageDirection: m.direction,
       lastMessageSenderName: m.senderName,
-      unreadCount: unreadByKey.get(`${m.contactId}:${m.channelId}`) ?? 0,
+      unreadCount,
       ownerId: contact?.ownerId ?? null,
       ownerName: contact?.ownerName ?? null,
     };
@@ -157,11 +164,22 @@ export async function listConversations(
 }
 
 // Marca a conversa como lida pra equipe inteira (inbox compartilhado — ver
-// comentário acima). Chamado ao abrir a tela de uma conversa.
+// comentário acima). Chamado ao abrir a tela de uma conversa, e também
+// limpa a marcação manual de "não lida" (ver markContactUnread).
 export async function markContactRead(contactId: string): Promise<void> {
   await db
     .update(contacts)
-    .set({ lastReadAt: new Date() })
+    .set({ lastReadAt: new Date(), markedUnread: false })
+    .where(eq(contacts.id, contactId));
+}
+
+// Marcação manual de "não lida" (ação do usuário na lista de conversas,
+// sem precisar de mensagem nova) — não mexe em lastReadAt, só liga a flag
+// que força o badge; markContactRead desliga de novo ao abrir a conversa.
+export async function markContactUnread(contactId: string): Promise<void> {
+  await db
+    .update(contacts)
+    .set({ markedUnread: true })
     .where(eq(contacts.id, contactId));
 }
 

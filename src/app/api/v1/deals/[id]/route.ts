@@ -18,7 +18,8 @@ export async function GET(
   return Response.json({ deal });
 }
 
-// PATCH /api/v1/deals/:id  { title?, ownerId?, value?, stageId?, customFields? }
+// PATCH /api/v1/deals/:id  { title?, ownerId?, value?, stageId?, customFields?, status?, lossReasonId? }
+// status "perdido" exige lossReasonId (motivo cadastrado na pipeline do negócio).
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -33,6 +34,8 @@ export async function PATCH(
     value?: string | null;
     stageId?: string;
     customFields?: Record<string, unknown>;
+    status?: "aberto" | "ganho" | "perdido";
+    lossReasonId?: string;
   } | null;
   if (!body) return Response.json({ error: "Corpo inválido." }, { status: 400 });
 

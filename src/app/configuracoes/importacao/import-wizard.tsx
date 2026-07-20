@@ -116,7 +116,9 @@ export function ImportWizard({
     return Array.from(set).sort();
   }, [headers, rows, stageColumnName]);
 
-  const phoneMapped = Object.values(mapping).includes("contact.phone");
+  const phoneOrEmailMapped =
+    Object.values(mapping).includes("contact.phone") ||
+    Object.values(mapping).includes("contact.email");
   const ignoredColumns = headers.filter((h) => !mapping[h]);
 
   function resetAll() {
@@ -321,17 +323,17 @@ export function ImportWizard({
                 </div>
               ))}
             </div>
-            {!phoneMapped && (
+            {!phoneOrEmailMapped && (
               <p className="text-sm text-destructive">
-                Mapeie uma coluna pra &quot;Telefone do contato&quot; — é obrigatório pra identificar/criar o
-                contato.
+                Mapeie uma coluna pra &quot;Telefone do contato&quot; e/ou &quot;Email do contato&quot; — pelo
+                menos um dos dois é obrigatório pra identificar/criar o contato.
               </p>
             )}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setStep("upload")}>
                 Voltar
               </Button>
-              <Button type="button" disabled={!phoneMapped} onClick={() => setStep("destination")}>
+              <Button type="button" disabled={!phoneOrEmailMapped} onClick={() => setStep("destination")}>
                 Continuar
               </Button>
             </div>
@@ -499,7 +501,7 @@ export function ImportWizard({
                 <TableRow>
                   <TableHead>Linha</TableHead>
                   <TableHead>Contato</TableHead>
-                  <TableHead>Telefone</TableHead>
+                  <TableHead>Telefone/Email</TableHead>
                   <TableHead>Negócio</TableHead>
                   <TableHead>Etapa</TableHead>
                   <TableHead>Status</TableHead>
@@ -510,7 +512,7 @@ export function ImportWizard({
                   <TableRow key={row.row}>
                     <TableCell>{row.row}</TableCell>
                     <TableCell>{row.contactName}</TableCell>
-                    <TableCell>{row.contactPhone ?? "—"}</TableCell>
+                    <TableCell>{row.contactPhone ?? row.contactEmail ?? "—"}</TableCell>
                     <TableCell>{row.dealTitle}</TableCell>
                     <TableCell>{row.stageLabel}</TableCell>
                     <TableCell>

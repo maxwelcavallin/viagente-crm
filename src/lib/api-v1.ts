@@ -1,10 +1,11 @@
-import { and, desc, eq, ilike, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   contacts,
   customFieldDefinitions,
   deals,
   dealTags,
+  lossReasons,
   pipelines,
   stages,
   tags,
@@ -13,7 +14,9 @@ import {
 } from "@/db/schema";
 import { logApiWrite } from "@/lib/api-audit";
 import type { AuthenticatedApiKey } from "@/lib/api-keys";
+import { cancelActiveSequenceRuns } from "@/lib/automation-sequences";
 import { getAllowedChannelIds, userHasChannelAccess } from "@/lib/channel-access";
+import { findDuplicateContact } from "@/lib/contact-merge";
 import { getThread, type ThreadMessage } from "@/lib/conversations";
 import { logDealActivity } from "@/lib/deal-activity-log";
 import { moveDealStage } from "@/lib/deal-mutations";
@@ -57,6 +60,10 @@ const DEAL_LIST_SELECTION = {
   id: deals.id,
   title: deals.title,
   status: deals.status,
+  wonAt: deals.wonAt,
+  lostAt: deals.lostAt,
+  lossReasonId: deals.lossReasonId,
+  lossReasonLabel: lossReasons.label,
   temperature: deals.temperature,
   value: deals.value,
   pipelineId: deals.pipelineId,
@@ -113,6 +120,7 @@ export async function listDeals(
     .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
     .innerJoin(stages, eq(deals.stageId, stages.id))
     .leftJoin(users, eq(deals.ownerId, users.id))
+    .leftJoin(lossReasons, eq(deals.lossReasonId, lossReasons.id))
     .where(and(...conditions))
     .orderBy(desc(deals.updatedAt))
     .limit(clampLimit(filters.limit))
@@ -127,6 +135,7 @@ export async function getDeal(actingUser: AuthenticatedApiKey["actingUser"], dea
     .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
     .innerJoin(stages, eq(deals.stageId, stages.id))
     .leftJoin(users, eq(deals.ownerId, users.id))
+    .leftJoin(lossReasons, eq(deals.lossReasonId, lossReasons.id))
     .where(eq(deals.id, dealId))
     .limit(1);
 
@@ -258,6 +267,12 @@ export type UpdateDealParams = {
   value?: string | null;
   stageId?: string;
   customFields?: Record<string, unknown>;
+  // Status é campo próprio do negócio (não deriva da etapa) — ver
+  // setDealStatusAction/setDealLostAction em src/app/negocios/actions.ts,
+  // cuja lógica é espelhada aqui pra API/MCP. "perdido" exige lossReasonId
+  // válido pra pipeline do negócio (mesma regra da tela de negócios).
+  status?: "aberto" | "ganho" | "perdido";
+  lossReasonId?: string;
 };
 
 export async function updateDealForApiKey(
@@ -270,10 +285,34 @@ export async function updateDealForApiKey(
     return { ok: false, status: 404, error: "Negócio não encontrado." };
   }
 
+  if (params.status !== undefined && !["aberto", "ganho", "perdido"].includes(params.status)) {
+    return { ok: false, status: 400, error: "status inválido." };
+  }
+
+  let lossReason: { id: string; label: string } | undefined;
+  if (params.status === "perdido") {
+    if (!params.lossReasonId) {
+      return { ok: false, status: 400, error: "lossReasonId é obrigatório pra marcar como perdido." };
+    }
+    const [reason] = await db
+      .select({ id: lossReasons.id, label: lossReasons.label })
+      .from(lossReasons)
+      .where(and(eq(lossReasons.id, params.lossReasonId), eq(lossReasons.pipelineId, current.pipelineId)))
+      .limit(1);
+    if (!reason) return { ok: false, status: 400, error: "lossReasonId inválido pra esta pipeline." };
+    lossReason = reason;
+  }
+
   const customFields =
     params.customFields !== undefined
       ? { ...(current.customFields as Record<string, string>), ...(await filterCustomFields("deal", params.customFields)) }
       : undefined;
+
+  const hasBasicFieldChange =
+    params.title !== undefined ||
+    params.ownerId !== undefined ||
+    params.value !== undefined ||
+    customFields !== undefined;
 
   await db
     .update(deals)
@@ -282,6 +321,14 @@ export async function updateDealForApiKey(
       ...(params.ownerId !== undefined ? { ownerId: params.ownerId } : {}),
       ...(params.value !== undefined ? { value: params.value } : {}),
       ...(customFields !== undefined ? { customFields } : {}),
+      ...(params.status !== undefined
+        ? {
+            status: params.status,
+            wonAt: params.status === "ganho" ? new Date() : null,
+            lostAt: params.status === "perdido" ? new Date() : null,
+            lossReasonId: params.status === "perdido" ? params.lossReasonId : null,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(deals.id, dealId));
@@ -289,12 +336,30 @@ export async function updateDealForApiKey(
   if (params.ownerId !== undefined) {
     await syncContactOwnerFromDeal(current.contactId, params.ownerId);
   }
-  await logDealActivity({
-    dealId,
-    userId: apiKey.actingUser.id,
-    source: "api",
-    action: "editado",
-  });
+  if (hasBasicFieldChange) {
+    await logDealActivity({
+      dealId,
+      userId: apiKey.actingUser.id,
+      source: "api",
+      action: "editado",
+    });
+  }
+
+  if (params.status !== undefined && params.status !== current.status) {
+    await logDealActivity({
+      dealId,
+      userId: apiKey.actingUser.id,
+      source: "api",
+      action: params.status === "ganho" ? "ganho" : params.status === "perdido" ? "perdido" : "editado",
+      fieldName: "Status",
+      oldValue: current.status,
+      newValue: params.status === "perdido" && lossReason ? `Perdido — ${lossReason.label}` : params.status,
+    });
+    if (params.status === "ganho" || params.status === "perdido") {
+      await cancelActiveSequenceRuns(dealId);
+      void dispatchOutboundWebhooks(params.status === "ganho" ? "negocio_ganho" : "negocio_perdido", dealId);
+    }
+  }
 
   if (params.stageId && params.stageId !== current.stageId) {
     const [stage] = await db.select({ id: stages.id }).from(stages).where(eq(stages.id, params.stageId)).limit(1);
@@ -448,22 +513,9 @@ export async function getContact(actingUser: AuthenticatedApiKey["actingUser"], 
   return contact;
 }
 
-async function contactPhoneConflicts(phone: string, excludeId?: string): Promise<boolean> {
-  const [existing] = await db
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(
-      excludeId
-        ? and(eq(contacts.phone, phone), ne(contacts.id, excludeId))
-        : eq(contacts.phone, phone)
-    )
-    .limit(1);
-  return Boolean(existing);
-}
-
 export type CreateContactParams = {
   name: string;
-  phone: string;
+  phone?: string | null;
   email?: string | null;
   customFields?: Record<string, unknown>;
 };
@@ -473,11 +525,19 @@ export async function createContactForApiKey(
   params: CreateContactParams
 ): Promise<ApiResult<{ id: string }>> {
   if (!params.name.trim()) return { ok: false, status: 400, error: "name é obrigatório." };
-  if (!params.phone.trim()) return { ok: false, status: 400, error: "phone é obrigatório." };
 
-  const normalizedPhone = params.phone.trim();
-  if (await contactPhoneConflicts(normalizedPhone)) {
-    return { ok: false, status: 400, error: "Já existe um contato com esse telefone." };
+  const normalizedPhone = params.phone?.trim() || null;
+  const normalizedEmail = params.email?.trim() || null;
+  if (!normalizedPhone && !normalizedEmail) {
+    return { ok: false, status: 400, error: "Informe phone e/ou email." };
+  }
+
+  // Mesma checagem de duplicata (telefone OU email) usada na tela de
+  // contatos (ver findDuplicateContact) — API/MCP não pode criar um
+  // duplicado que a UI bloquearia.
+  const duplicate = await findDuplicateContact(normalizedPhone, normalizedEmail);
+  if (duplicate) {
+    return { ok: false, status: 400, error: `Já existe um contato com esse ${duplicate.matchedField}.` };
   }
 
   const customFields = await filterCustomFields("contact", params.customFields);
@@ -486,7 +546,7 @@ export async function createContactForApiKey(
     .values({
       name: params.name.trim(),
       phone: normalizedPhone,
-      email: params.email?.trim() || null,
+      email: normalizedEmail,
       customFields,
     })
     .returning({ id: contacts.id });
@@ -497,7 +557,7 @@ export async function createContactForApiKey(
 
 export type UpdateContactParams = {
   name?: string;
-  phone?: string;
+  phone?: string | null;
   email?: string | null;
   customFields?: Record<string, unknown>;
 };
@@ -512,12 +572,16 @@ export async function updateContactForApiKey(
     return { ok: false, status: 404, error: "Contato não encontrado." };
   }
 
-  let phone = current.phone;
-  if (params.phone !== undefined) {
-    if (!params.phone.trim()) return { ok: false, status: 400, error: "phone não pode ser vazio." };
-    phone = params.phone.trim();
-    if (await contactPhoneConflicts(phone, contactId)) {
-      return { ok: false, status: 400, error: "Já existe um contato com esse telefone." };
+  const nextPhone = params.phone !== undefined ? params.phone?.trim() || null : current.phone;
+  const nextEmail = params.email !== undefined ? params.email?.trim() || null : current.email;
+  if (!nextPhone && !nextEmail) {
+    return { ok: false, status: 400, error: "Contato precisa ter phone e/ou email." };
+  }
+
+  if (params.phone !== undefined || params.email !== undefined) {
+    const duplicate = await findDuplicateContact(nextPhone, nextEmail, contactId);
+    if (duplicate) {
+      return { ok: false, status: 400, error: `Já existe um contato com esse ${duplicate.matchedField}.` };
     }
   }
 
@@ -530,8 +594,8 @@ export async function updateContactForApiKey(
     .update(contacts)
     .set({
       ...(params.name !== undefined ? { name: params.name.trim() || current.name } : {}),
-      phone,
-      ...(params.email !== undefined ? { email: params.email?.trim() || null } : {}),
+      ...(params.phone !== undefined ? { phone: nextPhone } : {}),
+      ...(params.email !== undefined ? { email: nextEmail } : {}),
       ...(customFields !== undefined ? { customFields } : {}),
     })
     .where(eq(contacts.id, contactId));

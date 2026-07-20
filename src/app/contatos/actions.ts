@@ -13,6 +13,7 @@ import {
   messages,
 } from "@/db/schema";
 import { findDuplicateContact, mergeContactsInto } from "@/lib/contact-merge";
+import { markContactRead, markContactUnread } from "@/lib/conversations";
 import { syncDealOwnerFromContact } from "@/lib/owner-distribution";
 
 async function requireSession() {
@@ -81,12 +82,12 @@ export async function createContactAction(
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof phone !== "string" || !phone.trim()) {
-    return { status: "error", message: "Telefone é obrigatório." };
-  }
 
-  const normalizedPhone = phone.trim();
+  const normalizedPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
   const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
+  if (!normalizedPhone && !normalizedEmail) {
+    return { status: "error", message: "Informe telefone e/ou email." };
+  }
 
   // Nunca cria um contato duplicado por telefone ou email já existente —
   // sempre pede pra usar/vincular o contato encontrado em vez de criar um
@@ -138,12 +139,12 @@ export async function updateContactAction(
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof phone !== "string" || !phone.trim()) {
-    return { status: "error", message: "Telefone é obrigatório." };
-  }
 
-  const normalizedPhone = phone.trim();
+  const normalizedPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
   const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
+  if (!normalizedPhone && !normalizedEmail) {
+    return { status: "error", message: "Informe telefone e/ou email." };
+  }
   const confirmMerge = formData.get("confirmMerge") === "true";
 
   const duplicate = await findDuplicateContact(normalizedPhone, normalizedEmail, id);
@@ -233,6 +234,25 @@ export async function bulkSetContactOwnerAction(
 
   for (const contactId of contactIds) {
     await syncDealOwnerFromContact(contactId, ownerId);
+  }
+
+  revalidatePath("/atendimento");
+  return { ok: true };
+}
+
+// Toggle manual de lida/não lida na lista do atendimento (sem precisar
+// abrir a conversa) — ver markContactRead/markContactUnread em conversations.ts.
+export async function setContactReadStateAction(
+  contactId: string,
+  read: boolean
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user) return { ok: false };
+
+  if (read) {
+    await markContactRead(contactId);
+  } else {
+    await markContactUnread(contactId);
   }
 
   revalidatePath("/atendimento");

@@ -98,6 +98,7 @@ export type ImportPreviewRow = {
   row: number;
   contactName: string;
   contactPhone: string | null;
+  contactEmail: string | null;
   dealTitle: string;
   stageLabel: string;
   error: string | null;
@@ -117,16 +118,18 @@ export function previewCsvRows(
     const rowNumber = i + 1;
     const resolved = resolveRow(headers, rowValues, mapping);
 
-    if (!resolved.contactPhone) {
+    if (!resolved.contactPhone && !resolved.contactEmail) {
       return {
         row: rowNumber,
         contactName: resolved.contactName ?? "—",
         contactPhone: null,
+        contactEmail: null,
         dealTitle: resolved.dealTitle ?? "—",
         stageLabel: "—",
-        error: "Telefone do contato não informado.",
+        error: "Telefone ou email do contato não informado.",
       };
     }
+    const identity = resolved.contactPhone || resolved.contactEmail!;
 
     let stageLabel = "—";
     let error: string | null = null;
@@ -148,9 +151,10 @@ export function previewCsvRows(
 
     return {
       row: rowNumber,
-      contactName: resolved.contactName || resolved.contactPhone,
+      contactName: resolved.contactName || identity,
       contactPhone: resolved.contactPhone,
-      dealTitle: resolved.dealTitle || resolved.contactName || resolved.contactPhone,
+      contactEmail: resolved.contactEmail,
+      dealTitle: resolved.dealTitle || resolved.contactName || identity,
       stageLabel,
       error,
     };

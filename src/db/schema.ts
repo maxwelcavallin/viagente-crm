@@ -383,6 +383,11 @@ export const contacts = pgTable(
     // usuário): zera o contador de não lidas quando qualquer atendente
     // abre a conversa — ver markContactRead em src/lib/conversations.ts.
     lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    // Força a conversa a aparecer como não lida mesmo sem mensagem nova
+    // depois de lastReadAt (ação manual "marcar como não lida" no
+    // atendimento) — zerado de volta assim que alguém abre a conversa, ver
+    // markContactRead em src/lib/conversations.ts.
+    markedUnread: boolean("marked_unread").notNull().default(false),
     customFields: jsonb("custom_fields").notNull().default({}),
     // Dono do atendimento — mantido em sincronia com o dono do negócio
     // aberto deste contato (ver src/lib/owner-distribution.ts). Um contato

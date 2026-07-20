@@ -45,6 +45,7 @@ import {
   listChannelsForApiKey,
   listCustomFieldsForApiKey,
   listEmailTemplatesForApiKey,
+  listLossReasonsForApiKey,
   listMessageTemplatesForApiKey,
   listPipelinesForApiKey,
   listStagesForApiKey,
@@ -179,7 +180,10 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
     "editar_negocio",
     {
       title: "Editar negócio",
-      description: "Edita campos de um negócio existente (título, dono, valor, etapa, campos customizados).",
+      description:
+        "Edita campos de um negócio existente (título, dono, valor, etapa, campos customizados, status). " +
+        "Pra marcar como perdido, status=\"perdido\" exige lossReasonId (ver listar_motivos_perda, chave admin). " +
+        "Marcar como ganho ou reabrir (status=\"aberto\") não precisa de lossReasonId.",
       inputSchema: {
         dealId: z.string().uuid(),
         title: z.string().optional(),
@@ -187,6 +191,8 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
         value: z.string().optional().nullable(),
         stageId: z.string().uuid().optional(),
         customFields: z.record(z.string(), z.unknown()).optional(),
+        status: z.enum(["aberto", "ganho", "perdido"]).optional(),
+        lossReasonId: z.string().uuid().optional(),
       },
     },
     async ({ dealId, ...params }) => {
@@ -291,10 +297,12 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
     "criar_contato",
     {
       title: "Criar contato",
-      description: "Cria um novo contato (telefone precisa ser único no CRM).",
+      description:
+        "Cria um novo contato — informe phone e/ou email (pelo menos um dos dois; " +
+        "cada um precisa ser único no CRM quando informado).",
       inputSchema: {
         name: z.string().min(1),
-        phone: z.string().min(1),
+        phone: z.string().optional().nullable(),
         email: z.string().email().optional().nullable(),
         customFields: z.record(z.string(), z.unknown()).optional(),
       },
@@ -310,11 +318,13 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
     "editar_contato",
     {
       title: "Editar contato",
-      description: "Edita campos de um contato existente.",
+      description:
+        "Edita campos de um contato existente — não é possível deixar phone e email " +
+        "vazios ao mesmo tempo.",
       inputSchema: {
         contactId: z.string().uuid(),
         name: z.string().optional(),
-        phone: z.string().optional(),
+        phone: z.string().optional().nullable(),
         email: z.string().email().optional().nullable(),
         customFields: z.record(z.string(), z.unknown()).optional(),
       },
@@ -575,6 +585,23 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
         const result = await deleteStageForApiKey(apiKey, stageId);
         if (!result.ok) return errorResult(result.error);
         return textResult(result.data);
+      }
+    );
+
+    // ---- Motivos de perda ----
+    server.registerTool(
+      "listar_motivos_perda",
+      {
+        title: "Listar motivos de perda",
+        description:
+          "Lista os motivos de perda cadastrados numa pipeline — use pra descobrir o lossReasonId " +
+          "necessário em editar_negocio quando status=\"perdido\".",
+        inputSchema: { pipelineId: z.string().uuid() },
+      },
+      async ({ pipelineId }) => {
+        const result = await listLossReasonsForApiKey(apiKey, pipelineId);
+        if (!result.ok) return errorResult(result.error);
+        return textResult({ lossReasons: result.data });
       }
     );
 

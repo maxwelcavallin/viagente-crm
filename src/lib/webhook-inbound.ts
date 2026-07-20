@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   contacts,
@@ -144,30 +144,40 @@ export async function processInboundPayload(
       dealCustomFields[mappingKey.replace("deal.custom.", "")] = stringValue;
   }
 
-  if (!contactFields.phone) {
+  if (!contactFields.phone && !contactFields.email) {
     return {
       ok: false,
       error:
-        "Telefone do contato não foi resolvido no payload — não é possível criar/buscar o contato.",
+        "Nem telefone nem email do contato foram resolvidos no payload — não é possível criar/buscar o contato.",
       missingFields,
     };
   }
 
+  // Casa por telefone OU email — mesma identidade "OR" usada na checagem de
+  // duplicata da tela de contatos (ver findDuplicateContact em
+  // src/lib/contact-merge.ts), só que aqui o objetivo é reaproveitar o
+  // contato existente em vez de bloquear.
+  const identityConditions = [
+    contactFields.phone ? eq(contacts.phone, contactFields.phone) : undefined,
+    contactFields.email ? eq(contacts.email, contactFields.email) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+
   const [existingContact] = await db
     .select({ id: contacts.id })
     .from(contacts)
-    .where(eq(contacts.phone, contactFields.phone))
+    .where(or(...identityConditions))
     .limit(1);
 
   let contactId: string;
   if (existingContact) {
     contactId = existingContact.id;
   } else {
+    const fallbackName = contactFields.phone || contactFields.email!;
     const [created] = await db
       .insert(contacts)
       .values({
-        name: contactFields.name || contactFields.phone,
-        phone: contactFields.phone,
+        name: contactFields.name || fallbackName,
+        phone: contactFields.phone || null,
         email: contactFields.email || null,
         customFields: contactCustomFields,
       })
@@ -194,7 +204,7 @@ export async function processInboundPayload(
       contactId,
       pipelineId: webhookConfig.defaultPipelineId,
       stageId: webhookConfig.defaultStageId,
-      title: contactFields.name || contactFields.phone,
+      title: contactFields.name || contactFields.phone || contactFields.email!,
       customFields: filteredDealCustomFields,
       temperature,
       ownerId: distributedOwnerId,

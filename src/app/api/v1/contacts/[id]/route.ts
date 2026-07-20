@@ -29,7 +29,7 @@ export async function PATCH(
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as {
     name?: string;
-    phone?: string;
+    phone?: string | null;
     email?: string | null;
     customFields?: Record<string, unknown>;
   } | null;

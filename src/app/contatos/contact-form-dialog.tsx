@@ -130,8 +130,8 @@ export function ContactFormDialog({
             {mode === "create" ? "Novo contato" : `Editar ${contact?.name}`}
           </DialogTitle>
           <DialogDescription>
-            Telefone é obrigatório e único — não é possível cadastrar dois
-            contatos com o mesmo número.
+            Informe telefone e/ou email — pelo menos um dos dois, cada um
+            único no CRM quando preenchido.
           </DialogDescription>
         </DialogHeader>
         <form action={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
@@ -144,7 +144,7 @@ export function ContactFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Telefone</Label>
-            <Input id="phone" name="phone" defaultValue={contact?.phone ?? ""} required />
+            <Input id="phone" name="phone" defaultValue={contact?.phone ?? ""} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
