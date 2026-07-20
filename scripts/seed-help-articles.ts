@@ -59,7 +59,7 @@ No primeiro acesso ao CRM (ou depois que um admin recria seu acesso), você rece
 4. Ao confirmar, você é desconectado e precisa logar de novo com a senha nova — isso garante que a sessão usa as credenciais atualizadas.
 
 ## Perguntas frequentes
-**Esqueci minha senha, e agora?** Não há recuperação de senha por email nesta versão do sistema — peça pra um administrador entrar em Configurações → Usuários e recriar seu acesso (isso gera uma nova senha temporária).`,
+**Esqueci minha senha, e agora?** Não há recuperação de senha por email nesta versão do sistema — peça pra um administrador entrar em [Configurações → Usuários](/configuracoes/usuarios) e recriar seu acesso (isso gera uma nova senha temporária).`,
   },
   {
     categorySlug: null,
@@ -71,7 +71,7 @@ No primeiro acesso ao CRM (ou depois que um admin recria seu acesso), você rece
 Cadastro dos usuários que vão acessar o CRM — administradores (acesso total, incluindo Configurações) e atendentes (uso do dia a dia: negócios, contatos, atendimento, tarefas).
 
 ## Passo a passo
-1. Acesse **Configurações → Usuários**.
+1. Acesse [Configurações → Usuários](/configuracoes/usuarios).
 2. Preencha nome, email e escolha o papel (Atendente ou Admin).
 3. Ao salvar, o sistema gera uma senha temporária e mostra na tela **uma única vez** — copie e repasse pra pessoa por um canal seguro.
 4. A pessoa loga com essa senha e é obrigada a trocá-la no primeiro acesso.
@@ -90,7 +90,7 @@ Cadastro dos usuários que vão acessar o CRM — administradores (acesso total,
 A pipeline é o funil de vendas (ex: "Vendas", "Pós-venda"), dividido em etapas (colunas do kanban) que representam o estágio de cada negócio.
 
 ## Passo a passo
-1. Acesse **Configurações → Pipelines** e clique em criar nova pipeline (ou clone uma existente, o que já traz etapas, tarefas automáticas e motivos de perda copiados).
+1. Acesse [Configurações → Pipelines](/configuracoes/pipelines) e clique em criar nova pipeline (ou clone uma existente, o que já traz etapas, tarefas automáticas e motivos de perda copiados).
 2. Abra a pipeline criada e cadastre as etapas na ordem desejada (nome + cor) — reordene arrastando ou pelas setas.
 3. Em cada etapa, defina os **motivos de perda** que farão sentido pra ela e, se quiser, uma **tarefa automática** que é criada sozinha assim que um negócio entra ali (ex: "Ligar em até 1 dia").
 4. Opcionalmente, configure a **distribuição automática de donos** da pipeline — sem isso, negócios criados sem dono explícito continuam sem dono.
@@ -108,8 +108,8 @@ A pipeline é o funil de vendas (ex: "Vendas", "Pós-venda"), dividido em etapas
 Campos customizados adicionam informações extras (além de nome/telefone/email) a contatos e negócios. Tags são etiquetas coloridas pra classificar e filtrar.
 
 ## Passo a passo
-1. Em **Configurações → Campos Customizados**, escolha a entidade (Contato ou Negócio), defina o rótulo, o tipo (Texto, Número, Select ou Data) e, se for Select, as opções.
-2. Em **Configurações → Tags**, cadastre as tags que fizerem sentido pro seu processo (nome + cor).
+1. Em [Configurações → Campos Customizados](/configuracoes/campos), escolha a entidade (Contato ou Negócio), defina o rótulo, o tipo (Texto, Número, Select ou Data) e, se for Select, as opções.
+2. Em [Configurações → Tags](/configuracoes/tags), cadastre as tags que fizerem sentido pro seu processo (nome + cor).
 3. Reordene campos e tags arrastando, se quiser mudar a ordem de exibição.
 
 ## Perguntas frequentes
@@ -126,7 +126,7 @@ Um canal WhatsApp conecta um número de telefone ao CRM via Z-API (provedor terc
 
 ## Passo a passo
 1. Crie uma instância na Z-API e tenha em mãos o **Instance ID**, o **Token** e o **Client-Token**.
-2. Em **Configurações → WhatsApp**, clique em adicionar canal e preencha esses dados junto com um nome pro canal.
+2. Em [Configurações → WhatsApp](/configuracoes/whatsapp), clique em adicionar canal e preencha esses dados junto com um nome pro canal.
 3. Abra o canal criado e copie a **URL de webhook** exibida — cole ela no painel da Z-API, nas abas "Ao receber" e "Status da mensagem".
 4. Volte pro CRM e clique em **"Testar conexão"** pra confirmar que está tudo certo.
 5. Se for o único canal (ou o principal), marque-o como **padrão**.
@@ -144,8 +144,8 @@ Um canal WhatsApp conecta um número de telefone ao CRM via Z-API (provedor terc
 Templates são textos reutilizáveis (mensagem ou email) com variáveis que o sistema substitui automaticamente. Tarefas automáticas de etapa usam esses templates pra guiar o atendente (ou até enviar sozinhas).
 
 ## Passo a passo
-1. Em **Configurações → Templates**, crie os templates de mensagem e de email que sua equipe mais usa — o painel lateral mostra as variáveis disponíveis (nome do contato, valor do negócio, campos customizados) clicáveis pra inserir no texto.
-2. Em **Configurações → Pipelines → [sua pipeline] → etapa**, associe um template à tarefa automática daquela etapa.
+1. Em [Configurações → Templates](/configuracoes/templates), crie os templates de mensagem e de email que sua equipe mais usa — o painel lateral mostra as variáveis disponíveis (nome do contato, valor do negócio, campos customizados) clicáveis pra inserir no texto.
+2. Em [Configurações → Pipelines](/configuracoes/pipelines) → [sua pipeline] → etapa, associe um template à tarefa automática daquela etapa.
 3. Se quiser que a mensagem saia sozinha, sem precisar de um clique do atendente, ative **"Enviar automaticamente"** e escolha o canal.
 
 ## Perguntas frequentes
@@ -161,7 +161,7 @@ Templates são textos reutilizáveis (mensagem ou email) com variáveis que o si
 Conecta sua conta pessoal do Google Agenda pra permitir agendar reuniões de verdade (com convite automático pro contato) direto de um negócio.
 
 ## Passo a passo
-1. Acesse **Configurações → Google Agenda** (ou **Perfil**, se você for atendente — a conexão é sempre pessoal, de quem está logado).
+1. Acesse [Configurações → Google Agenda](/configuracoes/google-agenda) (ou [Perfil](/perfil), se você for atendente — a conexão é sempre pessoal, de quem está logado).
 2. Clique em conectar e autorize o acesso na tela do Google.
 3. Se quiser que outros atendentes usem sua agenda pra agendar reuniões sem precisar conectar a própria conta, ative o compartilhamento pra eles na lista abaixo.
 
@@ -178,20 +178,20 @@ Conecta sua conta pessoal do Google Agenda pra permitir agendar reuniões de ver
 Um resumo de tudo que existe em **Configurações** (acesso exclusivo de administradores), pra você saber onde procurar cada coisa depois.
 
 ## O que tem lá
-- **Usuários**: cadastro de admins/atendentes e restrição de visibilidade.
-- **Pipelines e Etapas**: funis, etapas, tarefas automáticas, motivos de perda, distribuição de donos.
-- **Campos Customizados e Tags**: informações extras e classificação de contatos/negócios.
-- **Templates**: textos reutilizáveis de mensagem e email.
-- **Conexão de Canais**: WhatsApp e Instagram.
-- **Automações**: automações por tag e Sequências de múltiplos passos (além das tarefas automáticas de etapa, que ficam dentro de Pipelines).
-- **Negócio Automático**: cria negócio sozinho na primeira mensagem de um contato novo.
-- **Pós-venda (NPS)**: pesquisa de satisfação automática.
-- **Email**: configuração de envio (não é caixa de entrada, só saída).
-- **Webhooks**: capturar leads externos (entrada) e notificar outros sistemas (saída).
-- **Importação de Dados**: importar contatos/negócios via CSV.
-- **Google Agenda**: sua conexão pessoal e compartilhamento.
-- **LinkedIn**: configuração da sincronização com o LeadDelta.
-- **API**: chaves de API e documentação do servidor MCP.
+- [Usuários](/configuracoes/usuarios): cadastro de admins/atendentes e restrição de visibilidade.
+- [Pipelines e Etapas](/configuracoes/pipelines): funis, etapas, tarefas automáticas, motivos de perda, distribuição de donos.
+- [Campos Customizados](/configuracoes/campos) e [Tags](/configuracoes/tags): informações extras e classificação de contatos/negócios.
+- [Templates](/configuracoes/templates): textos reutilizáveis de mensagem e email.
+- Conexão de Canais: [WhatsApp](/configuracoes/whatsapp) e [Instagram](/configuracoes/instagram).
+- [Automações](/configuracoes/automacoes): automações por tag e [Sequências](/configuracoes/sequencias) de múltiplos passos (além das tarefas automáticas de etapa, que ficam dentro de [Pipelines](/configuracoes/pipelines)).
+- [Negócio Automático](/configuracoes/negocio-automatico): cria negócio sozinho na primeira mensagem de um contato novo.
+- [Pós-venda (NPS)](/configuracoes/nps): pesquisa de satisfação automática.
+- [Email](/configuracoes/email): configuração de envio (não é caixa de entrada, só saída).
+- [Webhooks](/configuracoes/webhooks): capturar leads externos (entrada) e notificar outros sistemas (saída).
+- [Importação de Dados](/configuracoes/importacao): importar contatos/negócios via CSV.
+- [Google Agenda](/configuracoes/google-agenda): sua conexão pessoal e compartilhamento.
+- [LinkedIn](/configuracoes/linkedin): configuração da sincronização com o LeadDelta.
+- [API](/configuracoes/api): chaves de API e documentação do servidor MCP.
 
 ## Perguntas frequentes
 **Um atendente consegue ver essas telas?** Não — a seção inteira de Configurações é bloqueada pra quem não é admin, sem exceção.`,
@@ -214,7 +214,7 @@ Seu acesso foi criado por um administrador, que te passou um email e uma senha t
 4. Faça login de novo com a senha nova.
 
 ## Perguntas frequentes
-**Esqueci minha senha depois disso.** Peça pra um administrador recriar seu acesso em Configurações → Usuários (gera uma senha temporária nova) — não há recuperação por email.`,
+**Esqueci minha senha depois disso.** Peça pra um administrador recriar seu acesso em [Configurações → Usuários](/configuracoes/usuarios) (gera uma senha temporária nova) — não há recuperação por email.`,
   },
   {
     categorySlug: null,
@@ -428,12 +428,12 @@ Como encerrar (ou reabrir) um negócio.
 
 ## Passo a passo
 1. Dentro do negócio, use os botões de status pra marcar como **Ganho** ou **Perdido**.
-2. Marcar como Perdido exige escolher um **motivo de perda** (cadastrado em Configurações → Pipelines, por pipeline).
+2. Marcar como Perdido exige escolher um **motivo de perda** (cadastrado em [Configurações → Pipelines](/configuracoes/pipelines), por pipeline).
 3. As duas ações cancelam automaticamente qualquer sequência de automação em andamento pra aquele negócio, e disparam o webhook de saída correspondente, se configurado.
 4. Se precisar, use **Reabrir** pra voltar o negócio pro status aberto (limpa data e motivo de perda/ganho).
 
 ## Perguntas frequentes
-**Marcar Ganho dispara alguma coisa automaticamente?** Sim, se a pesquisa de NPS estiver configurada pra disparar em "negócio ganho" (ver artigo de Pós-venda/NPS).`,
+**Marcar Ganho dispara alguma coisa automaticamente?** Sim, se a pesquisa de NPS estiver configurada pra disparar em "negócio ganho" (ver [Como funciona a pesquisa de NPS pós-venda](/ajuda/pos-venda-nps/nps-como-funciona)).`,
   },
   {
     categorySlug: "negocios",
@@ -445,7 +445,7 @@ A página de detalhe do negócio reúne tudo relacionado àquela oportunidade.
 
 ## O que tem lá
 - **Tarefas**: automáticas (criadas ao entrar numa etapa) e manuais, com execução direta (enviar mensagem/email, marcar como concluída, abrir agendamento).
-- **Agendar reunião**: cria um evento de verdade no Google Agenda, convidando o contato automaticamente se ele tiver email cadastrado (exige ter conectado sua Google Agenda em Perfil/Configurações).
+- **Agendar reunião**: cria um evento de verdade no Google Agenda, convidando o contato automaticamente se ele tiver email cadastrado (exige ter conectado sua Google Agenda em [Perfil](/perfil) ou [Configurações → Google Agenda](/configuracoes/google-agenda)).
 - **Agendar mensagem**: mesmo recurso do Atendimento, disponível direto no negócio.
 - **Enviar email**: compõe e manda email pro contato usando templates pré-cadastrados, com anexos — fica registrado na lista de "Emails enviados" do negócio.
 - **Resumo de Reuniões**: notas do Google Meet (via Gemini) sincronizadas automaticamente quando o contato participou de uma reunião pelo Google Agenda.
@@ -464,7 +464,7 @@ A página de detalhe do negócio reúne tudo relacionado àquela oportunidade.
 Cada negócio pode ter um dono (o atendente responsável). Se ninguém escolher um dono na criação, o sistema pode distribuir automaticamente, se configurado.
 
 ## Passo a passo
-1. Configure a distribuição em **Configurações → Pipelines → [pipeline] → Distribuição de donos**: adicione usuários com um peso cada (o sistema usa isso como uma proporção — quem tem peso maior recebe mais negócios).
+1. Configure a distribuição em [Configurações → Pipelines](/configuracoes/pipelines) → [pipeline] → Distribuição de donos: adicione usuários com um peso cada (o sistema usa isso como uma proporção — quem tem peso maior recebe mais negócios).
 2. Sem nenhuma regra configurada ali, negócios criados sem dono explícito continuam sem dono, como sempre.
 3. Ao definir/alterar o dono de um negócio manualmente, esse dono é propagado pro contato vinculado também — mas nunca apaga um dono que o contato já tinha se a nova atribuição vier vazia.
 
@@ -488,7 +488,7 @@ A tela de **Contatos** é o CRUD central de pessoas/empresas com quem sua equipe
 4. A exclusão só é permitida se o contato **não tiver nenhum negócio vinculado** — mova ou exclua os negócios primeiro.
 
 ## Perguntas frequentes
-**Um contato pode não ter telefone?** Sim, contatos que chegam só pelo Instagram não têm telefone até serem vinculados a um contato com WhatsApp (ver artigo de duplicidade).`,
+**Um contato pode não ter telefone?** Sim, contatos que chegam só pelo Instagram não têm telefone até serem vinculados a um contato com WhatsApp (ver [Evitar e resolver contatos duplicados](/ajuda/contatos/contatos-duplicados)).`,
   },
   {
     categorySlug: "contatos",
@@ -523,7 +523,7 @@ Em **Tarefas**, você vê todas as tarefas de todos os negócios num lugar só, 
 3. Execute a tarefa direto da lista (enviar mensagem/email, abrir agendamento) ou marque como concluída.
 
 ## Perguntas frequentes
-**A lista mostra tarefas de negócios que não são meus?** Depende do seu nível de acesso — se você tiver a restrição "aos próprios negócios" ativada (ver Configurações → Usuários), só vê as suas.`,
+**A lista mostra tarefas de negócios que não são meus?** Depende do seu nível de acesso — se você tiver a restrição "aos próprios negócios" ativada (ver [Cadastrar usuários e permissões](/ajuda/config-usuarios/config-usuarios-cadastro)), só vê as suas.`,
   },
   {
     categorySlug: "tarefas-automacao",
@@ -534,9 +534,9 @@ Em **Tarefas**, você vê todas as tarefas de todos os negócios num lugar só, 
 O CRM tem três formas distintas de automatizar tarefas, cada uma com seu propósito — entender a diferença evita configurar a coisa errada no lugar errado.
 
 ## As três camadas
-1. **Tarefa automática de etapa** (dentro de Configurações → Pipelines → etapa): dispara quando um negócio **entra** naquela etapa. É a mais simples — um passo só, ligado à posição no funil.
-2. **Automações** (Configurações → Automações): disparam por **tag** — quando uma tag é adicionada a um negócio, ou depois de X tempo com aquela tag. Também um passo só, mas o gatilho é a tag, não a etapa.
-3. **Sequências** (Configurações → Sequências): a mais sofisticada — vários passos encadeados no tempo (mensagem, tarefa genérica, adicionar tag, mudar de etapa), disparados por entrada em etapa, tag ganha, ou **falta de resposta do contato há N dias**, com uma condição opcional sobre o negócio (temperatura, tag, campo customizado).
+1. **Tarefa automática de etapa** (dentro de [Configurações → Pipelines](/configuracoes/pipelines) → etapa): dispara quando um negócio **entra** naquela etapa. É a mais simples — um passo só, ligado à posição no funil.
+2. **Automações** ([Configurações → Automações](/configuracoes/automacoes)): disparam por **tag** — quando uma tag é adicionada a um negócio, ou depois de X tempo com aquela tag. Também um passo só, mas o gatilho é a tag, não a etapa.
+3. **Sequências** ([Configurações → Sequências](/configuracoes/sequencias)): a mais sofisticada — vários passos encadeados no tempo (mensagem, tarefa genérica, adicionar tag, mudar de etapa), disparados por entrada em etapa, tag ganha, ou **falta de resposta do contato há N dias**, com uma condição opcional sobre o negócio (temperatura, tag, campo customizado).
 
 ## Perguntas frequentes
 **Uso automação por tag ou sequência pra um lembrete simples?** Se for um passo só, automação por tag basta. Se envolver vários passos espaçados no tempo (ex: mensagem no dia 1, outra no dia 3, tarefa no dia 7), use Sequências.`,
@@ -552,7 +552,7 @@ O CRM tem três formas distintas de automatizar tarefas, cada uma com seu propó
 Cada usuário (admin ou atendente) conecta a própria conta do Google Agenda — é uma conexão pessoal, não uma configuração única da empresa, mesmo estando dentro de Configurações.
 
 ## Passo a passo
-1. Acesse **Perfil** (ou Configurações → Google Agenda, se for admin) e clique em conectar.
+1. Acesse [Perfil](/perfil) (ou [Configurações → Google Agenda](/configuracoes/google-agenda), se for admin) e clique em conectar.
 2. Autorize o acesso na tela do Google.
 3. Se quiser deixar outros atendentes agendarem reuniões usando sua agenda sem precisar conectar a própria conta, ative o compartilhamento pra eles ali mesmo.
 4. Um atendente sem conexão própria, mas com uma agenda compartilhada por um colega, vê o aviso "Você está usando a agenda compartilhada por [nome]".
@@ -592,7 +592,7 @@ Diferente de WhatsApp/Instagram, email não é um canal de atendimento com caixa
 3. Envie — o email aparece na lista "Emails enviados" do negócio, com status (enviado ou falhou).
 
 ## Perguntas frequentes
-**Preciso configurar algo antes de usar isso?** Sim, um admin precisa configurar o remetente em Configurações → Email (endereço, provedor e chave de API) antes de qualquer email poder ser enviado.`,
+**Preciso configurar algo antes de usar isso?** Sim, um admin precisa configurar o remetente em [Configurações → Email](/configuracoes/email) (endereço, provedor e chave de API) antes de qualquer email poder ser enviado.`,
   },
 
   // ---------- Referência: NPS ----------
@@ -605,14 +605,14 @@ Diferente de WhatsApp/Instagram, email não é um canal de atendimento com caixa
 Uma pesquisa automática de satisfação (nota de 0 a 10) enviada por WhatsApp depois que um negócio é ganho e/ou entra numa etapa configurada.
 
 ## Passo a passo
-1. Um admin configura o gatilho em Configurações → NPS (ao ganhar e/ou ao entrar em etapa X), o prazo em dias, o canal e o template de envio.
+1. Um admin configura o gatilho em [Configurações → NPS](/configuracoes/nps) (ao ganhar e/ou ao entrar em etapa X), o prazo em dias, o canal e o template de envio.
 2. Quando um negócio se torna elegível, o sistema gera um link único e manda a mensagem automaticamente.
 3. O cliente responde num link público, sem precisar de login — escolhe uma nota e pode deixar um comentário.
 4. Cada link só pode ser respondido uma vez.
 5. Se a nota for baixa (0 a 6, "detrator"), o sistema cria automaticamente uma tarefa de follow-up no negócio, pra alguém da equipe entrar em contato.
 
 ## Perguntas frequentes
-**Onde vejo o resultado das pesquisas?** No card "NPS pós-venda" da tela Início (nota média, distribuição por faixa e comentários recentes) — a tela de Configurações só cuida do disparo, não mostra resultado.`,
+**Onde vejo o resultado das pesquisas?** No card "NPS pós-venda" da [tela Início](/) (nota média, distribuição por faixa e comentários recentes) — a tela de [Configurações → NPS](/configuracoes/nps) só cuida do disparo, não mostra resultado.`,
   },
 
   // ---------- Referência: Notificações ----------
@@ -652,7 +652,9 @@ A tela **Início** reúne os principais indicadores comerciais do time, com filt
 - **Ranking por vendedor**, **mensagens por dia** (gráfico dos últimos 90 dias) e **motivos de perda** mais comuns.
 
 ## Perguntas frequentes
-**Por que o funil não muda quando troco o período?** Porque ele reflete a posição atual dos negócios abertos, não um recorte histórico — trocar o período só afeta os indicadores que fazem sentido "por período" (leads, vendas, etc).`,
+**Por que o funil não muda quando troco o período?** Porque ele reflete a posição atual dos negócios abertos, não um recorte histórico — trocar o período só afeta os indicadores que fazem sentido "por período" (leads, vendas, etc).
+
+**Tem indicadores de LinkedIn/LeadDelta aqui também?** Não — esse é um painel separado, veja [Painel de indicadores do LinkedIn via LeadDelta](/ajuda/linkedin/linkedin-leaddelta).`,
   },
 
   // ---------- Referência: LinkedIn ----------
@@ -662,11 +664,11 @@ A tela **Início** reúne os principais indicadores comerciais do time, com filt
     title: "Painel de indicadores do LinkedIn via LeadDelta",
     track: "referencia",
     content: `## O que é
-Não é um canal de atendimento — é um painel de indicadores sobre as conexões do LinkedIn sincronizadas de uma ferramenta terceirizada chamada **LeadDelta** (configurada em Configurações → LinkedIn).
+Não é um canal de atendimento — é um painel de indicadores sobre as conexões do LinkedIn sincronizadas de uma ferramenta terceirizada chamada **LeadDelta** (configurada em [Configurações → LinkedIn](/configuracoes/linkedin)).
 
 ## Passo a passo
-1. Configure a API Key do LeadDelta em Configurações → LinkedIn e sincronize.
-2. Acesse **LinkedIn** no menu pra ver o funil de prospecção (Entrada → Contato realizado → Reunião → Fechado), comparativo entre os dois perfis/contas de prospecção usados, e uma tabela filtrável de todas as conexões individuais.
+1. Configure a API Key do LeadDelta em [Configurações → LinkedIn](/configuracoes/linkedin) e sincronize — lá também tem o botão **"Sincronizar agora"** pra atualizar na hora, sem esperar o horário do cron diário.
+2. Acesse [LinkedIn](/linkedin) no menu pra ver o funil de prospecção (Entrada → Contato realizado → Reunião → Fechado), comparativo entre os dois perfis/contas de prospecção usados, e uma tabela filtrável de todas as conexões individuais.
 3. Clique em **"Ver mais indicadores"** pra detalhes extras: cidades, empresas mais frequentes, novas conexões por mês, distribuição por workspace.
 
 ## Perguntas frequentes
@@ -684,7 +686,7 @@ Não é um canal de atendimento — é um painel de indicadores sobre as conexõ
 Gestão de quem acessa o CRM e com qual nível de permissão.
 
 ## Passo a passo
-1. Em Configurações → Usuários, crie um usuário com nome, email e papel (Atendente ou Admin) — a senha temporária gerada só aparece uma vez.
+1. Em [Configurações → Usuários](/configuracoes/usuarios), crie um usuário com nome, email e papel (Atendente ou Admin) — a senha temporária gerada só aparece uma vez.
 2. Edite um usuário pra trocar nome/email/papel, ou ativar **"Restringir aos próprios negócios/atendimentos"** (o atendente só vê o que é dele ou sem dono).
 3. Exclua um usuário que não precisa mais de acesso.
 
@@ -703,7 +705,7 @@ Gestão de quem acessa o CRM e com qual nível de permissão.
 Estrutura o funil de vendas: pipelines (funis) e suas etapas (colunas do kanban).
 
 ## Passo a passo
-1. Em Configurações → Pipelines, crie uma pipeline nova ou clone uma existente (copia etapas, tarefas automáticas e motivos de perda com nome novo).
+1. Em [Configurações → Pipelines](/configuracoes/pipelines), crie uma pipeline nova ou clone uma existente (copia etapas, tarefas automáticas e motivos de perda com nome novo).
 2. Dentro da pipeline, crie etapas (nome + cor) e reordene por drag-and-drop ou pelas setas.
 3. Em cada etapa, configure a tarefa automática que é criada quando um negócio entra ali (tipo, template, prazo, atraso de disparo, e opção de enviar mensagem sozinha sem clique).
 
@@ -755,7 +757,7 @@ Define quem recebe automaticamente negócios criados sem dono explícito, numa p
 Campos extras (além dos padrões do sistema) pra Contatos ou Negócios, guardados como informação livre em cada registro.
 
 ## Passo a passo
-1. Em Configurações → Campos Customizados, escolha a entidade (Contato ou Negócio), o rótulo, e o tipo: Texto, Número, Select (com opções cadastradas) ou Data.
+1. Em [Configurações → Campos Customizados](/configuracoes/campos), escolha a entidade (Contato ou Negócio), o rótulo, e o tipo: Texto, Número, Select (com opções cadastradas) ou Data.
 2. Depois de criado, só o rótulo e as opções (se for Select) podem ser editados — entidade, chave técnica e tipo ficam travados.
 3. Reordene os campos arrastando; a tela mostra quantos registros já têm aquele campo preenchido.
 
@@ -772,7 +774,7 @@ Campos extras (além dos padrões do sistema) pra Contatos ou Negócios, guardad
 Etiquetas coloridas aplicáveis a contatos e negócios, usadas pra classificar e filtrar, e também como gatilho de automações.
 
 ## Passo a passo
-1. Em Configurações → Tags, crie uma tag com nome (não pode repetir, mesmo com maiúsculas/minúsculas diferentes) e cor.
+1. Em [Configurações → Tags](/configuracoes/tags), crie uma tag com nome (não pode repetir, mesmo com maiúsculas/minúsculas diferentes) e cor.
 2. Edite ou exclua conforme necessário — a tela mostra quantos contatos/negócios usam cada tag.
 3. Reordene arrastando.
 
@@ -791,13 +793,13 @@ Etiquetas coloridas aplicáveis a contatos e negócios, usadas pra classificar e
 Textos reutilizáveis com variáveis, usados por tarefas automáticas, automações, sequências e envio de NPS.
 
 ## Passo a passo
-1. Em Configurações → Templates, crie um template de mensagem (nome + conteúdo) ou de email (nome + assunto + corpo).
+1. Em [Configurações → Templates](/configuracoes/templates), crie um template de mensagem (nome + conteúdo) ou de email (nome + assunto + corpo).
 2. Use o painel de variáveis disponíveis (clicáveis) pra inserir no texto — inclui nome/email do contato, valor do negócio e qualquer campo customizado já cadastrado.
 3. Veja o preview ao vivo com dados de exemplo antes de salvar.
 4. Ao excluir um template em uso, as tarefas automáticas que o referenciavam ficam sem template (não são bloqueadas, só desvinculadas).
 
 ## Perguntas frequentes
-**O template de NPS também é cadastrado aqui?** Sim, é um template de mensagem normal — só precisa conter a variável \`{{link_pesquisa}}\` pra funcionar (configurado em Configurações → NPS).`,
+**O template de NPS também é cadastrado aqui?** Sim, é um template de mensagem normal — só precisa conter a variável \`{{link_pesquisa}}\` pra funcionar (configurado em [Configurações → NPS](/configuracoes/nps)).`,
   },
 
   // ---------- Referência: Configurações — Canais ----------
@@ -811,7 +813,7 @@ Textos reutilizáveis com variáveis, usados por tarefas automáticas, automaç�
 Cada canal WhatsApp conecta um número de telefone via Z-API (provedor terceirizado).
 
 ## Passo a passo
-1. Em Configurações → WhatsApp, adicione um canal com nome, Instance ID, Token e Client-Token da Z-API.
+1. Em [Configurações → WhatsApp](/configuracoes/whatsapp), adicione um canal com nome, Instance ID, Token e Client-Token da Z-API.
 2. Copie a URL de webhook exibida e cadastre no painel da Z-API (abas "Ao receber" e "Status da mensagem").
 3. Clique em **"Testar conexão"** pra validar — isso também corrige automaticamente uma configuração incompleta de notificação de mensagens enviadas de outro aparelho, sem precisar reconectar.
 4. Marque um canal como **padrão**, se tiver mais de um.
@@ -830,7 +832,7 @@ Cada canal WhatsApp conecta um número de telefone via Z-API (provedor terceiriz
 Conexão de uma conta profissional do Instagram (Business ou Criador de conteúdo) pra atendimento via Direct.
 
 ## Passo a passo
-1. Em Configurações → Instagram, clique em **"Conectar conta do Instagram"** — isso abre o fluxo de autorização do próprio Meta, sem precisar digitar nenhuma credencial manualmente.
+1. Em [Configurações → Instagram](/configuracoes/instagram), clique em **"Conectar conta do Instagram"** — isso abre o fluxo de autorização do próprio Meta, sem precisar digitar nenhuma credencial manualmente.
 2. A conta precisa estar cadastrada como testadora do app usado pelo CRM (enquanto o app não passar por revisão do Meta) — **não precisa** de Página do Facebook vinculada.
 3. Depois de conectado, use **"Testar conexão"** sempre que quiser confirmar que está tudo certo (reforça a inscrição em webhook automaticamente).
 4. Controle o acesso por atendente do mesmo jeito do WhatsApp (bloqueio, não permissão — por padrão todos têm acesso).
@@ -850,7 +852,7 @@ Conexão de uma conta profissional do Instagram (Business ou Criador de conteúd
 Recebe dados de ferramentas externas (landing pages, calculadoras, formulários) e cria contato + negócio automaticamente.
 
 ## Passo a passo
-1. Em Configurações → Webhooks, crie um webhook de entrada com nome, pipeline e etapa padrão.
+1. Em [Configurações → Webhooks](/configuracoes/webhooks), crie um webhook de entrada com nome, pipeline e etapa padrão.
 2. Copie a URL e o **token secreto** gerado (mostrado uma única vez) — a ferramenta externa precisa mandar esse token no header \`x-webhook-secret\` ou como \`?token=\`.
 3. Configure o **mapeamento de campos**: pra cada campo do sistema ou customizado, informe o caminho dentro do JSON recebido (ex: \`payload.nome\`).
 4. Cadastre **tags fixas** que todo registro criado por esse webhook recebe automaticamente, pra identificar a origem depois.
@@ -870,7 +872,7 @@ Recebe dados de ferramentas externas (landing pages, calculadoras, formulários)
 Dispara um POST pra uma URL externa quando eventos escolhidos acontecem no CRM.
 
 ## Passo a passo
-1. Em Configurações → Webhooks, crie um webhook de saída com nome e URL de destino.
+1. Em [Configurações → Webhooks](/configuracoes/webhooks), crie um webhook de saída com nome e URL de destino.
 2. Marque os eventos desejados: negócio criado, etapa alterada, negócio ganho, negócio perdido.
 3. Se quiser, filtre por pipeline (e, só pro evento "Etapa alterada", por uma etapa específica).
 
@@ -889,7 +891,7 @@ Dispara um POST pra uma URL externa quando eventos escolhidos acontecem no CRM.
 Wizard de importação em massa de contatos e negócios a partir de uma planilha CSV.
 
 ## Passo a passo
-1. Em Configurações → Importação, envie o arquivo \`.csv\` (se os acentos vierem errados, use "Tentar reler como Windows-1252 (Excel)").
+1. Em [Configurações → Importação](/configuracoes/importacao), envie o arquivo \`.csv\` (se os acentos vierem errados, use "Tentar reler como Windows-1252 (Excel)").
 2. Mapeie cada coluna da planilha pra um campo do sistema, campo customizado, ou "Não mapear".
 3. Escolha o destino: uma pipeline/etapa fixa pra todas as linhas, ou por coluna (mapeando cada valor distinto da planilha pra uma etapa real).
 4. Confira o preview das primeiras linhas já resolvidas.
@@ -910,7 +912,7 @@ Wizard de importação em massa de contatos e negócios a partir de uma planilha
 Configuração única que, quando ativa, cria um negócio sozinho assim que chega a primeira mensagem de um contato novo (WhatsApp ou Instagram), sem negócio aberto ainda.
 
 ## Passo a passo
-1. Em Configurações → Negócio Automático, ative o switch.
+1. Em [Configurações → Negócio Automático](/configuracoes/negocio-automatico), ative o switch.
 2. Escolha a pipeline e a etapa fixa onde esses negócios devem entrar.
 
 ## Perguntas frequentes
@@ -928,7 +930,7 @@ Configuração única que, quando ativa, cria um negócio sozinho assim que cheg
 Chaves de API permitem que sistemas externos ou agentes de IA acessem o CRM via API REST ou servidor MCP.
 
 ## Passo a passo
-1. Em Configurações → API, crie uma chave com um rótulo e escolha o escopo: **Operacional** (negócios, contatos, tarefas, mensagens e emails do dia a dia) ou **Admin** (tudo do operacional + configurar o CRM: pipelines, campos, tags, templates, automações, webhooks).
+1. Em [Configurações → API](/configuracoes/api), crie uma chave com um rótulo e escolha o escopo: **Operacional** (negócios, contatos, tarefas, mensagens e emails do dia a dia) ou **Admin** (tudo do operacional + configurar o CRM: pipelines, campos, tags, templates, automações, webhooks).
 2. A chave gerada (\`rawKey\`) só aparece **uma única vez**, na criação — copie e guarde com segurança.
 3. Revogue ou reative uma chave existente quando precisar, sem excluir o registro (mantém o histórico de uso).
 
@@ -945,8 +947,8 @@ Chaves de API permitem que sistemas externos ou agentes de IA acessem o CRM via 
 O CRM expõe um servidor MCP (Model Context Protocol), permitindo que um assistente de IA (Claude, por exemplo) consulte e opere o CRM diretamente.
 
 ## Passo a passo
-1. Crie uma chave de API (ver artigo anterior) com o escopo adequado.
-2. Em Configurações → API → Documentação MCP, copie a URL do servidor e configure no seu cliente MCP (claude.ai/Claude Desktop, ou via \`mcp-remote\` pra clientes que só suportam stdio), usando a chave como \`Authorization: Bearer\`.
+1. No claude.ai, em Configurações → Conectores → Adicionar conector personalizado, cole só a URL do servidor (ver [Configurações → API → Documentação MCP](/configuracoes/api/mcp)) e deixe os campos de OAuth em branco — o claude.ai se registra sozinho e abre uma tela de consentimento dentro do próprio CRM, onde você loga como admin e escolhe o escopo; a API key é criada automaticamente nesse momento.
+2. Se o seu cliente MCP só suporta servidores locais (stdio), crie uma chave manualmente (ver [Chaves de API: escopo operacional e admin](/ajuda/config-api/config-api-chaves)) e configure a ponte \`mcp-remote\` com a chave no header \`Authorization: Bearer\` — sem passar pelo fluxo OAuth.
 3. Com escopo Operacional, o agente já consegue listar/detalhar negócios e contatos, mexer no histórico de conversa, mover etapa, gerenciar tags e tarefas, e enviar mensagem/email.
 4. Com escopo Admin, o agente também consegue mexer em configuração do CRM (pipelines, campos, tags, templates, automações, webhooks) — nunca em credenciais de canal, mesmo com esse escopo.
 

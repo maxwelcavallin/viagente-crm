@@ -1,24 +1,50 @@
 import { Fragment } from "react";
+import Link from "next/link";
 
 // Renderizador minimalista pro subconjunto de markdown usado nos artigos da
-// Central de Ajuda (## título, listas numeradas/com marcador, **negrito** e
-// `código` inline) — conteúdo é 100% escrito por nós via script de seed
-// (scripts/seed-help-articles.ts), não é markdown de usuário, então não
-// precisa de uma lib de parsing completa nem de sanitização.
+// Central de Ajuda (## título, listas numeradas/com marcador, **negrito**,
+// `código` inline e [texto](link)) — conteúdo é 100% escrito por nós via
+// script de seed (scripts/seed-help-articles.ts), não é markdown de usuário,
+// então não precisa de uma lib de parsing completa nem de sanitização.
+// Link interno (começa com "/") usa next/link pra navegação sem reload —
+// tanto pra outro artigo (/ajuda/categoria/slug) quanto pra uma página
+// específica do CRM (ex: /configuracoes/whatsapp); link externo abre em
+// nova aba.
+const LINK_CLASSNAME = "text-primary underline underline-offset-2 hover:no-underline";
+
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
+  const parts = text
+    .split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g)
+    .filter(Boolean);
   return parts.map((part, i) => {
+    const key = `${keyPrefix}-${i}`;
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>;
+      return <strong key={key}>{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
-        <code key={`${keyPrefix}-${i}`} className="rounded bg-muted px-1 py-0.5 text-[0.85em]">
+        <code key={key} className="rounded bg-muted px-1 py-0.5 text-[0.85em]">
           {part.slice(1, -1)}
         </code>
       );
     }
-    return <Fragment key={`${keyPrefix}-${i}`}>{part}</Fragment>;
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      const [, label, href] = linkMatch;
+      if (href.startsWith("/")) {
+        return (
+          <Link key={key} href={href} className={LINK_CLASSNAME}>
+            {label}
+          </Link>
+        );
+      }
+      return (
+        <a key={key} href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASSNAME}>
+          {label}
+        </a>
+      );
+    }
+    return <Fragment key={key}>{part}</Fragment>;
   });
 }
 
