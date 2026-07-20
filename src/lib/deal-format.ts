@@ -37,10 +37,11 @@ export function formatCurrencyBRL(value: string | null): string | null {
   });
 }
 
-// Aproximação do tempo na etapa atual: usa updated_at (não há coluna
-// dedicada de "entrou na etapa em"), conforme orientado na Etapa 8.
-export function formatTimeInStage(updatedAt: Date, now: Date = new Date()): string {
-  const diffMs = now.getTime() - updatedAt.getTime();
+// Tempo na etapa atual — a partir de deals.stageEnteredAt (resetado toda
+// vez que a etapa muda, ver moveDealStage), não confundir com updatedAt
+// (que qualquer edição toca) nem createdAt (data de criação do negócio).
+export function formatTimeInStage(stageEnteredAt: Date, now: Date = new Date()): string {
+  const diffMs = now.getTime() - stageEnteredAt.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   if (diffMin < 1) return "agora";
   if (diffMin < 60) return `${diffMin}m`;

@@ -43,6 +43,34 @@ export type KanbanStage = {
   pipelineId: string;
 };
 
+type SortOption = "tempo_etapa" | "data_criacao" | "nome" | "valor";
+
+// Padrão pedido pelo usuário: tempo na etapa, dos mais recentes (acabou de
+// entrar) pro mais antigo (parado há mais tempo) — ver compareDeals.
+const DEFAULT_SORT: SortOption = "tempo_etapa";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  tempo_etapa: "Tempo na etapa",
+  data_criacao: "Data de criação",
+  nome: "Nome",
+  valor: "Valor",
+};
+
+function compareDeals(a: DealCardData, b: DealCardData, sort: SortOption): number {
+  switch (sort) {
+    case "tempo_etapa":
+      // Mais recente (acabou de entrar) primeiro, mais antigo (mais tempo
+      // parado na etapa) por último.
+      return b.stageEnteredAt.getTime() - a.stageEnteredAt.getTime();
+    case "data_criacao":
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    case "nome":
+      return a.title.localeCompare(b.title, "pt-BR");
+    case "valor":
+      return (Number(b.value) || 0) - (Number(a.value) || 0);
+  }
+}
+
 export function KanbanBoard({
   pipelines,
   selectedPipelineId,
@@ -62,6 +90,7 @@ export function KanbanBoard({
   const [, startTransition] = useTransition();
   const [deals, setDeals] = useState(initialDeals);
   const [filters, setFilters] = useState<DealFiltersState>(DEFAULT_FILTERS);
+  const [sortBy, setSortBy] = useState<SortOption>(DEFAULT_SORT);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
   const [grabbedDealId, setGrabbedDealId] = useState<string | null>(null);
@@ -290,24 +319,46 @@ export function KanbanBoard({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Select
-          items={Object.fromEntries(pipelines.map((p) => [p.id, p.name]))}
-          value={selectedPipelineId}
-          onValueChange={(value) => {
-            if (value) router.push(`/negocios?pipelineId=${value}`);
-          }}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Pipeline" />
-          </SelectTrigger>
-          <SelectContent>
-            {pipelines.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            items={Object.fromEntries(pipelines.map((p) => [p.id, p.name]))}
+            value={selectedPipelineId}
+            onValueChange={(value) => {
+              if (value) router.push(`/negocios?pipelineId=${value}`);
+            }}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Pipeline" />
+            </SelectTrigger>
+            <SelectContent>
+              {pipelines.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={SORT_LABELS}
+            value={sortBy}
+            onValueChange={(value) => setSortBy((value as SortOption) ?? DEFAULT_SORT)}
+          >
+            <SelectTrigger className="w-48 text-sm">
+              <span className="text-muted-foreground">Ordenar por:</span>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(SORT_LABELS) as [SortOption, string][]).map(
+                ([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
 
         <DealFormDialog
           {...formProps}
@@ -369,9 +420,9 @@ export function KanbanBoard({
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2">
           {stagesForPipeline.map((stage) => {
-            const stageDeals = filteredDeals.filter(
-              (d) => d.stageId === stage.id
-            );
+            const stageDeals = filteredDeals
+              .filter((d) => d.stageId === stage.id)
+              .sort((a, b) => compareDeals(a, b, sortBy));
             const sum = stageDeals.reduce(
               (acc, d) => acc + (d.value ? Number(d.value) : 0),
               0

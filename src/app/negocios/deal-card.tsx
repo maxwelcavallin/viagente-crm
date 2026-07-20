@@ -38,6 +38,7 @@ export type DealCardData = {
   temperature: Temperature | null;
   updatedAt: Date;
   createdAt: Date;
+  stageEnteredAt: Date;
   contactId: string;
   contactName: string;
   contactPhone: string;
@@ -268,7 +269,7 @@ export function DealCard({
       )}
 
       <div className="flex items-center justify-between pt-0.5 text-[11px] text-muted-foreground">
-        <span>{formatTimeInStage(deal.updatedAt)} na etapa</span>
+        <span>{formatTimeInStage(deal.stageEnteredAt)} na etapa</span>
         <DeleteDealDialog
           deal={deal}
           trigger={
