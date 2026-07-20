@@ -411,36 +411,44 @@ export function KanbanBoard({
                     Nenhum negócio nesta etapa.
                   </p>
                 ) : (
-                  stageDeals.map((deal) => (
-                    <DealCard
-                      key={deal.id}
-                      deal={deal}
-                      otherStages={otherStages}
-                      formProps={formProps}
-                      lossReasons={lossReasons}
-                      onMoveStage={(stageId) => commitMove(deal.id, stageId)}
-                      onSetStatus={(status) => handleSetStatus(deal.id, status)}
-                      onSetLost={(lossReasonId) => handleSetLost(deal.id, lossReasonId)}
-                      isGrabbed={grabbedDealId === deal.id}
-                      grabbedPreviewStageName={
-                        grabbedDealId === deal.id
-                          ? (stages.find(
-                              (s) =>
-                                s.id === (grabbedPreviewStageId ?? deal.stageId)
-                            )?.name ?? null)
-                          : null
-                      }
-                      draggable={selectedDealIds.size === 0}
-                      onDragStart={() => setDraggedDealId(deal.id)}
-                      onDragEnd={() => {
-                        setDraggedDealId(null);
-                        setDragOverStageId(null);
-                      }}
-                      onKeyDown={(e) => handleCardKeyDown(e, deal)}
-                      selected={selectedDealIds.has(deal.id)}
-                      onToggleSelect={() => toggleSelectDeal(deal.id)}
-                    />
-                  ))
+                  // max-h aproxima 5 cards visíveis (altura varia com legenda de
+                  // mensagem/tags de cada negócio) + início do 6º espiando — o
+                  // resto só aparece rolando esta coluna, pra uma etapa com
+                  // muitos negócios não esticar a página inteira (a rolagem
+                  // geral da página continua em AppShell, ver <main
+                  // overflow-y-auto>).
+                  <div className="flex max-h-[820px] flex-col gap-3 overflow-y-auto pr-1">
+                    {stageDeals.map((deal) => (
+                      <DealCard
+                        key={deal.id}
+                        deal={deal}
+                        otherStages={otherStages}
+                        formProps={formProps}
+                        lossReasons={lossReasons}
+                        onMoveStage={(stageId) => commitMove(deal.id, stageId)}
+                        onSetStatus={(status) => handleSetStatus(deal.id, status)}
+                        onSetLost={(lossReasonId) => handleSetLost(deal.id, lossReasonId)}
+                        isGrabbed={grabbedDealId === deal.id}
+                        grabbedPreviewStageName={
+                          grabbedDealId === deal.id
+                            ? (stages.find(
+                                (s) =>
+                                  s.id === (grabbedPreviewStageId ?? deal.stageId)
+                              )?.name ?? null)
+                            : null
+                        }
+                        draggable={selectedDealIds.size === 0}
+                        onDragStart={() => setDraggedDealId(deal.id)}
+                        onDragEnd={() => {
+                          setDraggedDealId(null);
+                          setDragOverStageId(null);
+                        }}
+                        onKeyDown={(e) => handleCardKeyDown(e, deal)}
+                        selected={selectedDealIds.has(deal.id)}
+                        onToggleSelect={() => toggleSelectDeal(deal.id)}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             );
