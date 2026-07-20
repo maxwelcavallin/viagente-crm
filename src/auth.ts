@@ -100,6 +100,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // própria (Authorization: Bearer), não por sessão de usuário.
         pathname.startsWith("/api/v1") ||
         pathname === "/api/mcp" ||
+        // Handshake OAuth do conector MCP hospedado (claude.ai) — chamados
+        // pelo backend do claude.ai direto, sem sessão de navegador (só
+        // /oauth/authorize, a tela de consentimento, exige login normal e
+        // por isso NÃO entra nessa lista). Ver src/lib/mcp-oauth.ts.
+        pathname === "/.well-known/oauth-authorization-server" ||
+        pathname === "/.well-known/oauth-protected-resource" ||
+        pathname === "/api/oauth/register" ||
+        pathname === "/api/oauth/token" ||
         // Pesquisa pública de NPS (Etapa 27) — respondida pelo cliente
         // final, sem login. Faltava aqui (bug pré-existente: um cliente
         // anônimo era redirecionado pro /login em vez de ver a pesquisa).

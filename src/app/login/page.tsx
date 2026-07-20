@@ -7,7 +7,13 @@ import {
 } from "@/components/ui/card";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}) {
+  const { callbackUrl } = await searchParams;
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-4">
       {/* eslint-disable-next-line @next/next/no-img-element -- logo estática, sem next/image usado no restante do projeto */}
@@ -30,7 +36,7 @@ export default function LoginPage() {
           <CardDescription>Entre com seu email e senha.</CardDescription>
         </CardHeader>
         <CardContent>
-          <LoginForm />
+          <LoginForm callbackUrl={callbackUrl} />
         </CardContent>
       </Card>
     </main>

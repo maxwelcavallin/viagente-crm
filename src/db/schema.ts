@@ -1324,6 +1324,41 @@ export const apiWriteLog = pgTable(
   (t) => [index("api_write_log_api_key_id_created_at_idx").on(t.apiKeyId, t.createdAt)]
 );
 
+// ---------- OAuth 2.1 pra conectores MCP hospedados (claude.ai) ----------
+// Ao adicionar um "conector personalizado" remoto, o claude.ai assume por
+// padrão um handshake OAuth 2.1 completo (Dynamic Client Registration +
+// PKCE) — não dá pra simplesmente colar uma API key na hora de conectar.
+// Essas duas tabelas implementam só o mínimo necessário desse handshake: o
+// cliente (Claude) se registra sozinho via DCR (mcpOauthClients), o admin
+// autoriza usando a própria sessão já logada no CRM (nenhum login/senha
+// novo), e o "access_token" devolvido no fim de /api/oauth/token é uma
+// api_keys de verdade, criada na hora — reaproveita 100% da autenticação,
+// revogação (tela de Configurações → API) e auditoria que já existem pra
+// API pública/MCP (Etapa 28), sem token de acesso paralelo pra manter.
+export const mcpOauthClients = pgTable("mcp_oauth_clients", {
+  id: text("id").primaryKey(), // client_id gerado no /register (DCR)
+  clientName: text("client_name"),
+  redirectUris: jsonb("redirect_uris").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Authorization code de uso único (fluxo padrão + PKCE S256) — vida curta
+// (ver EXPIRES_IN_MS em mcp-oauth.ts) e marcado como usado assim que
+// trocado por um access_token em /api/oauth/token, pra impedir replay.
+export const mcpOauthCodes = pgTable("mcp_oauth_codes", {
+  code: text("code").primaryKey(),
+  clientId: text("client_id").notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  scope: apiKeyScopeEnum("scope").notNull().default("operacional"),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Config global (linha única, mesmo padrão de npsSettings) — não é por
 // canal: qualquer canal WhatsApp conectado cria negócio na mesma
 // pipeline/etapa quando uma conversa nova chega sem negócio aberto.

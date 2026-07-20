@@ -67,17 +67,27 @@ export default function McpDocsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>3. Conectando no Claude (claude.ai / Claude Desktop)</CardTitle>
+          <CardTitle>3. Conectando no claude.ai (conector personalizado)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>
-            Em <strong>Configurações → Conectores → Adicionar conector personalizado</strong>, informe
-            a URL acima e adicione um header customizado:
+            Em <strong>Configurações → Conectores → Adicionar conector personalizado</strong>, informe só a
+            URL do servidor acima — <strong>deixe &quot;ID do Cliente OAuth&quot; e &quot;Client Secret OAuth&quot;
+            em branco</strong>. O claude.ai se registra sozinho (OAuth 2.1 com Dynamic Client Registration) e
+            abre uma tela de consentimento dentro do próprio CRM: faça login como admin e escolha o escopo
+            (Operacional ou Admin) — a API key é criada na hora, sem precisar copiar/colar nada.
           </p>
-          <CodeBlock>{`Authorization: Bearer <sua chave>`}</CodeBlock>
           <p className="text-muted-foreground">
-            Se o cliente MCP que você está usando só suporta servidores locais (stdio), use a ponte{" "}
-            <code className="font-mono">mcp-remote</code> na configuração:
+            Essa API key criada pelo fluxo OAuth aparece na aba{" "}
+            <Link href="/configuracoes/api" className="text-primary hover:underline">
+              API
+            </Link>{" "}
+            como qualquer outra — revogar por lá desconecta o conector.
+          </p>
+          <p className="text-muted-foreground">
+            Se o cliente MCP que você está usando só suporta servidores locais (stdio) — como o Claude
+            Desktop configurado manualmente — use a ponte <code className="font-mono">mcp-remote</code> com
+            a API key direto no header, sem passar pelo fluxo OAuth:
           </p>
           <CodeBlock>{`{
   "mcpServers": {

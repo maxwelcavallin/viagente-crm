@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { authenticateApiRequest } from "@/lib/api-keys";
+import { getOAuthBaseUrl } from "@/lib/mcp-oauth";
 import { createMcpServer } from "@/lib/mcp-server";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,14 @@ export const dynamic = "force-dynamic";
 async function handleMcpRequest(request: Request): Promise<Response> {
   const auth = await authenticateApiRequest(request);
   if (!auth.ok) {
-    return Response.json({ error: auth.error }, { status: auth.status });
+    // WWW-Authenticate com resource_metadata é como o claude.ai descobre o
+    // fluxo OAuth (ver /oauth/authorize) num 401 — sem isso, ele tenta
+    // adivinhar endpoints e cai em 404 (ver src/app/api/oauth/*).
+    const headers =
+      auth.status === 401
+        ? { "www-authenticate": `Bearer resource_metadata="${getOAuthBaseUrl()}/.well-known/oauth-protected-resource"` }
+        : undefined;
+    return Response.json({ error: auth.error }, { status: auth.status, headers });
   }
 
   const server = createMcpServer(auth.apiKey);
