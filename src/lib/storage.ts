@@ -17,6 +17,14 @@ function getClient(): S3Client {
     region: "auto",
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
+    // O SDK v3 passou a calcular checksum (CRC32) por padrão em todo
+    // PutObject, inclusive URL assinada — vira query param extra
+    // (x-amz-checksum-crc32/x-amz-sdk-checksum-algorithm) que o R2 não
+    // libera no preflight de CORS pro PUT feito direto do navegador
+    // (getMediaUploadUrl), quebrando upload de anexo com "blocked by CORS
+    // policy". "WHEN_REQUIRED" desliga o checksum automático, restaurando o
+    // comportamento de antes — R2 não exige esse checksum.
+    requestChecksumCalculation: "WHEN_REQUIRED",
   });
 }
 
