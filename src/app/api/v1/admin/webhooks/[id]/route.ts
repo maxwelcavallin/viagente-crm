@@ -21,6 +21,7 @@ export async function PATCH(
     events?: string[];
     pipelineId?: string | null;
     stageId?: string | null;
+    tagId?: string | null;
   } | null;
   if (!body?.direction || !body?.name) {
     return Response.json({ error: "direction e name são obrigatórios." }, { status: 400 });
@@ -35,6 +36,7 @@ export async function PATCH(
     events: body.events,
     pipelineId: body.pipelineId,
     stageId: body.stageId,
+    tagId: body.tagId,
   });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
   return Response.json({ webhook: result.data });

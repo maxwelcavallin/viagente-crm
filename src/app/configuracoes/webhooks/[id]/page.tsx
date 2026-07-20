@@ -189,9 +189,11 @@ export default async function WebhookDetailPage({
                 events: (webhook.events as string[] | null) ?? [],
                 pipelineId: webhook.pipelineId,
                 stageId: webhook.stageId,
+                tagId: webhook.tagId,
               }}
               pipelines={allPipelines}
               stages={allStages}
+              tags={allTags}
             />
           </CardContent>
         </Card>

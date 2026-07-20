@@ -1,17 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, deals, webhookConfigs, webhookLogs } from "@/db/schema";
+import { contacts, deals, tags, webhookConfigs, webhookLogs } from "@/db/schema";
 
 export type OutboundEvent =
   | "negocio_criado"
   | "etapa_alterada"
   | "negocio_ganho"
-  | "negocio_perdido";
+  | "negocio_perdido"
+  | "tag_adicionada";
 
 async function findMatchingConfigs(
   event: OutboundEvent,
   pipelineId: string,
-  stageId: string
+  stageId: string,
+  tagId?: string
 ) {
   const rows = await db
     .select()
@@ -25,6 +27,9 @@ async function findMatchingConfigs(
     if (!events.includes(event)) return false;
     if (cfg.pipelineId && cfg.pipelineId !== pipelineId) return false;
     if (event === "etapa_alterada" && cfg.stageId && cfg.stageId !== stageId) {
+      return false;
+    }
+    if (event === "tag_adicionada" && cfg.tagId && cfg.tagId !== tagId) {
       return false;
     }
     return true;
@@ -75,15 +80,21 @@ async function sendOne(
 
 // Fire-and-forget: nunca lança, nunca deve bloquear a ação principal do CRM
 // que a disparou (ver seção 6 da spec — falha de saída só vira log de erro).
+// `tagId` só é relevante (e obrigatório pra escopo funcionar) no evento
+// 'tag_adicionada' — chame uma vez por tag genuinamente adicionada, nunca
+// com a lista inteira de uma vez (ver call sites: syncDealTags,
+// bulkAddTagAction, attachTagsToDeal, addTagToDealForApiKey,
+// createDealForApiKey, automation-sequences.ts).
 export async function dispatchOutboundWebhooks(
   event: OutboundEvent,
-  dealId: string
+  dealId: string,
+  tagId?: string
 ): Promise<void> {
   try {
     const [deal] = await db.select().from(deals).where(eq(deals.id, dealId)).limit(1);
     if (!deal) return;
 
-    const configs = await findMatchingConfigs(event, deal.pipelineId, deal.stageId);
+    const configs = await findMatchingConfigs(event, deal.pipelineId, deal.stageId, tagId);
     if (configs.length === 0) return;
 
     const [contact] = await db
@@ -91,6 +102,12 @@ export async function dispatchOutboundWebhooks(
       .from(contacts)
       .where(eq(contacts.id, deal.contactId))
       .limit(1);
+
+    let tag: { id: string; name: string } | null = null;
+    if (event === "tag_adicionada" && tagId) {
+      const [row] = await db.select({ id: tags.id, name: tags.name }).from(tags).where(eq(tags.id, tagId)).limit(1);
+      tag = row ?? null;
+    }
 
     const body = {
       event,
@@ -112,6 +129,7 @@ export async function dispatchOutboundWebhooks(
             email: contact.email,
           }
         : null,
+      ...(tag ? { tag } : {}),
     };
 
     await Promise.all(configs.map((config) => sendOne(config, body)));

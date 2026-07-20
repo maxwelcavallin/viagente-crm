@@ -318,6 +318,7 @@ export async function createDealAction(
     source: "manual",
   });
   await fireTagAddedAutomations(created.id, newTagIds);
+  for (const tagId of newTagIds) void dispatchOutboundWebhooks("tag_adicionada", created.id, tagId);
   void dispatchOutboundWebhooks("negocio_criado", created.id);
 
   revalidatePath("/negocios");
@@ -365,6 +366,7 @@ export async function updateDealAction(
   await logDealFieldDiffs(user.id, id, current, fields);
   const newTagIds = await syncDealTags(id, fields.tagIds, { userId: user.id, source: "manual" });
   await fireTagAddedAutomations(id, newTagIds);
+  for (const tagId of newTagIds) void dispatchOutboundWebhooks("tag_adicionada", id, tagId);
 
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${id}`);
@@ -805,6 +807,7 @@ export async function bulkAddTagAction(
         newValue: tag?.name ?? null,
       });
       await fireTagAddedAutomations(row.dealId, [tagId]);
+      void dispatchOutboundWebhooks("tag_adicionada", row.dealId, tagId);
     }
   }
 

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
 // POST /api/v1/admin/webhooks — requer chave admin
 // direction='entrada': { direction, name, defaultPipelineId, defaultStageId }
-// direction='saida': { direction, name, targetUrl, events, pipelineId?, stageId? }
+// direction='saida': { direction, name, targetUrl, events, pipelineId?, stageId?, tagId? }
 export async function POST(request: Request) {
   const auth = await authenticateApiRequest(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     events?: string[];
     pipelineId?: string | null;
     stageId?: string | null;
+    tagId?: string | null;
   } | null;
   if (!body?.direction || !body?.name) {
     return Response.json({ error: "direction e name são obrigatórios." }, { status: 400 });
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
     events: body.events,
     pipelineId: body.pipelineId,
     stageId: body.stageId,
+    tagId: body.tagId,
   });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
   return Response.json({ webhook: result.data }, { status: 201 });

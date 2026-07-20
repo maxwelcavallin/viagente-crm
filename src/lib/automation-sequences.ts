@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { logDealActivity } from "@/lib/deal-activity-log";
 import { maybeAutoSendTask } from "@/lib/task-automation";
+import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_MINUTE = 60 * 1000;
@@ -178,6 +179,7 @@ async function executeStep(run: RunRow, step: StepRow): Promise<void> {
           action: "tag_adicionada",
           newValue: tag?.name ?? null,
         });
+        void dispatchOutboundWebhooks("tag_adicionada", run.dealId, step.addTagId);
       }
       break;
     }

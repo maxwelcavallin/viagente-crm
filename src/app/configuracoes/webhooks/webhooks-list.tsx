@@ -28,6 +28,7 @@ export type WebhookRow = {
   defaultStageId: string | null;
   pipelineId: string | null;
   stageId: string | null;
+  tagId: string | null;
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -35,6 +36,7 @@ const EVENT_LABELS: Record<string, string> = {
   etapa_alterada: "Etapa alterada",
   negocio_ganho: "Negócio ganho",
   negocio_perdido: "Negócio perdido",
+  tag_adicionada: "Tag adicionada",
 };
 
 function ActiveToggle({ webhook }: { webhook: WebhookRow }) {
@@ -58,13 +60,16 @@ export function WebhooksList({
   webhooks,
   pipelines,
   stages,
+  tags,
 }: {
   webhooks: WebhookRow[];
   pipelines: { id: string; name: string }[];
   stages: { id: string; name: string; pipelineId: string }[];
+  tags: { id: string; name: string }[];
 }) {
   const pipelineById = new Map(pipelines.map((p) => [p.id, p]));
   const stageById = new Map(stages.map((s) => [s.id, s]));
+  const tagById = new Map(tags.map((t) => [t.id, t]));
 
   if (webhooks.length === 0) {
     return (
@@ -122,6 +127,9 @@ export function WebhooksList({
                       {pipelineById.get(webhook.pipelineId)?.name}
                       {webhook.stageId ? ` → ${stageById.get(webhook.stageId)?.name}` : ""}
                     </Badge>
+                  )}
+                  {webhook.tagId && (
+                    <Badge variant="outline">{tagById.get(webhook.tagId)?.name}</Badge>
                   )}
                 </div>
               )}

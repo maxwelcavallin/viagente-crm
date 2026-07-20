@@ -295,6 +295,13 @@
       "when": 1784584644877,
       "tag": "0041_dashing_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784587223399,
+      "tag": "0042_careless_prism",
+      "breakpoints": true
     }
   ]
 }

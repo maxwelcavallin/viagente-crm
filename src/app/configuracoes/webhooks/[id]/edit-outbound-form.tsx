@@ -21,12 +21,14 @@ const EVENT_LABELS: Record<string, string> = {
   etapa_alterada: "Etapa alterada",
   negocio_ganho: "Negócio ganho",
   negocio_perdido: "Negócio perdido",
+  tag_adicionada: "Tag adicionada",
 };
 
 export function EditOutboundForm({
   webhook,
   pipelines,
   stages,
+  tags,
 }: {
   webhook: {
     id: string;
@@ -35,13 +37,16 @@ export function EditOutboundForm({
     events: string[];
     pipelineId: string | null;
     stageId: string | null;
+    tagId: string | null;
   };
   pipelines: { id: string; name: string }[];
   stages: { id: string; name: string; pipelineId: string; order: number }[];
+  tags: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [pipelineId, setPipelineId] = useState<string | null>(webhook.pipelineId);
   const [stageId, setStageId] = useState<string | null>(webhook.stageId);
+  const [tagId, setTagId] = useState<string | null>(webhook.tagId);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(
     new Set(webhook.events)
   );
@@ -79,6 +84,7 @@ export function EditOutboundForm({
       <input type="hidden" name="id" value={webhook.id} />
       <input type="hidden" name="pipelineId" value={pipelineId ?? ""} />
       <input type="hidden" name="stageId" value={stageId ?? ""} />
+      <input type="hidden" name="tagId" value={tagId ?? ""} />
       <div className="space-y-2">
         <Label htmlFor="edit-out-name">Nome</Label>
         <Input id="edit-out-name" name="name" defaultValue={webhook.name} required />
@@ -156,6 +162,32 @@ export function EditOutboundForm({
           </Select>
         </div>
       </div>
+      {selectedEvents.has("tag_adicionada") && (
+        <div className="space-y-2">
+          <Label>Tag específica (opcional)</Label>
+          <Select
+            items={{ "": "Qualquer tag", ...Object.fromEntries(tags.map((t) => [t.id, t.name])) }}
+            value={tagId ?? ""}
+            onValueChange={(v) => setTagId(v || null)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Qualquer tag" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Qualquer tag</SelectItem>
+              {tags.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Sem tag selecionada, dispara pra qualquer tag adicionada ao
+            negócio. Só se aplica ao evento &quot;Tag adicionada&quot;.
+          </p>
+        </div>
+      )}
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" disabled={isPending}>
         {isPending ? "Salvando..." : "Salvar"}

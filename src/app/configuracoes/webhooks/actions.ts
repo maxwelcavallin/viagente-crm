@@ -73,6 +73,7 @@ export async function createOutboundWebhookAction(
   const events = formData.getAll("events").filter((v): v is string => typeof v === "string");
   const pipelineId = formData.get("pipelineId");
   const stageId = formData.get("stageId");
+  const tagId = formData.get("tagId");
 
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
@@ -98,6 +99,7 @@ export async function createOutboundWebhookAction(
       events,
       pipelineId: typeof pipelineId === "string" && pipelineId ? pipelineId : null,
       stageId: typeof stageId === "string" && stageId ? stageId : null,
+      tagId: typeof tagId === "string" && tagId ? tagId : null,
       fieldMapping: {},
     })
     .returning({ id: webhookConfigs.id });
@@ -118,6 +120,7 @@ export async function updateOutboundWebhookAction(
   const events = formData.getAll("events").filter((v): v is string => typeof v === "string");
   const pipelineId = formData.get("pipelineId");
   const stageId = formData.get("stageId");
+  const tagId = formData.get("tagId");
 
   if (typeof id !== "string" || !id) {
     return { status: "error", message: "Webhook inválido." };
@@ -145,6 +148,7 @@ export async function updateOutboundWebhookAction(
       events,
       pipelineId: typeof pipelineId === "string" && pipelineId ? pipelineId : null,
       stageId: typeof stageId === "string" && stageId ? stageId : null,
+      tagId: typeof tagId === "string" && tagId ? tagId : null,
     })
     .where(eq(webhookConfigs.id, id));
 

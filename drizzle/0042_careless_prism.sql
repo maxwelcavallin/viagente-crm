@@ -1,0 +1,2 @@
+ALTER TABLE "webhook_configs" ADD COLUMN "tag_id" uuid;--> statement-breakpoint
+ALTER TABLE "webhook_configs" ADD CONSTRAINT "webhook_configs_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE cascade ON UPDATE no action;

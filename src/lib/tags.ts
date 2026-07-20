@@ -2,6 +2,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { contactTags, dealTags, tags } from "@/db/schema";
 import { fireTagAddedAutomations } from "@/lib/task-automation";
+import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 export type TagOption = { id: string; name: string; color: string | null };
 
@@ -65,8 +66,7 @@ export async function attachTagsToDeal(dealId: string, tagIds: string[]): Promis
     .onConflictDoNothing()
     .returning({ tagId: dealTags.tagId });
 
-  await fireTagAddedAutomations(
-    dealId,
-    inserted.map((row) => row.tagId)
-  );
+  const insertedTagIds = inserted.map((row) => row.tagId);
+  await fireTagAddedAutomations(dealId, insertedTagIds);
+  for (const tagId of insertedTagIds) void dispatchOutboundWebhooks("tag_adicionada", dealId, tagId);
 }

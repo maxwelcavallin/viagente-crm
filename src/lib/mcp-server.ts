@@ -1115,9 +1115,15 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           defaultPipelineId: z.string().uuid().optional().nullable().describe("obrigatório se direction='entrada'"),
           defaultStageId: z.string().uuid().optional().nullable().describe("obrigatório se direction='entrada'"),
           targetUrl: z.string().url().optional().nullable().describe("obrigatório se direction='saida'"),
-          events: z.array(z.string()).optional().describe("obrigatório se direction='saida'"),
+          events: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "obrigatório se direction='saida'. Eventos possíveis: negocio_criado, etapa_alterada, negocio_ganho, negocio_perdido, tag_adicionada."
+            ),
           pipelineId: z.string().uuid().optional().nullable(),
-          stageId: z.string().uuid().optional().nullable(),
+          stageId: z.string().uuid().optional().nullable().describe("escopo do evento etapa_alterada"),
+          tagId: z.string().uuid().optional().nullable().describe("escopo do evento tag_adicionada"),
         },
       },
       async (args) => {
@@ -1141,6 +1147,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           events: z.array(z.string()).optional(),
           pipelineId: z.string().uuid().optional().nullable(),
           stageId: z.string().uuid().optional().nullable(),
+          tagId: z.string().uuid().optional().nullable(),
         },
       },
       async ({ webhookId, ...params }) => {

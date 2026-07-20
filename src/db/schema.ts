@@ -887,6 +887,11 @@ export const webhookConfigs = pgTable("webhook_configs", {
   stageId: uuid("stage_id").references(() => stages.id, {
     onDelete: "cascade",
   }),
+  // Escopo do evento 'tag_adicionada': sem tagId, dispara pra qualquer tag
+  // adicionada a um negócio da pipeline configurada; com tagId, só dispara
+  // quando essa tag específica é adicionada (ex: "Qualificado"). Ignorado
+  // pelos demais eventos.
+  tagId: uuid("tag_id").references(() => tags.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

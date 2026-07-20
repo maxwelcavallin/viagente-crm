@@ -986,6 +986,7 @@ type WebhookInput = {
   events?: string[];
   pipelineId?: string | null;
   stageId?: string | null;
+  tagId?: string | null;
 };
 
 function validateWebhookInput(input: WebhookInput): { error: string } | null {
@@ -1038,6 +1039,7 @@ export async function createWebhookForApiKey(
       events: params.direction === "saida" ? params.events : null,
       pipelineId: params.direction === "saida" ? (params.pipelineId ?? null) : null,
       stageId: params.direction === "saida" ? (params.stageId ?? null) : null,
+      tagId: params.direction === "saida" ? (params.tagId ?? null) : null,
       fieldMapping: {},
     })
     .returning({ id: webhookConfigs.id });
@@ -1066,6 +1068,7 @@ export async function updateWebhookForApiKey(
       events: params.direction === "saida" ? params.events : null,
       pipelineId: params.direction === "saida" ? (params.pipelineId ?? null) : null,
       stageId: params.direction === "saida" ? (params.stageId ?? null) : null,
+      tagId: params.direction === "saida" ? (params.tagId ?? null) : null,
     })
     .where(eq(webhookConfigs.id, webhookId));
 

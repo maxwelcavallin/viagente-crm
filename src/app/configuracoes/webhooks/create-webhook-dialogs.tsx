@@ -39,7 +39,10 @@ const EVENT_LABELS: Record<string, string> = {
   etapa_alterada: "Etapa alterada",
   negocio_ganho: "Negócio ganho",
   negocio_perdido: "Negócio perdido",
+  tag_adicionada: "Tag adicionada",
 };
+
+type TagOption = { id: string; name: string };
 
 function CreateInboundDialog({
   pipelines,
@@ -211,14 +214,17 @@ function CreateInboundDialog({
 function CreateOutboundDialog({
   pipelines,
   stages,
+  tags,
 }: {
   pipelines: PipelineOption[];
   stages: StageOption[];
+  tags: TagOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [stageId, setStageId] = useState<string | null>(null);
+  const [tagId, setTagId] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -267,6 +273,7 @@ function CreateOutboundDialog({
         <form action={handleSubmit} className="space-y-4">
           <input type="hidden" name="pipelineId" value={pipelineId ?? ""} />
           <input type="hidden" name="stageId" value={stageId ?? ""} />
+          <input type="hidden" name="tagId" value={tagId ?? ""} />
           <div className="space-y-2">
             <Label htmlFor="out-name">Nome</Label>
             <Input id="out-name" name="name" placeholder="Ex: Zapier - Proposta enviada" required />
@@ -342,6 +349,32 @@ function CreateOutboundDialog({
             Etapa específica só se aplica ao evento &quot;Etapa alterada&quot;
             — os demais eventos ignoram esse filtro.
           </p>
+          {selectedEvents.has("tag_adicionada") && (
+            <div className="space-y-2">
+              <Label>Tag específica (opcional)</Label>
+              <Select
+                items={{ "": "Qualquer tag", ...Object.fromEntries(tags.map((t) => [t.id, t.name])) }}
+                value={tagId ?? ""}
+                onValueChange={(v) => setTagId(v || null)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Qualquer tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Qualquer tag</SelectItem>
+                  {tags.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Sem tag selecionada, dispara pra qualquer tag adicionada ao
+                negócio. Só se aplica ao evento &quot;Tag adicionada&quot;.
+              </p>
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
@@ -360,14 +393,16 @@ function CreateOutboundDialog({
 export function CreateWebhookDialogs({
   pipelines,
   stages,
+  tags,
 }: {
   pipelines: PipelineOption[];
   stages: StageOption[];
+  tags: TagOption[];
 }) {
   return (
     <div className="flex flex-wrap gap-2">
       <CreateInboundDialog pipelines={pipelines} stages={stages} />
-      <CreateOutboundDialog pipelines={pipelines} stages={stages} />
+      <CreateOutboundDialog pipelines={pipelines} stages={stages} tags={tags} />
     </div>
   );
 }

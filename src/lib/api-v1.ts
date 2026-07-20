@@ -252,6 +252,7 @@ export async function createDealForApiKey(
         action: "tag_adicionada",
         newValue: tag.name,
       });
+      void dispatchOutboundWebhooks("tag_adicionada", created.id, tag.id);
     }
     await fireTagAddedAutomations(created.id, tagIds);
   }
@@ -398,6 +399,7 @@ export async function addTagToDealForApiKey(
       newValue: tag.name,
     });
     await fireTagAddedAutomations(dealId, [tagId]);
+    void dispatchOutboundWebhooks("tag_adicionada", dealId, tagId);
   }
 
   void logApiWrite(apiKey.id, "deal", dealId, "add_tag");
