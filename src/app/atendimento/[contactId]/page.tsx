@@ -16,6 +16,7 @@ import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { findOpenDealIdForContact } from "@/lib/messaging";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
+import { firstNameOf } from "@/lib/templates";
 import { canViewOwnedRecord } from "@/lib/visibility";
 import type { ContactDealParam } from "@/components/insert-param-button";
 import type { LinkContactTarget } from "./link-contact-dialog";
@@ -164,6 +165,7 @@ export default async function ConversationPage({
   const dealCustomFields = (openDeal?.customFields as Record<string, unknown>) ?? {};
   const contactParams: ContactDealParam[] = [
     { key: "nome_contato", label: "Nome do contato", value: contact.name },
+    { key: "primeiro_nome", label: "Primeiro nome do contato", value: firstNameOf(contact.name) },
   ];
   if (contact.email) {
     contactParams.push({ key: "email_contato", label: "Email do contato", value: contact.email });

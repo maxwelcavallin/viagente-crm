@@ -18,7 +18,7 @@ import { getAllowedChannelIds } from "@/lib/channel-access";
 import { formatCustomFieldValue } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { resolveConnectionOwner } from "@/lib/google-calendar";
-import { substituteTemplate } from "@/lib/templates";
+import { firstNameOf, substituteTemplate } from "@/lib/templates";
 import { TarefasList, type TarefaItem } from "./tarefas-list";
 
 export const dynamic = "force-dynamic";
@@ -119,6 +119,7 @@ export default async function TarefasPage() {
 
     const variableValues: Record<string, string> = {
       nome_contato: row.contactName,
+      primeiro_nome: firstNameOf(row.contactName),
       email_contato: row.contactEmail ?? "",
       valor: formatCurrencyBRL(row.dealValue) ?? "",
     };

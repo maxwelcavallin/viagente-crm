@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { sendTextMessage } from "@/lib/send-message";
-import { substituteTemplate } from "@/lib/templates";
+import { firstNameOf, substituteTemplate } from "@/lib/templates";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -82,6 +82,7 @@ export async function runNpsSweep(): Promise<{ sent: number }> {
     const token = randomBytes(24).toString("hex");
     const text = substituteTemplate(template.content, {
       nome_contato: deal.contactName,
+      primeiro_nome: firstNameOf(deal.contactName),
       email_contato: deal.contactEmail ?? "",
       valor: formatCurrencyBRL(deal.dealValue) ?? "",
       link_pesquisa: buildNpsLink(token),

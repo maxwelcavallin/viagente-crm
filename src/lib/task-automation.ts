@@ -15,7 +15,7 @@ import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { sendTemplateStyledMessage } from "@/lib/send-message";
 import type { MediaKind } from "@/lib/storage";
-import { substituteTemplate } from "@/lib/templates";
+import { firstNameOf, substituteTemplate } from "@/lib/templates";
 
 type TaskType = "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
 
@@ -46,6 +46,7 @@ async function buildTemplateVariables(
 
   const variableValues: Record<string, string> = {
     nome_contato: row.contactName,
+    primeiro_nome: firstNameOf(row.contactName),
     email_contato: row.contactEmail ?? "",
     valor: formatCurrencyBRL(row.dealValue) ?? "",
   };

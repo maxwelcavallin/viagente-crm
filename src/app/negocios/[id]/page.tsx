@@ -34,7 +34,7 @@ import { formatCurrencyBRL } from "@/lib/deal-format";
 import { resolveConnectionOwner } from "@/lib/google-calendar";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
 import { canViewOwnedRecord } from "@/lib/visibility";
-import { substituteTemplate } from "@/lib/templates";
+import { firstNameOf, substituteTemplate } from "@/lib/templates";
 import { TEMPERATURE_BADGE_VARIANT, TEMPERATURE_LABELS } from "@/lib/temperature";
 import type { TagOption } from "@/lib/tags";
 import { Badge } from "@/components/ui/badge";
@@ -308,6 +308,7 @@ export default async function DealDetailPage({
 
   const variableValues: Record<string, string> = {
     nome_contato: contact.name,
+    primeiro_nome: firstNameOf(contact.name),
     email_contato: contact.email ?? "",
     valor: value ?? "",
   };

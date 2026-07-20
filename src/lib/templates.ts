@@ -14,6 +14,14 @@ export function substituteTemplate(
   );
 }
 
+// Tudo antes do primeiro espaço do nome completo — base da variável
+// "primeiro_nome" (ver buildVariableCatalog). Centralizado aqui pra todo
+// lugar que monta variableValues (tarefas, automação, NPS, atendimento)
+// calcular do mesmo jeito.
+export function firstNameOf(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] ?? "";
+}
+
 export type TemplateVariableInfo = {
   key: string;
   label: string;
@@ -34,6 +42,7 @@ export function buildVariableCatalog(
 ): TemplateVariableInfo[] {
   const base: TemplateVariableInfo[] = [
     { key: "nome_contato", label: "Nome do contato", example: "Maria Silva" },
+    { key: "primeiro_nome", label: "Primeiro nome do contato", example: "Maria" },
     { key: "email_contato", label: "Email do contato", example: "maria@email.com" },
     { key: "valor", label: "Valor do negócio", example: "R$ 1.500,00" },
   ];
