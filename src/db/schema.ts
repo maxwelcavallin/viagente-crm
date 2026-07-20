@@ -255,6 +255,14 @@ export const messageTemplates = pgTable("message_templates", {
   name: text("name").notNull(),
   content: text("content").notNull(),
   variables: jsonb("variables").notNull().default([]),
+  // Anexo opcional (qualquer tipo) armazenado em
+  // `${mediaPrefix(mediaType)}/templates/${id}` no R2 — ver src/lib/storage.ts.
+  // "audio" é sempre o blob webm/opus do gravador do composer (mesmo
+  // AudioRecorderButton), despachado como nota de voz (waveform=true) na
+  // hora do envio, igual uma gravação ao vivo — ver sendTemplateStyledMessage
+  // em src/lib/send-message.ts.
+  mediaType: text("media_type"),
+  mediaFileName: text("media_file_name"),
 });
 
 // Mesmo espírito de messageTemplates, mas com assunto — usado pela tarefa

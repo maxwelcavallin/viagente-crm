@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  customFieldDefinitions,
   emailTemplates,
   lossReasons,
   messageTemplates,
@@ -14,6 +15,7 @@ import {
   whatsappChannels,
 } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildVariableCatalog } from "@/lib/templates";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
 import { LossReasonsPanel } from "./loss-reasons-panel";
@@ -50,6 +52,7 @@ export default async function PipelineDetailPage({
     pipelineLossReasons,
     distributionRows,
     allUsers,
+    fieldDefRows,
   ] = await Promise.all([
     stageIds.length > 0
       ? db
@@ -71,7 +74,15 @@ export default async function PipelineDetailPage({
           .where(inArray(stageTasks.stageId, stageIds))
           .orderBy(asc(stageTasks.order))
       : Promise.resolve([]),
-    db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
+    db
+      .select({
+        id: messageTemplates.id,
+        name: messageTemplates.name,
+        content: messageTemplates.content,
+        mediaType: messageTemplates.mediaType,
+        mediaFileName: messageTemplates.mediaFileName,
+      })
+      .from(messageTemplates),
     db.select({ id: emailTemplates.id, name: emailTemplates.name }).from(emailTemplates),
     db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
     db
@@ -92,7 +103,18 @@ export default async function PipelineDetailPage({
       .where(eq(pipelineOwnerDistribution.pipelineId, id))
       .orderBy(asc(pipelineOwnerDistribution.createdAt)),
     db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
+    db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
   ]);
+
+  const variableCatalog = buildVariableCatalog(
+    fieldDefRows.map((row) => ({
+      key: row.key,
+      label: row.label,
+      type: row.type,
+      options: (row.options as { value: string; label: string }[] | null) ?? null,
+      entity: row.entity,
+    }))
+  );
 
   const stageTasksByStageId: Record<string, StageTask[]> = {};
   for (const row of stageTaskRows) {
@@ -135,6 +157,7 @@ export default async function PipelineDetailPage({
               pipelineId={pipeline.id}
               stageTasksByStageId={stageTasksByStageId}
               templates={templates}
+              variableCatalog={variableCatalog}
               emailTemplates={emailTemplateOptions}
               channels={channels}
             />

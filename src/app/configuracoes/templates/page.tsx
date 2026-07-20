@@ -19,6 +19,8 @@ export default async function TemplatesPage() {
         id: messageTemplates.id,
         name: messageTemplates.name,
         content: messageTemplates.content,
+        mediaType: messageTemplates.mediaType,
+        mediaFileName: messageTemplates.mediaFileName,
         usageCount: count(stageTasks.id),
       })
       .from(messageTemplates)

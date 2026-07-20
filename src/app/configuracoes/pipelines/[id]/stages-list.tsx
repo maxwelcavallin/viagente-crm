@@ -24,6 +24,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import type { TemplateVariableInfo } from "@/lib/templates";
+import type { TemplateData } from "@/app/configuracoes/templates/template-form-dialog";
 import {
   updateStageAction,
   deleteStageAction,
@@ -44,6 +46,7 @@ function StageRow({
   total,
   stageTasks,
   templates,
+  variableCatalog,
   emailTemplates,
   channels,
   isDragging,
@@ -60,7 +63,8 @@ function StageRow({
   index: number;
   total: number;
   stageTasks: StageTask[];
-  templates: { id: string; name: string }[];
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
   emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
   isDragging: boolean;
@@ -214,6 +218,7 @@ function StageRow({
         pipelineId={pipelineId}
         tasks={stageTasks}
         templates={templates}
+        variableCatalog={variableCatalog}
         emailTemplates={emailTemplates}
         channels={channels}
       />
@@ -226,13 +231,15 @@ export function StagesList({
   pipelineId,
   stageTasksByStageId,
   templates,
+  variableCatalog,
   emailTemplates,
   channels,
 }: {
   stages: Stage[];
   pipelineId: string;
   stageTasksByStageId: Record<string, StageTask[]>;
-  templates: { id: string; name: string }[];
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
   emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
@@ -336,6 +343,7 @@ export function StagesList({
           total={order.length}
           stageTasks={stageTasksByStageId[stage.id] ?? []}
           templates={templates}
+          variableCatalog={variableCatalog}
           emailTemplates={emailTemplates}
           channels={channels}
           isDragging={draggedId === stage.id}

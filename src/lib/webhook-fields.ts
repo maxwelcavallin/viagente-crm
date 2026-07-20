@@ -20,4 +20,8 @@ export const CONTACT_SYSTEM_FIELDS = [
 export const DEAL_SYSTEM_FIELDS = [
   { key: "deal.title", label: "Título do negócio" },
   { key: "deal.value", label: "Valor do negócio" },
+  // Só a importação de CSV usa este campo (webhook de entrada sempre cria
+  // negócio "aberto" — ver processInboundPayload). Valores aceitos:
+  // aberto/ganho/perdido (ver dealStatusEnum em src/db/schema.ts).
+  { key: "deal.status", label: "Status do negócio (aberto/ganho/perdido)" },
 ] as const;

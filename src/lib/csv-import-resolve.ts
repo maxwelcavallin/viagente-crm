@@ -40,6 +40,28 @@ export function normalizePhone(raw: string): string {
   return raw.replace(/[^\d+]/g, "");
 }
 
+export type DealStatus = "aberto" | "ganho" | "perdido";
+
+const STATUS_ALIASES: Record<string, DealStatus> = {
+  aberto: "aberto",
+  ganho: "ganho",
+  ganha: "ganho",
+  ganhou: "ganho",
+  won: "ganho",
+  perdido: "perdido",
+  perdida: "perdido",
+  perdeu: "perdido",
+  lost: "perdido",
+  open: "aberto",
+};
+
+// Aceita variações comuns em português/inglês de planilhas de outros CRMs —
+// null quando não reconhece (csv-import.ts trata como erro na linha, não
+// ignora silenciosamente pra não gravar negócio com status errado).
+export function normalizeDealStatus(raw: string): DealStatus | null {
+  return STATUS_ALIASES[raw.trim().toLowerCase()] ?? null;
+}
+
 export type ResolvedRow = {
   contactName: string | null;
   contactPhone: string | null;
@@ -48,6 +70,7 @@ export type ResolvedRow = {
   contactTagNames: string[];
   dealTitle: string | null;
   dealValue: string | null;
+  dealStatus: string | null;
   dealCustomFields: Record<string, string>;
   dealTagNames: string[];
   stageRawValue: string | null;
@@ -66,6 +89,7 @@ export function resolveRow(
     contactTagNames: [],
     dealTitle: null,
     dealValue: null,
+    dealStatus: null,
     dealCustomFields: {},
     dealTagNames: [],
     stageRawValue: null,
@@ -83,6 +107,7 @@ export function resolveRow(
     else if (target === "contact.tags") resolved.contactTagNames.push(...splitTagNames(cell));
     else if (target === "deal.title") resolved.dealTitle = cell;
     else if (target === "deal.value") resolved.dealValue = parseImportNumber(cell);
+    else if (target === "deal.status") resolved.dealStatus = cell;
     else if (target === "deal.tags") resolved.dealTagNames.push(...splitTagNames(cell));
     else if (target === STAGE_COLUMN_KEY) resolved.stageRawValue = cell;
     else if (target.startsWith("contact.custom."))
@@ -147,6 +172,9 @@ export function previewCsvRows(
           stageLabel = stageLabelById.get(mappedStageId) ?? "—";
         }
       }
+    }
+    if (!error && resolved.dealStatus && !normalizeDealStatus(resolved.dealStatus)) {
+      error = `Status "${resolved.dealStatus}" não reconhecido — use aberto, ganho ou perdido.`;
     }
 
     return {

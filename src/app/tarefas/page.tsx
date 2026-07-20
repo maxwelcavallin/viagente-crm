@@ -43,7 +43,10 @@ export default async function TarefasPage() {
           type: tasks.type,
           status: tasks.status,
           dueAt: tasks.dueAt,
+          messageTemplateId: stageTasks.messageTemplateId,
           templateContent: messageTemplates.content,
+          templateMediaType: messageTemplates.mediaType,
+          templateMediaFileName: messageTemplates.mediaFileName,
           emailTemplateSubject: emailTemplates.subject,
           emailTemplateContent: emailTemplates.content,
           dealId: deals.id,
@@ -136,6 +139,9 @@ export default async function TarefasPage() {
       type: row.type,
       status: row.status,
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+      messageTemplateId: row.messageTemplateId,
+      templateMediaType: row.templateMediaType,
+      templateMediaFileName: row.templateMediaFileName,
       messagePreview: row.templateContent
         ? substituteTemplate(row.templateContent, variableValues)
         : row.emailTemplateContent

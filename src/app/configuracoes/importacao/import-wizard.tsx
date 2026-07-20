@@ -12,6 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Combobox,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxInputGroup,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+} from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { parseCsv } from "@/lib/csv-parse";
 import {
@@ -33,9 +42,12 @@ type Stage = { id: string; name: string; pipelineId: string; order: number };
 const BATCH_SIZE = 25;
 const IGNORE_VALUE = "__ignore__";
 
+// "Não mapear" fica fixo no topo (é o valor padrão/mais comum quando a
+// planilha tem mais colunas do que campos do CRM) — o resto sai em ordem
+// alfabética pra facilitar achar um campo específico numa lista que já
+// passa de 20 itens com campos customizados.
 function buildMappingOptions(contactFieldDefs: FieldDef[], dealFieldDefs: FieldDef[]) {
-  return [
-    { key: IGNORE_VALUE, label: "Não mapear (ignorar coluna)" },
+  const options = [
     ...CONTACT_SYSTEM_FIELDS,
     ...DEAL_SYSTEM_FIELDS,
     { key: STAGE_COLUMN_KEY, label: "Etapa/Funil na Clint (pra rotear por coluna)" },
@@ -47,7 +59,8 @@ function buildMappingOptions(contactFieldDefs: FieldDef[], dealFieldDefs: FieldD
       key: `deal.custom.${f.key}`,
       label: `${f.label} (campo de negócio)`,
     })),
-  ];
+  ].sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  return [{ key: IGNORE_VALUE, label: "Não mapear (ignorar coluna)" }, ...options];
 }
 
 export function ImportWizard({
@@ -88,6 +101,14 @@ export function ImportWizard({
   const mappingOptions = useMemo(
     () => buildMappingOptions(contactFieldDefs, dealFieldDefs),
     [contactFieldDefs, dealFieldDefs]
+  );
+  // Itens do combobox precisam ser objetos estáveis (mesma referência entre
+  // renders) pra o Combobox conseguir casar o "value" selecionado com o item
+  // certo da lista — ver comparação por igualdade referencial default do
+  // Base UI Combobox.
+  const comboboxItems = useMemo(
+    () => mappingOptions.map((o) => ({ value: o.key, label: o.label })),
+    [mappingOptions]
   );
   const stageLabelById = useMemo(() => new Map(stages.map((s) => [s.id, s.name])), [stages]);
 
@@ -296,32 +317,40 @@ export function ImportWizard({
               Escolha pra qual campo do CRM cada coluna do CSV vai. Colunas não mapeadas são ignoradas.
             </p>
             <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-              {headers.map((column) => (
-                <div
-                  key={column}
-                  className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-2.5 sm:grid-cols-[1fr_1fr]"
-                >
-                  <span className="truncate text-sm font-medium" title={column}>
-                    {column}
-                  </span>
-                  <Select
-                    items={Object.fromEntries(mappingOptions.map((o) => [o.key, o.label]))}
-                    value={mapping[column] ?? IGNORE_VALUE}
-                    onValueChange={(v) => setColumnTarget(column, v ?? IGNORE_VALUE)}
+              {headers.map((column) => {
+                const selectedKey = mapping[column] ?? IGNORE_VALUE;
+                const selectedItem =
+                  comboboxItems.find((o) => o.value === selectedKey) ?? null;
+                return (
+                  <div
+                    key={column}
+                    className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-2.5 sm:grid-cols-[1fr_1fr]"
                   >
-                    <SelectTrigger className="w-full text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mappingOptions.map((o) => (
-                        <SelectItem key={o.key} value={o.key}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+                    <span className="truncate text-sm font-medium" title={column}>
+                      {column}
+                    </span>
+                    <Combobox
+                      items={comboboxItems}
+                      value={selectedItem}
+                      onValueChange={(item) => setColumnTarget(column, item?.value ?? IGNORE_VALUE)}
+                    >
+                      <ComboboxInputGroup>
+                        <ComboboxInput placeholder="Buscar campo..." />
+                      </ComboboxInputGroup>
+                      <ComboboxPopup>
+                        <ComboboxEmpty>Nenhum campo encontrado.</ComboboxEmpty>
+                        <ComboboxList>
+                          {(item: { value: string; label: string }) => (
+                            <ComboboxItem key={item.value} value={item}>
+                              {item.label}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxPopup>
+                    </Combobox>
+                  </div>
+                );
+              })}
             </div>
             {!phoneOrEmailMapped && (
               <p className="text-sm text-destructive">

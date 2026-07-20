@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -49,6 +50,22 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 export function extensionForMimeType(mimeType: string | undefined): string {
   if (!mimeType) return "bin";
   return EXTENSION_BY_MIME[mimeType] ?? mimeType.split("/")[1]?.split(";")[0] ?? "bin";
+}
+
+// Cópia server-side (sem baixar/reenviar bytes pelo nosso servidor) — usada
+// pra "materializar" o anexo de um template dentro da mensagem real quando
+// ele é enviado (ver sendMediaMessage em src/lib/send-message.ts), já que a
+// leitura de mídia de uma conversa (/api/media/[messageId]) espera o objeto
+// na chave por mensagem, não na chave compartilhada do template.
+export async function copyMediaInR2(sourceKey: string, destKey: string): Promise<void> {
+  const client = getClient();
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: bucketName(),
+      CopySource: `${bucketName()}/${encodeURIComponent(sourceKey)}`,
+      Key: destKey,
+    })
+  );
 }
 
 export async function uploadMediaToR2(params: {

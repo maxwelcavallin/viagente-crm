@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -92,9 +92,19 @@ export function TemplatesList({
           className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
         >
           <div className="min-w-0 flex-1">
-            <p className="font-medium">{template.name}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium">{template.name}</p>
+              {template.mediaType && (
+                <Paperclip
+                  size={12}
+                  strokeWidth={1.75}
+                  className="shrink-0 text-muted-foreground"
+                  aria-label="Tem anexo"
+                />
+              )}
+            </div>
             <p className="line-clamp-1 text-sm text-muted-foreground">
-              {template.content}
+              {template.content || "—"}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">

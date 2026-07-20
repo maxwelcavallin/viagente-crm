@@ -18,6 +18,20 @@ export type TemplateFormState =
 
 const idle: TemplateFormState = { status: "idle" };
 
+// mediaType vem do upload já concluído no cliente (ver template-form-dialog.tsx
+// — o arquivo/áudio já está no R2 antes do form ser enviado, aqui só grava a
+// referência). Conteúdo deixa de ser obrigatório sozinho: precisa de texto
+// e/ou anexo, nunca os dois vazios (mesmo padrão de "pelo menos um dos dois"
+// já usado pra telefone/email de contato).
+function readMediaFields(formData: FormData): { mediaType: string | null; mediaFileName: string | null } {
+  const mediaType = formData.get("mediaType");
+  const mediaFileName = formData.get("mediaFileName");
+  return {
+    mediaType: typeof mediaType === "string" && mediaType ? mediaType : null,
+    mediaFileName: typeof mediaFileName === "string" && mediaFileName ? mediaFileName : null,
+  };
+}
+
 export async function createTemplateAction(
   _prevState: TemplateFormState,
   formData: FormData
@@ -26,19 +40,30 @@ export async function createTemplateAction(
     return { status: "error", message: "Acesso negado." };
   }
 
+  const id = formData.get("id");
   const name = formData.get("name");
   const content = formData.get("content");
+  if (typeof id !== "string" || !id) {
+    return { status: "error", message: "Template inválido." };
+  }
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof content !== "string" || !content.trim()) {
-    return { status: "error", message: "Conteúdo é obrigatório." };
+  if (typeof content !== "string") {
+    return { status: "error", message: "Conteúdo inválido." };
+  }
+  const { mediaType, mediaFileName } = readMediaFields(formData);
+  if (!content.trim() && !mediaType) {
+    return { status: "error", message: "Informe o conteúdo e/ou um anexo." };
   }
 
   await db.insert(messageTemplates).values({
+    id,
     name: name.trim(),
     content: content.trim(),
     variables: extractVariables(content),
+    mediaType,
+    mediaFileName,
   });
 
   revalidatePath("/configuracoes/templates");
@@ -62,8 +87,12 @@ export async function updateTemplateAction(
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof content !== "string" || !content.trim()) {
-    return { status: "error", message: "Conteúdo é obrigatório." };
+  if (typeof content !== "string") {
+    return { status: "error", message: "Conteúdo inválido." };
+  }
+  const { mediaType, mediaFileName } = readMediaFields(formData);
+  if (!content.trim() && !mediaType) {
+    return { status: "error", message: "Informe o conteúdo e/ou um anexo." };
   }
 
   await db
@@ -72,10 +101,13 @@ export async function updateTemplateAction(
       name: name.trim(),
       content: content.trim(),
       variables: extractVariables(content),
+      mediaType,
+      mediaFileName,
     })
     .where(eq(messageTemplates.id, id));
 
   revalidatePath("/configuracoes/templates");
+  revalidatePath("/configuracoes/pipelines");
   return idle;
 }
 

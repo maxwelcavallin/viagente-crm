@@ -1,10 +1,21 @@
+import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, instagramChannels, messages, whatsappChannels } from "@/db/schema";
 import { decryptCredential } from "@/lib/credentials-crypto";
 import { findOpenDealIdForContact } from "@/lib/messaging";
-import { sendZapiText } from "@/lib/zapi";
-import { sendInstagramText } from "@/lib/instagram-graph";
+import { copyMediaInR2, getMediaSignedUrl, mediaPrefix, type MediaKind } from "@/lib/storage";
+import {
+  sendInstagramAttachment,
+  sendInstagramText,
+} from "@/lib/instagram-graph";
+import {
+  sendZapiAudio,
+  sendZapiDocument,
+  sendZapiImage,
+  sendZapiText,
+  sendZapiVideo,
+} from "@/lib/zapi";
 
 export type SendTextMessageResult =
   | { ok: true; message: typeof messages.$inferSelect }
@@ -130,4 +141,210 @@ export async function sendTextMessage(
     .returning();
 
   return { ok: true, message: created };
+}
+
+function extensionFromFileName(fileName: string): string {
+  const ext = fileName.split(".").pop();
+  return ext && ext !== fileName ? ext.toLowerCase() : "bin";
+}
+
+// Instagram Messaging não tem tipo "document" (ver sendInstagramAttachment).
+const INSTAGRAM_ATTACHMENT_TYPE: Partial<Record<MediaKind, "image" | "video" | "audio">> = {
+  imagem: "image",
+  video: "video",
+  audio: "audio",
+};
+
+export type SendMediaMessageParams = {
+  channelId: string;
+  channelType?: "whatsapp" | "instagram";
+  contactId: string;
+  // Chave no R2 de onde copiar os bytes (ex: anexo de um template) — a chave
+  // final da mensagem é sempre gerada aqui a partir de um messageId novo.
+  sourceKey: string;
+  mediaKind: MediaKind;
+  caption?: string;
+  fileName?: string;
+};
+
+export type SendMediaMessageResult =
+  | { ok: true; message: typeof messages.$inferSelect }
+  | { ok: false; error: string };
+
+// Espelha /api/messages/send-media (upload manual do composer), mas parte de
+// um objeto já existente no R2 (o anexo do template) em vez de um upload novo
+// do navegador — por isso primeiro copia pra chave por mensagem (ver
+// copyMediaInR2 em storage.ts) antes de gerar a URL assinada que a
+// Z-API/Instagram vão buscar. Áudio sempre sai como nota de voz (waveform),
+// igual uma gravação ao vivo no composer — ver sendZapiAudio.
+export async function sendMediaMessage(
+  params: SendMediaMessageParams
+): Promise<SendMediaMessageResult> {
+  const channelType = params.channelType ?? "whatsapp";
+  const messageId = randomUUID();
+  const destKey = `${mediaPrefix(params.mediaKind)}/${params.channelId}/${messageId}`;
+
+  try {
+    await copyMediaInR2(params.sourceKey, destKey);
+  } catch (error) {
+    console.error("[send-message] falha ao copiar anexo do template no R2", error);
+    return { ok: false, error: "Falha ao preparar o anexo pra envio" };
+  }
+
+  let externalMessageId: string;
+  try {
+    const signedUrl = await getMediaSignedUrl(destKey, { expiresInSeconds: 300 });
+
+    if (channelType === "instagram") {
+      const instagramType = INSTAGRAM_ATTACHMENT_TYPE[params.mediaKind];
+      if (!instagramType) {
+        return { ok: false, error: "Instagram não suporta esse tipo de anexo" };
+      }
+      const [channel] = await db
+        .select()
+        .from(instagramChannels)
+        .where(eq(instagramChannels.id, params.channelId))
+        .limit(1);
+      if (!channel) return { ok: false, error: "Canal não encontrado" };
+
+      const [contact] = await db
+        .select({ instagramUserId: contacts.instagramUserId })
+        .from(contacts)
+        .where(eq(contacts.id, params.contactId))
+        .limit(1);
+      if (!contact) return { ok: false, error: "Contato não encontrado" };
+      if (!contact.instagramUserId) {
+        return { ok: false, error: "Contato não tem conta do Instagram vinculada" };
+      }
+
+      const { messageId: extId } = await sendInstagramAttachment(
+        decryptCredential(channel.accessToken),
+        contact.instagramUserId,
+        instagramType,
+        signedUrl
+      );
+      externalMessageId = extId;
+    } else {
+      const [channel] = await db
+        .select()
+        .from(whatsappChannels)
+        .where(eq(whatsappChannels.id, params.channelId))
+        .limit(1);
+      if (!channel) return { ok: false, error: "Canal não encontrado" };
+
+      const [contact] = await db
+        .select({ phone: contacts.phone })
+        .from(contacts)
+        .where(eq(contacts.id, params.contactId))
+        .limit(1);
+      if (!contact) return { ok: false, error: "Contato não encontrado" };
+      if (!contact.phone) return { ok: false, error: "Contato não tem telefone (WhatsApp)" };
+
+      const creds = {
+        zapiInstanceId: channel.zapiInstanceId,
+        zapiToken: decryptCredential(channel.zapiToken),
+        zapiClientToken: decryptCredential(channel.zapiClientToken),
+      };
+      const { messageId: extId } =
+        params.mediaKind === "imagem"
+          ? await sendZapiImage(creds, contact.phone, signedUrl, params.caption)
+          : params.mediaKind === "video"
+            ? await sendZapiVideo(creds, contact.phone, signedUrl, params.caption)
+            : params.mediaKind === "audio"
+              ? await sendZapiAudio(creds, contact.phone, signedUrl)
+              : await sendZapiDocument(
+                  creds,
+                  contact.phone,
+                  signedUrl,
+                  extensionFromFileName(params.fileName ?? "arquivo.bin"),
+                  params.fileName
+                );
+      externalMessageId = extId;
+    }
+  } catch (error) {
+    console.error(`[send-message] falha ao enviar mídia via ${channelType}`, error);
+    return {
+      ok: false,
+      error: `Falha ao enviar mídia via ${channelType === "instagram" ? "Instagram" : "WhatsApp"}`,
+    };
+  }
+
+  const dealId = await findOpenDealIdForContact(params.contactId);
+
+  const [created] = await db
+    .insert(messages)
+    .values({
+      id: messageId,
+      dealId,
+      contactId: params.contactId,
+      channelId: params.channelId,
+      channelType,
+      direction: "saida",
+      type: params.mediaKind,
+      content: params.caption?.trim() || params.fileName || null,
+      mediaUrl: `/api/media/${messageId}`,
+      status: "enviado",
+      externalMessageId,
+    })
+    .returning();
+
+  return { ok: true, message: created };
+}
+
+export type SendTemplateStyledMessageParams = {
+  channelId: string;
+  channelType?: "whatsapp" | "instagram";
+  contactId: string;
+  // Texto já substituído (variáveis resolvidas) e, no caso de envio manual de
+  // tarefa, possivelmente editado à mão pelo atendente antes de mandar.
+  message: string;
+  media?: {
+    templateId: string;
+    kind: MediaKind;
+    fileName?: string | null;
+  } | null;
+};
+
+// Regra de composição texto+anexo de um template: áudio nunca aceita legenda
+// (WhatsApp não tem esse conceito pra nota de voz — ver sendZapiAudio), então
+// o texto sai como mensagem separada ANTES do áudio, na ordem natural de uma
+// conversa. Imagem/vídeo/documento já embutem o texto como legenda na mesma
+// mensagem. Sem anexo, cai no envio de texto simples de sempre.
+export async function sendTemplateStyledMessage(
+  params: SendTemplateStyledMessageParams
+): Promise<{ ok: boolean; error?: string }> {
+  const text = params.message.trim();
+
+  if (!params.media) {
+    if (!text) return { ok: true };
+    const result = await sendTextMessage({
+      channelId: params.channelId,
+      channelType: params.channelType,
+      contactId: params.contactId,
+      message: text,
+    });
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  }
+
+  if (text && params.media.kind === "audio") {
+    const textResult = await sendTextMessage({
+      channelId: params.channelId,
+      channelType: params.channelType,
+      contactId: params.contactId,
+      message: text,
+    });
+    if (!textResult.ok) return { ok: false, error: textResult.error };
+  }
+
+  const mediaResult = await sendMediaMessage({
+    channelId: params.channelId,
+    channelType: params.channelType,
+    contactId: params.contactId,
+    sourceKey: `${mediaPrefix(params.media.kind)}/templates/${params.media.templateId}`,
+    mediaKind: params.media.kind,
+    caption: params.media.kind === "audio" ? undefined : text || undefined,
+    fileName: params.media.fileName ?? undefined,
+  });
+
+  return mediaResult.ok ? { ok: true } : { ok: false, error: mediaResult.error };
 }

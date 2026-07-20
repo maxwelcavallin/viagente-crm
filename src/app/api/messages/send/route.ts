@@ -1,6 +1,10 @@
+import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
+import { db } from "@/db";
+import { messageTemplates } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
-import { sendTextMessage } from "@/lib/send-message";
+import { sendTemplateStyledMessage, sendTextMessage } from "@/lib/send-message";
+import type { MediaKind } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +19,18 @@ export async function POST(request: Request) {
     channelType?: "whatsapp" | "instagram";
     contactId?: string;
     message?: string;
+    // Tarefa de mensagem executada manualmente (ver MessageTaskExecutor):
+    // quando o template linkado à tarefa tem anexo, ele vai junto do envio —
+    // ver sendTemplateStyledMessage.
+    templateId?: string | null;
     replyToMessageId?: string;
     replyToCreatedAt?: string;
   } | null;
 
-  if (!body?.channelId || !body?.contactId || !body?.message?.trim()) {
+  const message = body?.message?.trim() ?? "";
+  if (!body?.channelId || !body?.contactId) {
     return Response.json(
-      { error: "channelId, contactId e message são obrigatórios" },
+      { error: "channelId e contactId são obrigatórios" },
       { status: 400 }
     );
   }
@@ -38,11 +47,39 @@ export async function POST(request: Request) {
     );
   }
 
+  if (body.templateId) {
+    const [template] = await db
+      .select({ mediaType: messageTemplates.mediaType, mediaFileName: messageTemplates.mediaFileName })
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, body.templateId))
+      .limit(1);
+
+    if (template?.mediaType) {
+      const result = await sendTemplateStyledMessage({
+        channelId: body.channelId,
+        channelType: body.channelType,
+        contactId: body.contactId,
+        message,
+        media: {
+          templateId: body.templateId,
+          kind: template.mediaType as MediaKind,
+          fileName: template.mediaFileName,
+        },
+      });
+      if (!result.ok) return Response.json({ error: result.error }, { status: 502 });
+      return Response.json({ ok: true });
+    }
+  }
+
+  if (!message) {
+    return Response.json({ error: "message é obrigatório" }, { status: 400 });
+  }
+
   const result = await sendTextMessage({
     channelId: body.channelId,
     channelType: body.channelType,
     contactId: body.contactId,
-    message: body.message.trim(),
+    message,
     replyToMessageId: body.replyToMessageId || null,
     replyToCreatedAt: body.replyToCreatedAt ? new Date(body.replyToCreatedAt) : null,
   });

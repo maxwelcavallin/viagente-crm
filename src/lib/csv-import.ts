@@ -8,6 +8,7 @@ import {
 } from "@/lib/owner-distribution";
 import { attachTagsToContact, attachTagsToDeal, resolveOrCreateTagIds } from "@/lib/tags";
 import {
+  normalizeDealStatus,
   normalizePhone,
   resolveRow,
   type ColumnMapping,
@@ -72,6 +73,21 @@ export async function importCsvBatch(params: {
       continue;
     }
     const identity = phone || resolved.contactEmail!;
+
+    // "perdido" via import não exige motivo (lossReasonId fica null) —
+    // diferente da ação manual/API de marcar como perdido, aqui é migração
+    // de dado histórico de outro CRM, não uma ação de usuário no fluxo atual.
+    let dealStatus: "aberto" | "ganho" | "perdido" | null = null;
+    if (resolved.dealStatus) {
+      dealStatus = normalizeDealStatus(resolved.dealStatus);
+      if (!dealStatus) {
+        result.errors.push({
+          row: rowNumber,
+          message: `Status "${resolved.dealStatus}" não reconhecido — use aberto, ganho ou perdido.`,
+        });
+        continue;
+      }
+    }
 
     let pipelineId: string;
     let stageId: string;
@@ -158,6 +174,9 @@ export async function importCsvBatch(params: {
         value: resolved.dealValue,
         customFields: filteredDealCustom,
         ownerId: distributedOwnerId,
+        ...(dealStatus ? { status: dealStatus } : {}),
+        ...(dealStatus === "ganho" ? { wonAt: new Date() } : {}),
+        ...(dealStatus === "perdido" ? { lostAt: new Date() } : {}),
       })
       .returning({ id: deals.id });
     result.dealsCreated += 1;

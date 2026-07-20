@@ -13,7 +13,8 @@ import {
 import { fireTagSequenceTriggers } from "@/lib/automation-sequences";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
-import { sendTextMessage } from "@/lib/send-message";
+import { sendTemplateStyledMessage } from "@/lib/send-message";
+import type { MediaKind } from "@/lib/storage";
 import { substituteTemplate } from "@/lib/templates";
 
 type TaskType = "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
@@ -87,7 +88,11 @@ export async function maybeAutoSendTask(params: {
   if (!built) return;
 
   const [template] = await db
-    .select({ content: messageTemplates.content })
+    .select({
+      content: messageTemplates.content,
+      mediaType: messageTemplates.mediaType,
+      mediaFileName: messageTemplates.mediaFileName,
+    })
     .from(messageTemplates)
     .where(eq(messageTemplates.id, params.messageTemplateId))
     .limit(1);
@@ -95,10 +100,17 @@ export async function maybeAutoSendTask(params: {
 
   const text = substituteTemplate(template.content, built.variableValues);
 
-  const result = await sendTextMessage({
+  const result = await sendTemplateStyledMessage({
     channelId: params.autoSendChannelId,
     contactId: built.contactId,
     message: text,
+    media: template.mediaType
+      ? {
+          templateId: params.messageTemplateId,
+          kind: template.mediaType as MediaKind,
+          fileName: template.mediaFileName,
+        }
+      : null,
   });
 
   if (result.ok) {

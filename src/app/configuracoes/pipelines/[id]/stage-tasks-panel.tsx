@@ -31,6 +31,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { DurationPicker, formatMinutesShort } from "@/components/duration-picker";
+import type { TemplateVariableInfo } from "@/lib/templates";
+import {
+  TemplateFormDialog,
+  type TemplateData,
+} from "@/app/configuracoes/templates/template-form-dialog";
 import {
   createStageTaskAction,
   deleteStageTaskAction,
@@ -62,16 +67,68 @@ const TYPE_LABELS: Record<StageTask["type"], string> = {
 
 const idleState: StageTaskFormState = { status: "idle" };
 
+// Compartilhado entre EditStageTaskDialog e CreateStageTaskForm — o botão
+// "Editar template" abre o mesmo formulário de Configurações > Templates
+// (permite anexo/áudio, ver template-form-dialog.tsx) direto daqui, sem
+// precisar sair da tela da pipeline.
+function MessageTemplateField({
+  templates,
+  variableCatalog,
+  value,
+  onChange,
+  selectClassName,
+}: {
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+  selectClassName?: string;
+}) {
+  const selected = templates.find((t) => t.id === value) ?? null;
+  return (
+    <div className="flex items-end gap-1.5">
+      <input type="hidden" name="messageTemplateId" value={value ?? ""} />
+      <Select
+        items={Object.fromEntries(templates.map((t) => [t.id, t.name]))}
+        value={value}
+        onValueChange={(v) => onChange(v ?? null)}
+      >
+        <SelectTrigger className={selectClassName ?? "w-full"}>
+          <SelectValue placeholder="Selecione um template" />
+        </SelectTrigger>
+        <SelectContent>
+          {templates.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selected && (
+        <TemplateFormDialog
+          mode="edit"
+          template={selected}
+          variableCatalog={variableCatalog}
+          trigger={<Button type="button" variant="outline" size="sm" className="shrink-0" />}
+          triggerLabel="Editar"
+        />
+      )}
+    </div>
+  );
+}
+
 function EditStageTaskDialog({
   task,
   pipelineId,
   templates,
+  variableCatalog,
   emailTemplates,
   channels,
 }: {
   task: StageTask;
   pipelineId: string;
-  templates: { id: string; name: string }[];
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
   emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
@@ -159,27 +216,12 @@ function EditStageTaskDialog({
           {task.type === "mensagem" && (
             <div className="space-y-2">
               <Label>Template</Label>
-              <input
-                type="hidden"
-                name="messageTemplateId"
-                value={messageTemplateId ?? ""}
-              />
-              <Select
-                items={Object.fromEntries(templates.map((t) => [t.id, t.name]))}
+              <MessageTemplateField
+                templates={templates}
+                variableCatalog={variableCatalog}
                 value={messageTemplateId}
-                onValueChange={(v) => setMessageTemplateId(v ?? null)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione um template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={setMessageTemplateId}
+              />
             </div>
           )}
           {task.type === "email" && (
@@ -311,12 +353,14 @@ function CreateStageTaskForm({
   stageId,
   pipelineId,
   templates,
+  variableCatalog,
   emailTemplates,
   channels,
 }: {
   stageId: string;
   pipelineId: string;
-  templates: { id: string; name: string }[];
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
   emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
@@ -403,27 +447,13 @@ function CreateStageTaskForm({
       {type === "mensagem" && (
         <div className="space-y-1">
           <Label className="text-xs">Template</Label>
-          <input
-            type="hidden"
-            name="messageTemplateId"
-            value={messageTemplateId ?? ""}
-          />
-          <Select
-            items={Object.fromEntries(templates.map((t) => [t.id, t.name]))}
+          <MessageTemplateField
+            templates={templates}
+            variableCatalog={variableCatalog}
             value={messageTemplateId}
-            onValueChange={(v) => setMessageTemplateId(v ?? null)}
-          >
-            <SelectTrigger className="h-8 w-40 text-sm">
-              <SelectValue placeholder="Selecione..." />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={setMessageTemplateId}
+            selectClassName="h-8 w-40 text-sm"
+          />
         </div>
       )}
       <div className="space-y-1">
@@ -508,13 +538,15 @@ export function StageTasksPanel({
   pipelineId,
   tasks,
   templates,
+  variableCatalog,
   emailTemplates,
   channels,
 }: {
   stageId: string;
   pipelineId: string;
   tasks: StageTask[];
-  templates: { id: string; name: string }[];
+  templates: TemplateData[];
+  variableCatalog: TemplateVariableInfo[];
   emailTemplates: { id: string; name: string }[];
   channels: { id: string; label: string }[];
 }) {
@@ -615,6 +647,7 @@ export function StageTasksPanel({
                     task={task}
                     pipelineId={pipelineId}
                     templates={templates}
+                    variableCatalog={variableCatalog}
                     emailTemplates={emailTemplates}
                     channels={channels}
                   />
@@ -627,6 +660,7 @@ export function StageTasksPanel({
             stageId={stageId}
             pipelineId={pipelineId}
             templates={templates}
+            variableCatalog={variableCatalog}
             emailTemplates={emailTemplates}
             channels={channels}
           />

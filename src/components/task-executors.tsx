@@ -23,6 +23,9 @@ export type TaskLike = {
   messagePreview: string | null;
   dueAt: string | null;
   emailSubjectPreview?: string | null;
+  messageTemplateId?: string | null;
+  templateMediaType?: string | null;
+  templateMediaFileName?: string | null;
 };
 
 export function MessageTaskExecutor({
@@ -47,14 +50,19 @@ export function MessageTaskExecutor({
   const [error, setError] = useState<string | null>(null);
 
   async function handleSend() {
-    if (!text.trim() || !channelId) return;
+    if ((!text.trim() && !task.templateMediaType) || !channelId) return;
     setIsSending(true);
     setError(null);
     try {
       const res = await fetch("/api/messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channelId, contactId, message: text.trim() }),
+        body: JSON.stringify({
+          channelId,
+          contactId,
+          message: text.trim(),
+          templateId: task.messageTemplateId,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -107,11 +115,19 @@ export function MessageTaskExecutor({
             rows={3}
             className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
           />
+          {task.templateMediaType && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Paperclip size={12} strokeWidth={1.75} />
+              {task.templateMediaType === "audio"
+                ? "Áudio do template será enviado junto"
+                : `Anexo do template será enviado junto${task.templateMediaFileName ? `: ${task.templateMediaFileName}` : ""}`}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <Button
               type="button"
               size="sm"
-              disabled={isSending || !text.trim() || !channelId}
+              disabled={isSending || (!text.trim() && !task.templateMediaType) || !channelId}
               onClick={handleSend}
             >
               {isSending ? "Enviando..." : "Enviar e concluir"}
