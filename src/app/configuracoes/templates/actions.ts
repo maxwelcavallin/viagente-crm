@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { emailTemplates, messageTemplates, stageTasks } from "@/db/schema";
+import { emailTemplates, messageTemplateItems, messageTemplates, stageTasks } from "@/db/schema";
 import { extractVariables } from "@/lib/templates";
 
 async function requireAdmin() {
@@ -18,18 +18,39 @@ export type TemplateFormState =
 
 const idle: TemplateFormState = { status: "idle" };
 
-// mediaType vem do upload já concluído no cliente (ver template-form-dialog.tsx
-// — o arquivo/áudio já está no R2 antes do form ser enviado, aqui só grava a
-// referência). Conteúdo deixa de ser obrigatório sozinho: precisa de texto
-// e/ou anexo, nunca os dois vazios (mesmo padrão de "pelo menos um dos dois"
-// já usado pra telefone/email de contato).
-function readMediaFields(formData: FormData): { mediaType: string | null; mediaFileName: string | null } {
-  const mediaType = formData.get("mediaType");
-  const mediaFileName = formData.get("mediaFileName");
-  return {
-    mediaType: typeof mediaType === "string" && mediaType ? mediaType : null,
-    mediaFileName: typeof mediaFileName === "string" && mediaFileName ? mediaFileName : null,
-  };
+// Um template é um conjunto ORDENADO de mensagens separadas (ver
+// message_template_items no schema) — o form manda o conjunto inteiro
+// serializado em JSON (ver template-form-dialog.tsx), cada item já com seu
+// anexo (se houver) enviado pro R2 antes do submit. Item sem conteúdo e sem
+// anexo é descartado silenciosamente (mesmo padrão de "pelo menos um dos
+// dois" já usado pra telefone/email de contato, mas aqui por mensagem).
+type TemplateItemInput = {
+  id: string;
+  content: string;
+  mediaType: string | null;
+  mediaFileName: string | null;
+};
+
+function parseItems(formData: FormData): TemplateItemInput[] | null {
+  const raw = formData.get("items");
+  if (typeof raw !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter(
+      (it): it is TemplateItemInput =>
+        Boolean(it) &&
+        typeof it === "object" &&
+        typeof (it as TemplateItemInput).id === "string" &&
+        typeof (it as TemplateItemInput).content === "string" &&
+        ((it as TemplateItemInput).mediaType === null ||
+          typeof (it as TemplateItemInput).mediaType === "string") &&
+        ((it as TemplateItemInput).mediaFileName === null ||
+          typeof (it as TemplateItemInput).mediaFileName === "string")
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function createTemplateAction(
@@ -42,29 +63,32 @@ export async function createTemplateAction(
 
   const id = formData.get("id");
   const name = formData.get("name");
-  const content = formData.get("content");
   if (typeof id !== "string" || !id) {
     return { status: "error", message: "Template inválido." };
   }
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof content !== "string") {
-    return { status: "error", message: "Conteúdo inválido." };
+  const parsedItems = parseItems(formData);
+  if (!parsedItems) {
+    return { status: "error", message: "Mensagens inválidas." };
   }
-  const { mediaType, mediaFileName } = readMediaFields(formData);
-  if (!content.trim() && !mediaType) {
-    return { status: "error", message: "Informe o conteúdo e/ou um anexo." };
+  const items = parsedItems.filter((it) => it.content.trim() || it.mediaType);
+  if (items.length === 0) {
+    return { status: "error", message: "Adicione pelo menos uma mensagem com conteúdo e/ou anexo." };
   }
 
-  await db.insert(messageTemplates).values({
-    id,
-    name: name.trim(),
-    content: content.trim(),
-    variables: extractVariables(content),
-    mediaType,
-    mediaFileName,
-  });
+  await db.insert(messageTemplates).values({ id, name: name.trim() });
+  await db.insert(messageTemplateItems).values(
+    items.map((it, index) => ({
+      id: it.id,
+      templateId: id,
+      order: index,
+      content: it.content.trim(),
+      mediaType: it.mediaType,
+      mediaFileName: it.mediaFileName,
+    }))
+  );
 
   revalidatePath("/configuracoes/templates");
   return idle;
@@ -80,31 +104,43 @@ export async function updateTemplateAction(
 
   const id = formData.get("id");
   const name = formData.get("name");
-  const content = formData.get("content");
   if (typeof id !== "string" || !id) {
     return { status: "error", message: "Template inválido." };
   }
   if (typeof name !== "string" || !name.trim()) {
     return { status: "error", message: "Nome é obrigatório." };
   }
-  if (typeof content !== "string") {
-    return { status: "error", message: "Conteúdo inválido." };
+  const parsedItems = parseItems(formData);
+  if (!parsedItems) {
+    return { status: "error", message: "Mensagens inválidas." };
   }
-  const { mediaType, mediaFileName } = readMediaFields(formData);
-  if (!content.trim() && !mediaType) {
-    return { status: "error", message: "Informe o conteúdo e/ou um anexo." };
+  const items = parsedItems.filter((it) => it.content.trim() || it.mediaType);
+  if (items.length === 0) {
+    return { status: "error", message: "Adicione pelo menos uma mensagem com conteúdo e/ou anexo." };
   }
 
-  await db
-    .update(messageTemplates)
-    .set({
-      name: name.trim(),
-      content: content.trim(),
-      variables: extractVariables(content),
-      mediaType,
-      mediaFileName,
+  await db.update(messageTemplates).set({ name: name.trim() }).where(eq(messageTemplates.id, id));
+
+  // Substitui o conjunto inteiro (apaga tudo, insere de novo com a ordem
+  // atual do form) — mais simples que sincronizar item a item, e o id de
+  // cada item já vem estável do cliente (ver template-form-dialog.tsx), então
+  // a chave do anexo no R2 (`templates/${itemId}`) continua válida mesmo
+  // apagando e recriando a linha.
+  const del = db.delete(messageTemplateItems).where(eq(messageTemplateItems.templateId, id));
+  const inserts = items.map((it, index) =>
+    db.insert(messageTemplateItems).values({
+      id: it.id,
+      templateId: id,
+      order: index,
+      content: it.content.trim(),
+      mediaType: it.mediaType,
+      mediaFileName: it.mediaFileName,
     })
-    .where(eq(messageTemplates.id, id));
+  );
+  await db.batch([
+    del,
+    ...(inserts as [(typeof inserts)[number], ...(typeof inserts)[number][]]),
+  ]);
 
   revalidatePath("/configuracoes/templates");
   revalidatePath("/configuracoes/pipelines");
@@ -128,6 +164,7 @@ export async function deleteTemplateAction(
     .update(stageTasks)
     .set({ messageTemplateId: null })
     .where(eq(stageTasks.messageTemplateId, id));
+  // message_template_items é apagado em cascata (onDelete: "cascade").
   await db.delete(messageTemplates).where(eq(messageTemplates.id, id));
 
   revalidatePath("/configuracoes/templates");

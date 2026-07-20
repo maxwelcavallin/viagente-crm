@@ -1,16 +1,17 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   contacts,
   deals,
-  messageTemplates,
+  messageTemplateItems,
   npsSettings,
   npsSurveys,
   tasks,
 } from "@/db/schema";
 import { formatCurrencyBRL } from "@/lib/deal-format";
-import { sendTextMessage } from "@/lib/send-message";
+import { sendTemplateStyledMessage } from "@/lib/send-message";
+import type { MediaKind } from "@/lib/storage";
 import { firstNameOf, substituteTemplate } from "@/lib/templates";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -70,28 +71,38 @@ export async function runNpsSweep(): Promise<{ sent: number }> {
     .leftJoin(npsSurveys, eq(npsSurveys.dealId, deals.id))
     .where(and(or(...triggerCondition), isNull(npsSurveys.id)));
 
-  const [template] = await db
-    .select({ content: messageTemplates.content })
-    .from(messageTemplates)
-    .where(eq(messageTemplates.id, settings.messageTemplateId))
-    .limit(1);
-  if (!template) return { sent: 0 };
+  const itemRows = await db
+    .select({
+      id: messageTemplateItems.id,
+      content: messageTemplateItems.content,
+      mediaType: messageTemplateItems.mediaType,
+      mediaFileName: messageTemplateItems.mediaFileName,
+    })
+    .from(messageTemplateItems)
+    .where(eq(messageTemplateItems.templateId, settings.messageTemplateId))
+    .orderBy(asc(messageTemplateItems.order));
+  if (itemRows.length === 0) return { sent: 0 };
 
   let sent = 0;
   for (const deal of eligible) {
     const token = randomBytes(24).toString("hex");
-    const text = substituteTemplate(template.content, {
+    const variableValues = {
       nome_contato: deal.contactName,
       primeiro_nome: firstNameOf(deal.contactName),
       email_contato: deal.contactEmail ?? "",
       valor: formatCurrencyBRL(deal.dealValue) ?? "",
       link_pesquisa: buildNpsLink(token),
-    });
+    };
 
-    const result = await sendTextMessage({
+    const result = await sendTemplateStyledMessage({
       channelId: settings.channelId,
       contactId: deal.contactId,
-      message: text,
+      items: itemRows.map((it) => ({
+        id: it.id,
+        content: substituteTemplate(it.content, variableValues),
+        mediaType: it.mediaType as MediaKind | null,
+        mediaFileName: it.mediaFileName,
+      })),
     });
     if (!result.ok) {
       console.error(`[nps] falha ao enviar pesquisa pro negócio ${deal.dealId}: ${result.error}`);

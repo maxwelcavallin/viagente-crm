@@ -5,10 +5,11 @@ export const dynamic = "force-dynamic";
 
 const VALID_TYPES: MediaKind[] = ["imagem", "audio", "documento", "video"];
 
-// Espelha /api/messages/upload-url, mas a chave é compartilhada por
-// template (não por mensagem) — `templateId` é gerado no cliente (mesmo
-// template ainda não salvo, ver template-form-dialog.tsx) pra poder subir o
-// anexo antes de criar a linha no banco.
+// Espelha /api/messages/upload-url, mas a chave é por MENSAGEM do template
+// (message_template_items.id, não o template inteiro — um template agora é
+// um conjunto de várias mensagens, cada uma com seu próprio anexo opcional).
+// `itemId` é gerado no cliente (mensagem ainda não salva, ver
+// template-form-dialog.tsx) pra poder subir o anexo antes de criar a linha.
 export async function POST(request: Request) {
   const session = await auth();
   if (session?.user?.role !== "admin") {
@@ -16,25 +17,25 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    templateId?: string;
+    itemId?: string;
     type?: string;
     contentType?: string;
   } | null;
 
   if (
-    !body?.templateId ||
+    !body?.itemId ||
     !body?.type ||
     !VALID_TYPES.includes(body.type as MediaKind) ||
     !body?.contentType
   ) {
     return Response.json(
-      { error: "templateId, type e contentType são obrigatórios" },
+      { error: "itemId, type e contentType são obrigatórios" },
       { status: 400 }
     );
   }
 
   const type = body.type as MediaKind;
-  const key = `${mediaPrefix(type)}/templates/${body.templateId}`;
+  const key = `${mediaPrefix(type)}/templates/${body.itemId}`;
 
   const uploadUrl = await getMediaUploadUrl(key, body.contentType);
 

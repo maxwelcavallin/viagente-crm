@@ -1,11 +1,11 @@
-import { and, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   contacts,
   customFieldDefinitions,
   dealTags,
   deals,
-  messageTemplates,
+  messageTemplateItems,
   stageTasks,
   tagAutomations,
   tasks,
@@ -88,30 +88,27 @@ export async function maybeAutoSendTask(params: {
   const built = await buildTemplateVariables(params.dealId);
   if (!built) return;
 
-  const [template] = await db
+  const itemRows = await db
     .select({
-      content: messageTemplates.content,
-      mediaType: messageTemplates.mediaType,
-      mediaFileName: messageTemplates.mediaFileName,
+      id: messageTemplateItems.id,
+      content: messageTemplateItems.content,
+      mediaType: messageTemplateItems.mediaType,
+      mediaFileName: messageTemplateItems.mediaFileName,
     })
-    .from(messageTemplates)
-    .where(eq(messageTemplates.id, params.messageTemplateId))
-    .limit(1);
-  if (!template) return;
-
-  const text = substituteTemplate(template.content, built.variableValues);
+    .from(messageTemplateItems)
+    .where(eq(messageTemplateItems.templateId, params.messageTemplateId))
+    .orderBy(asc(messageTemplateItems.order));
+  if (itemRows.length === 0) return;
 
   const result = await sendTemplateStyledMessage({
     channelId: params.autoSendChannelId,
     contactId: built.contactId,
-    message: text,
-    media: template.mediaType
-      ? {
-          templateId: params.messageTemplateId,
-          kind: template.mediaType as MediaKind,
-          fileName: template.mediaFileName,
-        }
-      : null,
+    items: itemRows.map((it) => ({
+      id: it.id,
+      content: substituteTemplate(it.content, built.variableValues),
+      mediaType: it.mediaType as MediaKind | null,
+      mediaFileName: it.mediaFileName,
+    })),
   });
 
   if (result.ok) {

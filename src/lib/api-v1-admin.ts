@@ -9,6 +9,7 @@ import {
   emailTemplates,
   instagramChannels,
   lossReasons,
+  messageTemplateItems,
   messageTemplates,
   pipelines,
   stages,
@@ -499,29 +500,81 @@ export async function deleteTagForApiKey(
 }
 
 // ---------- Templates de mensagem ----------
+// Um template é um CONJUNTO ORDENADO de mensagens separadas (ver
+// message_template_items) — a API não expõe anexo (mediaType/mediaFileName
+// só são preenchidos via upload no editor da tela, ver
+// template-form-dialog.tsx); por aqui só texto por mensagem.
+
+export type MessageTemplateWithItems = {
+  id: string;
+  name: string;
+  items: {
+    id: string;
+    order: number;
+    content: string;
+    mediaType: string | null;
+    mediaFileName: string | null;
+  }[];
+};
+
+async function attachItemsToTemplates(
+  templateRows: (typeof messageTemplates.$inferSelect)[]
+): Promise<MessageTemplateWithItems[]> {
+  const itemRows = await db
+    .select()
+    .from(messageTemplateItems)
+    .orderBy(asc(messageTemplateItems.order));
+  const itemsByTemplateId = new Map<string, typeof itemRows>();
+  for (const item of itemRows) {
+    const list = itemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    itemsByTemplateId.set(item.templateId, list);
+  }
+  return templateRows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    items: (itemsByTemplateId.get(t.id) ?? []).map((it) => ({
+      id: it.id,
+      order: it.order,
+      content: it.content,
+      mediaType: it.mediaType,
+      mediaFileName: it.mediaFileName,
+    })),
+  }));
+}
 
 export async function listMessageTemplatesForApiKey(
   apiKey: AuthenticatedApiKey
-): Promise<ApiResult<(typeof messageTemplates.$inferSelect)[]>> {
+): Promise<ApiResult<MessageTemplateWithItems[]>> {
   const forbidden = requireAdminScope(apiKey);
   if (forbidden) return forbidden;
-  const rows = await db.select().from(messageTemplates);
-  return { ok: true, data: rows };
+  const templateRows = await db.select().from(messageTemplates);
+  return { ok: true, data: await attachItemsToTemplates(templateRows) };
 }
 
 export async function createMessageTemplateForApiKey(
   apiKey: AuthenticatedApiKey,
-  params: { name: string; content: string }
+  params: { name: string; items: { content: string }[] }
 ): Promise<ApiResult<{ id: string }>> {
   const forbidden = requireAdminScope(apiKey);
   if (forbidden) return forbidden;
   if (!params.name.trim()) return { ok: false, status: 400, error: "name é obrigatório." };
-  if (!params.content.trim()) return { ok: false, status: 400, error: "content é obrigatório." };
+  const items = (params.items ?? []).filter((it) => it.content.trim());
+  if (items.length === 0) {
+    return { ok: false, status: 400, error: "Informe pelo menos uma mensagem com conteúdo." };
+  }
 
   const [created] = await db
     .insert(messageTemplates)
-    .values({ name: params.name.trim(), content: params.content.trim(), variables: extractVariables(params.content) })
+    .values({ name: params.name.trim() })
     .returning({ id: messageTemplates.id });
+  await db.insert(messageTemplateItems).values(
+    items.map((it, index) => ({
+      templateId: created.id,
+      order: index,
+      content: it.content.trim(),
+    }))
+  );
 
   void logApiWrite(apiKey.id, "message_template", created.id, "create");
   return { ok: true, data: { id: created.id } };
@@ -530,17 +583,30 @@ export async function createMessageTemplateForApiKey(
 export async function updateMessageTemplateForApiKey(
   apiKey: AuthenticatedApiKey,
   templateId: string,
-  params: { name: string; content: string }
+  params: { name: string; items: { content: string }[] }
 ): Promise<ApiResult<{ id: string }>> {
   const forbidden = requireAdminScope(apiKey);
   if (forbidden) return forbidden;
   if (!params.name.trim()) return { ok: false, status: 400, error: "name é obrigatório." };
-  if (!params.content.trim()) return { ok: false, status: 400, error: "content é obrigatório." };
+  const items = (params.items ?? []).filter((it) => it.content.trim());
+  if (items.length === 0) {
+    return { ok: false, status: 400, error: "Informe pelo menos uma mensagem com conteúdo." };
+  }
 
-  await db
-    .update(messageTemplates)
-    .set({ name: params.name.trim(), content: params.content.trim(), variables: extractVariables(params.content) })
-    .where(eq(messageTemplates.id, templateId));
+  await db.update(messageTemplates).set({ name: params.name.trim() }).where(eq(messageTemplates.id, templateId));
+
+  // Substitui o conjunto inteiro — mesma estratégia do editor da tela (ver
+  // updateTemplateAction em configuracoes/templates/actions.ts). Itens
+  // criados aqui não têm anexo, então não há chave de mídia no R2 a
+  // preservar — diferente do editor, não precisa manter o id antigo.
+  const del = db.delete(messageTemplateItems).where(eq(messageTemplateItems.templateId, templateId));
+  const inserts = items.map((it, index) =>
+    db.insert(messageTemplateItems).values({ templateId, order: index, content: it.content.trim() })
+  );
+  await db.batch([
+    del,
+    ...(inserts as [(typeof inserts)[number], ...(typeof inserts)[number][]]),
+  ]);
 
   void logApiWrite(apiKey.id, "message_template", templateId, "update");
   return { ok: true, data: { id: templateId } };
@@ -554,6 +620,7 @@ export async function deleteMessageTemplateForApiKey(
   if (forbidden) return forbidden;
 
   await db.update(stageTasks).set({ messageTemplateId: null }).where(eq(stageTasks.messageTemplateId, templateId));
+  // message_template_items é apagado em cascata (onDelete: "cascade").
   await db.delete(messageTemplates).where(eq(messageTemplates.id, templateId));
   void logApiWrite(apiKey.id, "message_template", templateId, "delete");
   return { ok: true, data: { id: templateId } };

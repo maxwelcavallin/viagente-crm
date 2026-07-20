@@ -7,7 +7,7 @@ import {
   customFieldDefinitions,
   deals,
   emailTemplates,
-  messageTemplates,
+  messageTemplateItems,
   pipelines,
   stageTasks,
   tasks,
@@ -35,6 +35,7 @@ export default async function TarefasPage() {
     googleConnectionOwner,
     allUsers,
     allPipelines,
+    templateItemRows,
   ] = await Promise.all([
       db
         .select({
@@ -44,9 +45,6 @@ export default async function TarefasPage() {
           status: tasks.status,
           dueAt: tasks.dueAt,
           messageTemplateId: stageTasks.messageTemplateId,
-          templateContent: messageTemplates.content,
-          templateMediaType: messageTemplates.mediaType,
-          templateMediaFileName: messageTemplates.mediaFileName,
           emailTemplateSubject: emailTemplates.subject,
           emailTemplateContent: emailTemplates.content,
           dealId: deals.id,
@@ -66,7 +64,6 @@ export default async function TarefasPage() {
         .innerJoin(contacts, eq(deals.contactId, contacts.id))
         .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
-        .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
         .leftJoin(emailTemplates, eq(stageTasks.emailTemplateId, emailTemplates.id)),
       db
         .select()
@@ -82,7 +79,25 @@ export default async function TarefasPage() {
       resolveConnectionOwner(session.user.id),
       db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
       db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
+      db
+        .select({
+          id: messageTemplateItems.id,
+          templateId: messageTemplateItems.templateId,
+          order: messageTemplateItems.order,
+          content: messageTemplateItems.content,
+          mediaType: messageTemplateItems.mediaType,
+          mediaFileName: messageTemplateItems.mediaFileName,
+        })
+        .from(messageTemplateItems)
+        .orderBy(asc(messageTemplateItems.order)),
     ]);
+
+  const templateItemsByTemplateId = new Map<string, typeof templateItemRows>();
+  for (const item of templateItemRows) {
+    const list = templateItemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    templateItemsByTemplateId.set(item.templateId, list);
+  }
 
   const isGoogleConnected = googleConnectionOwner != null;
 
@@ -134,17 +149,24 @@ export default async function TarefasPage() {
       }
     }
 
+    const templateItems = row.messageTemplateId
+      ? (templateItemsByTemplateId.get(row.messageTemplateId) ?? [])
+      : [];
+
     return {
       id: row.id,
       title: row.title,
       type: row.type,
       status: row.status,
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
-      messageTemplateId: row.messageTemplateId,
-      templateMediaType: row.templateMediaType,
-      templateMediaFileName: row.templateMediaFileName,
-      messagePreview: row.templateContent
-        ? substituteTemplate(row.templateContent, variableValues)
+      messageItems: templateItems.map((it) => ({
+        id: it.id,
+        content: substituteTemplate(it.content, variableValues),
+        mediaType: it.mediaType,
+        mediaFileName: it.mediaFileName,
+      })),
+      messagePreview: templateItems[0]
+        ? substituteTemplate(templateItems[0].content, variableValues)
         : row.emailTemplateContent
           ? substituteTemplate(row.emailTemplateContent, variableValues)
           : null,

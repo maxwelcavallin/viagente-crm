@@ -1,7 +1,4 @@
-import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
-import { db } from "@/db";
-import { messageTemplates } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
 import { sendTemplateStyledMessage, sendTextMessage } from "@/lib/send-message";
 import type { MediaKind } from "@/lib/storage";
@@ -20,14 +17,19 @@ export async function POST(request: Request) {
     contactId?: string;
     message?: string;
     // Tarefa de mensagem executada manualmente (ver MessageTaskExecutor):
-    // quando o template linkado à tarefa tem anexo, ele vai junto do envio —
-    // ver sendTemplateStyledMessage.
-    templateId?: string | null;
+    // conjunto de mensagens do template (id real de message_template_items,
+    // texto já editado à mão se for o caso), enviadas em sequência — ver
+    // sendTemplateStyledMessage.
+    items?: {
+      id: string;
+      content: string;
+      mediaType: string | null;
+      mediaFileName: string | null;
+    }[];
     replyToMessageId?: string;
     replyToCreatedAt?: string;
   } | null;
 
-  const message = body?.message?.trim() ?? "";
   if (!body?.channelId || !body?.contactId) {
     return Response.json(
       { error: "channelId e contactId são obrigatórios" },
@@ -47,30 +49,23 @@ export async function POST(request: Request) {
     );
   }
 
-  if (body.templateId) {
-    const [template] = await db
-      .select({ mediaType: messageTemplates.mediaType, mediaFileName: messageTemplates.mediaFileName })
-      .from(messageTemplates)
-      .where(eq(messageTemplates.id, body.templateId))
-      .limit(1);
-
-    if (template?.mediaType) {
-      const result = await sendTemplateStyledMessage({
-        channelId: body.channelId,
-        channelType: body.channelType,
-        contactId: body.contactId,
-        message,
-        media: {
-          templateId: body.templateId,
-          kind: template.mediaType as MediaKind,
-          fileName: template.mediaFileName,
-        },
-      });
-      if (!result.ok) return Response.json({ error: result.error }, { status: 502 });
-      return Response.json({ ok: true });
-    }
+  if (body.items && body.items.length > 0) {
+    const result = await sendTemplateStyledMessage({
+      channelId: body.channelId,
+      channelType: body.channelType,
+      contactId: body.contactId,
+      items: body.items.map((it) => ({
+        id: it.id,
+        content: it.content,
+        mediaType: (it.mediaType as MediaKind | null) ?? null,
+        mediaFileName: it.mediaFileName,
+      })),
+    });
+    if (!result.ok) return Response.json({ error: result.error }, { status: 502 });
+    return Response.json({ ok: true });
   }
 
+  const message = body.message?.trim() ?? "";
   if (!message) {
     return Response.json({ error: "message é obrigatório" }, { status: 400 });
   }

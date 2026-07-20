@@ -1,7 +1,13 @@
 import { asc, count, eq } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import { db } from "@/db";
-import { customFieldDefinitions, emailTemplates, messageTemplates, stageTasks } from "@/db/schema";
+import {
+  customFieldDefinitions,
+  emailTemplates,
+  messageTemplateItems,
+  messageTemplates,
+  stageTasks,
+} from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildVariableCatalog } from "@/lib/templates";
@@ -13,20 +19,28 @@ import { EmailTemplateFormDialog } from "./email-template-form-dialog";
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
-  const [templateRows, emailTemplateRows, fieldDefRows] = await Promise.all([
+  const [templateRows, itemRows, emailTemplateRows, fieldDefRows] = await Promise.all([
     db
       .select({
         id: messageTemplates.id,
         name: messageTemplates.name,
-        content: messageTemplates.content,
-        mediaType: messageTemplates.mediaType,
-        mediaFileName: messageTemplates.mediaFileName,
         usageCount: count(stageTasks.id),
       })
       .from(messageTemplates)
       .leftJoin(stageTasks, eq(stageTasks.messageTemplateId, messageTemplates.id))
       .groupBy(messageTemplates.id)
       .orderBy(asc(messageTemplates.name)),
+    db
+      .select({
+        id: messageTemplateItems.id,
+        templateId: messageTemplateItems.templateId,
+        order: messageTemplateItems.order,
+        content: messageTemplateItems.content,
+        mediaType: messageTemplateItems.mediaType,
+        mediaFileName: messageTemplateItems.mediaFileName,
+      })
+      .from(messageTemplateItems)
+      .orderBy(asc(messageTemplateItems.order)),
     db
       .select({
         id: emailTemplates.id,
@@ -42,7 +56,24 @@ export default async function TemplatesPage() {
     db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
   ]);
 
-  const templates: TemplateRow[] = templateRows;
+  const itemsByTemplateId = new Map<string, typeof itemRows>();
+  for (const item of itemRows) {
+    const list = itemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    itemsByTemplateId.set(item.templateId, list);
+  }
+
+  const templates: TemplateRow[] = templateRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    usageCount: row.usageCount,
+    items: (itemsByTemplateId.get(row.id) ?? []).map((it) => ({
+      id: it.id,
+      content: it.content,
+      mediaType: it.mediaType,
+      mediaFileName: it.mediaFileName,
+    })),
+  }));
   const emailTemplateList: EmailTemplateRow[] = emailTemplateRows;
 
   const variableCatalog = buildVariableCatalog(

@@ -16,7 +16,7 @@ import {
   lossReasons,
   meetingNotes,
   meetingNotesContacts,
-  messageTemplates,
+  messageTemplateItems,
   pipelines,
   stages,
   stageTasks,
@@ -161,6 +161,7 @@ export default async function DealDetailPage({
     emailTemplateRows,
     emailsSentRows,
     meetingNoteRows,
+    templateItemRows,
   ] = await Promise.all([
       // undefined = sem filtro de canal — esta página mostra o histórico
       // como referência mesclada, diferente do Atendimento (que separa por
@@ -183,15 +184,11 @@ export default async function DealDetailPage({
           status: tasks.status,
           dueAt: tasks.dueAt,
           messageTemplateId: stageTasks.messageTemplateId,
-          templateContent: messageTemplates.content,
-          templateMediaType: messageTemplates.mediaType,
-          templateMediaFileName: messageTemplates.mediaFileName,
           emailTemplateSubject: emailTemplates.subject,
           emailTemplateContent: emailTemplates.content,
         })
         .from(tasks)
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
-        .leftJoin(messageTemplates, eq(stageTasks.messageTemplateId, messageTemplates.id))
         .leftJoin(emailTemplates, eq(stageTasks.emailTemplateId, emailTemplates.id))
         .where(eq(tasks.dealId, id)),
       db
@@ -253,6 +250,17 @@ export default async function DealDetailPage({
         .innerJoin(meetingNotes, eq(meetingNotesContacts.meetingNoteId, meetingNotes.id))
         .where(eq(meetingNotesContacts.dealId, id))
         .orderBy(desc(meetingNotes.meetingDate)),
+      db
+        .select({
+          id: messageTemplateItems.id,
+          templateId: messageTemplateItems.templateId,
+          order: messageTemplateItems.order,
+          content: messageTemplateItems.content,
+          mediaType: messageTemplateItems.mediaType,
+          mediaFileName: messageTemplateItems.mediaFileName,
+        })
+        .from(messageTemplateItems)
+        .orderBy(asc(messageTemplateItems.order)),
     ]);
 
   const allowedChannels = [
@@ -334,24 +342,39 @@ export default async function DealDetailPage({
     parsedOk: row.parsedOk,
   }));
 
-  const dealTasks: DealTask[] = taskRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    type: row.type,
-    status: row.status,
-    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
-    messageTemplateId: row.messageTemplateId,
-    templateMediaType: row.templateMediaType,
-    templateMediaFileName: row.templateMediaFileName,
-    messagePreview: row.templateContent
-      ? substituteTemplate(row.templateContent, variableValues)
-      : row.emailTemplateContent
-        ? substituteTemplate(row.emailTemplateContent, variableValues)
+  const templateItemsByTemplateId = new Map<string, typeof templateItemRows>();
+  for (const item of templateItemRows) {
+    const list = templateItemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    templateItemsByTemplateId.set(item.templateId, list);
+  }
+
+  const dealTasks: DealTask[] = taskRows.map((row) => {
+    const templateItems = row.messageTemplateId
+      ? (templateItemsByTemplateId.get(row.messageTemplateId) ?? [])
+      : [];
+    return {
+      id: row.id,
+      title: row.title,
+      type: row.type,
+      status: row.status,
+      dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+      messageItems: templateItems.map((it) => ({
+        id: it.id,
+        content: substituteTemplate(it.content, variableValues),
+        mediaType: it.mediaType,
+        mediaFileName: it.mediaFileName,
+      })),
+      messagePreview: templateItems[0]
+        ? substituteTemplate(templateItems[0].content, variableValues)
+        : row.emailTemplateContent
+          ? substituteTemplate(row.emailTemplateContent, variableValues)
+          : null,
+      emailSubjectPreview: row.emailTemplateSubject
+        ? substituteTemplate(row.emailTemplateSubject, variableValues)
         : null,
-    emailSubjectPreview: row.emailTemplateSubject
-      ? substituteTemplate(row.emailTemplateSubject, variableValues)
-      : null,
-  }));
+    };
+  });
 
   const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
   const defaultChannel = allowedChannels.find((c) => c.isDefault);

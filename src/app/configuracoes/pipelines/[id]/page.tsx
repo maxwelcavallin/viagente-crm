@@ -6,6 +6,7 @@ import {
   customFieldDefinitions,
   emailTemplates,
   lossReasons,
+  messageTemplateItems,
   messageTemplates,
   pipelineOwnerDistribution,
   pipelines,
@@ -16,6 +17,7 @@ import {
 } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildVariableCatalog } from "@/lib/templates";
+import type { TemplateData } from "@/app/configuracoes/templates/template-form-dialog";
 import { StagesList } from "./stages-list";
 import { CreateStageForm } from "./create-stage-form";
 import { LossReasonsPanel } from "./loss-reasons-panel";
@@ -46,7 +48,8 @@ export default async function PipelineDetailPage({
   const stageIds = pipelineStages.map((s) => s.id);
   const [
     stageTaskRows,
-    templates,
+    templateRows,
+    templateItemRows,
     emailTemplateOptions,
     channels,
     pipelineLossReasons,
@@ -74,15 +77,18 @@ export default async function PipelineDetailPage({
           .where(inArray(stageTasks.stageId, stageIds))
           .orderBy(asc(stageTasks.order))
       : Promise.resolve([]),
+    db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
     db
       .select({
-        id: messageTemplates.id,
-        name: messageTemplates.name,
-        content: messageTemplates.content,
-        mediaType: messageTemplates.mediaType,
-        mediaFileName: messageTemplates.mediaFileName,
+        id: messageTemplateItems.id,
+        templateId: messageTemplateItems.templateId,
+        order: messageTemplateItems.order,
+        content: messageTemplateItems.content,
+        mediaType: messageTemplateItems.mediaType,
+        mediaFileName: messageTemplateItems.mediaFileName,
       })
-      .from(messageTemplates),
+      .from(messageTemplateItems)
+      .orderBy(asc(messageTemplateItems.order)),
     db.select({ id: emailTemplates.id, name: emailTemplates.name }).from(emailTemplates),
     db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
     db
@@ -105,6 +111,23 @@ export default async function PipelineDetailPage({
     db.select({ id: users.id, name: users.name }).from(users).orderBy(asc(users.name)),
     db.select().from(customFieldDefinitions).orderBy(asc(customFieldDefinitions.order)),
   ]);
+
+  const itemsByTemplateId = new Map<string, typeof templateItemRows>();
+  for (const item of templateItemRows) {
+    const list = itemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    itemsByTemplateId.set(item.templateId, list);
+  }
+  const templates: TemplateData[] = templateRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    items: (itemsByTemplateId.get(row.id) ?? []).map((it) => ({
+      id: it.id,
+      content: it.content,
+      mediaType: it.mediaType,
+      mediaFileName: it.mediaFileName,
+    })),
+  }));
 
   const variableCatalog = buildVariableCatalog(
     fieldDefRows.map((row) => ({

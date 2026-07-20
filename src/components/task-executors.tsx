@@ -15,6 +15,13 @@ import { ScheduleMeetingDialog } from "@/components/schedule-meeting-dialog";
 import { completeTaskAction } from "@/app/negocios/actions";
 import { uploadEmailAttachment } from "@/lib/upload-email-attachment-client";
 
+export type TaskMessageItem = {
+  id: string;
+  content: string;
+  mediaType: string | null;
+  mediaFileName: string | null;
+};
+
 export type TaskLike = {
   id: string;
   title: string;
@@ -23,9 +30,10 @@ export type TaskLike = {
   messagePreview: string | null;
   dueAt: string | null;
   emailSubjectPreview?: string | null;
-  messageTemplateId?: string | null;
-  templateMediaType?: string | null;
-  templateMediaFileName?: string | null;
+  // type === "mensagem": conjunto ordenado de mensagens do template (já com
+  // variáveis substituídas) — o executor manda cada uma como sua própria
+  // mensagem, na ordem, igual o envio automático (ver sendTemplateStyledMessage).
+  messageItems?: TaskMessageItem[];
 };
 
 export function MessageTaskExecutor({
@@ -44,13 +52,19 @@ export function MessageTaskExecutor({
   onDone: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [text, setText] = useState(task.messagePreview ?? "");
+  const [items, setItems] = useState<TaskMessageItem[]>(() => task.messageItems ?? []);
   const [channelId, setChannelId] = useState(preselectedChannelId ?? channels[0]?.id ?? "");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const hasSendable = items.some((it) => it.content.trim() || it.mediaType);
+
+  function updateContent(id: string, value: string) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, content: value } : it)));
+  }
+
   async function handleSend() {
-    if ((!text.trim() && !task.templateMediaType) || !channelId) return;
+    if (!hasSendable || !channelId) return;
     setIsSending(true);
     setError(null);
     try {
@@ -60,8 +74,12 @@ export function MessageTaskExecutor({
         body: JSON.stringify({
           channelId,
           contactId,
-          message: text.trim(),
-          templateId: task.messageTemplateId,
+          items: items.map((it) => ({
+            id: it.id,
+            content: it.content.trim(),
+            mediaType: it.mediaType,
+            mediaFileName: it.mediaFileName,
+          })),
         }),
       });
       if (!res.ok) {
@@ -109,25 +127,34 @@ export function MessageTaskExecutor({
               ))}
             </SelectContent>
           </Select>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={3}
-            className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
-          />
-          {task.templateMediaType && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Paperclip size={12} strokeWidth={1.75} />
-              {task.templateMediaType === "audio"
-                ? "Áudio do template será enviado junto"
-                : `Anexo do template será enviado junto${task.templateMediaFileName ? `: ${task.templateMediaFileName}` : ""}`}
-            </p>
-          )}
+          {items.map((item, index) => (
+            <div key={item.id} className="space-y-1">
+              {items.length > 1 && (
+                <p className="text-[10px] font-medium text-muted-foreground">
+                  Mensagem {index + 1}
+                </p>
+              )}
+              <textarea
+                value={item.content}
+                onChange={(e) => updateContent(item.id, e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+              />
+              {item.mediaType && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Paperclip size={12} strokeWidth={1.75} />
+                  {item.mediaType === "audio"
+                    ? "Áudio será enviado junto"
+                    : `Anexo será enviado junto${item.mediaFileName ? `: ${item.mediaFileName}` : ""}`}
+                </p>
+              )}
+            </div>
+          ))}
           <div className="flex items-center gap-2">
             <Button
               type="button"
               size="sm"
-              disabled={isSending || (!text.trim() && !task.templateMediaType) || !channelId}
+              disabled={isSending || !hasSendable || !channelId}
               onClick={handleSend}
             >
               {isSending ? "Enviando..." : "Enviar e concluir"}

@@ -13,17 +13,25 @@ export async function GET(request: Request) {
   return Response.json({ messageTemplates: result.data });
 }
 
-// POST /api/v1/admin/message-templates  { name, content } — requer chave admin
+// POST /api/v1/admin/message-templates  { name, items: [{ content }] } — requer chave admin.
+// Um template é um conjunto ORDENADO de mensagens separadas (ordem = ordem
+// do array); anexo/áudio só pode ser adicionado depois, pela tela.
 export async function POST(request: Request) {
   const auth = await authenticateApiRequest(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
-  const body = (await request.json().catch(() => null)) as { name?: string; content?: string } | null;
-  if (!body?.name || !body?.content) {
-    return Response.json({ error: "name e content são obrigatórios." }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as {
+    name?: string;
+    items?: { content?: string }[];
+  } | null;
+  if (!body?.name || !body?.items?.length) {
+    return Response.json({ error: "name e items são obrigatórios." }, { status: 400 });
   }
 
-  const result = await createMessageTemplateForApiKey(auth.apiKey, { name: body.name, content: body.content });
+  const result = await createMessageTemplateForApiKey(auth.apiKey, {
+    name: body.name,
+    items: body.items.map((it) => ({ content: it.content ?? "" })),
+  });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
   return Response.json({ messageTemplate: result.data }, { status: 201 });
 }

@@ -20,6 +20,7 @@ import {
   MessageTaskExecutor,
   SchedulingTaskExecutor,
   type TaskLike,
+  type TaskMessageItem,
 } from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
@@ -32,6 +33,7 @@ export type TarefaItem = {
   status: "pendente" | "concluida";
   dueAt: string | null;
   messagePreview: string | null;
+  messageItems?: TaskMessageItem[];
   emailSubjectPreview?: string | null;
   dealId: string;
   dealTitle: string;
@@ -120,6 +122,7 @@ function TarefaRow({
     type: item.type,
     status: item.status,
     messagePreview: item.messagePreview,
+    messageItems: item.messageItems,
     dueAt: item.dueAt,
     emailSubjectPreview: item.emailSubjectPreview,
   };

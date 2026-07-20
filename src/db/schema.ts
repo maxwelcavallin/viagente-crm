@@ -249,21 +249,36 @@ export const stages = pgTable(
 );
 
 // ---------- Templates de mensagem (referenciado por stage_tasks) ----------
+// Um template é um CONJUNTO ORDENADO de mensagens separadas (messageTemplateItems)
+// — enviadas uma por uma, na ordem, quando o template é usado (ver
+// sendTemplateStyledMessage em src/lib/send-message.ts). O template em si só
+// guarda o nome; texto/anexo/ordem vivem em cada item.
 
 export const messageTemplates = pgTable("message_templates", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  content: text("content").notNull(),
-  variables: jsonb("variables").notNull().default([]),
-  // Anexo opcional (qualquer tipo) armazenado em
-  // `${mediaPrefix(mediaType)}/templates/${id}` no R2 — ver src/lib/storage.ts.
-  // "audio" é sempre o blob webm/opus do gravador do composer (mesmo
-  // AudioRecorderButton), despachado como nota de voz (waveform=true) na
-  // hora do envio, igual uma gravação ao vivo — ver sendTemplateStyledMessage
-  // em src/lib/send-message.ts.
-  mediaType: text("media_type"),
-  mediaFileName: text("media_file_name"),
 });
+
+export const messageTemplateItems = pgTable(
+  "message_template_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => messageTemplates.id, { onDelete: "cascade" }),
+    order: integer("order").notNull().default(0),
+    content: text("content").notNull().default(""),
+    // Anexo opcional (qualquer tipo) armazenado em
+    // `${mediaPrefix(mediaType)}/templates/${id}` no R2 (id deste item, não
+    // do template) — ver src/lib/storage.ts. "audio" é sempre o blob
+    // webm/opus do gravador do composer (mesmo AudioRecorderButton),
+    // despachado como nota de voz (waveform=true) na hora do envio, igual
+    // uma gravação ao vivo.
+    mediaType: text("media_type"),
+    mediaFileName: text("media_file_name"),
+  },
+  (t) => [index("message_template_items_template_id_idx").on(t.templateId)]
+);
 
 // Mesmo espírito de messageTemplates, mas com assunto — usado pela tarefa
 // tipo 'email' (Etapa 26).

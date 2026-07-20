@@ -823,8 +823,17 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
       "criar_template_mensagem",
       {
         title: "Criar template de mensagem",
-        description: "Cria um template de mensagem (variáveis {{campo}} detectadas automaticamente).",
-        inputSchema: { name: z.string().min(1), content: z.string().min(1) },
+        description:
+          "Cria um template de mensagem — um conjunto ORDENADO de mensagens separadas, enviadas uma " +
+          "por uma nessa ordem (variáveis {{campo}} detectadas automaticamente em cada uma). Anexo/áudio " +
+          "só pode ser adicionado depois, pela tela de Configurações > Templates.",
+        inputSchema: {
+          name: z.string().min(1),
+          items: z
+            .array(z.object({ content: z.string().min(1) }))
+            .min(1)
+            .describe("Mensagens na ordem de envio — cada uma vira uma mensagem separada."),
+        },
       },
       async (args) => {
         const result = await createMessageTemplateForApiKey(apiKey, args);
@@ -836,8 +845,16 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
       "editar_template_mensagem",
       {
         title: "Editar template de mensagem",
-        description: "Edita um template de mensagem existente.",
-        inputSchema: { templateId: z.string().uuid(), name: z.string().min(1), content: z.string().min(1) },
+        description:
+          "Edita um template de mensagem existente — substitui o conjunto de mensagens inteiro pela " +
+          "lista enviada (ordem = ordem do array). Atenção: isso apaga e recria todas as mensagens do " +
+          "template, então qualquer anexo/áudio já configurado nelas pela tela se perde — para só " +
+          "adicionar/editar texto sem mexer em anexos, prefira editar pela tela de Configurações > Templates.",
+        inputSchema: {
+          templateId: z.string().uuid(),
+          name: z.string().min(1),
+          items: z.array(z.object({ content: z.string().min(1) })).min(1),
+        },
       },
       async ({ templateId, ...params }) => {
         const result = await updateMessageTemplateForApiKey(apiKey, templateId, params);

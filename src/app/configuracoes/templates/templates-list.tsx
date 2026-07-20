@@ -86,39 +86,48 @@ export function TemplatesList({
 
   return (
     <div className="space-y-3">
-      {templates.map((template) => (
-        <div
-          key={template.id}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <p className="font-medium">{template.name}</p>
-              {template.mediaType && (
-                <Paperclip
-                  size={12}
-                  strokeWidth={1.75}
-                  className="shrink-0 text-muted-foreground"
-                  aria-label="Tem anexo"
-                />
-              )}
+      {templates.map((template) => {
+        const hasMedia = template.items.some((it) => it.mediaType);
+        const preview = template.items[0]?.content || "";
+        return (
+          <div
+            key={template.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="font-medium">{template.name}</p>
+                {template.items.length > 1 && (
+                  <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                    {template.items.length} mensagens
+                  </span>
+                )}
+                {hasMedia && (
+                  <Paperclip
+                    size={12}
+                    strokeWidth={1.75}
+                    className="shrink-0 text-muted-foreground"
+                    aria-label="Tem anexo"
+                  />
+                )}
+              </div>
+              <p className="line-clamp-1 text-sm text-muted-foreground">
+                {preview || (hasMedia ? "Anexo" : "—")}
+              </p>
             </div>
-            <p className="line-clamp-1 text-sm text-muted-foreground">
-              {template.content || "—"}
-            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <TemplateFormDialog
+                mode="edit"
+                template={template}
+                variableCatalog={variableCatalog}
+                trigger={<Button type="button" variant="outline" size="sm" />}
+                triggerLabel="Editar"
+              />
+              <DeleteTemplateDialog template={template} />
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <TemplateFormDialog
-              mode="edit"
-              template={template}
-              variableCatalog={variableCatalog}
-              trigger={<Button type="button" variant="outline" size="sm" />}
-              triggerLabel="Editar"
-            />
-            <DeleteTemplateDialog template={template} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

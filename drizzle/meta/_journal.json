@@ -288,6 +288,13 @@
       "when": 1784580335826,
       "tag": "0040_noisy_shadowcat",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784584644877,
+      "tag": "0041_dashing_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

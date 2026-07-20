@@ -291,60 +291,74 @@ export async function sendMediaMessage(
   return { ok: true, message: created };
 }
 
+// Uma mensagem separada dentro do conjunto do template — id é o id da linha
+// em message_template_items, usado como chave do anexo no R2
+// (`templates/${id}`, ver mediaPrefix) quando mediaType existe. content já
+// vem com as variáveis substituídas (e, no envio manual de tarefa,
+// possivelmente editado à mão pelo atendente antes de mandar).
+export type TemplateMessageItem = {
+  id: string;
+  content: string;
+  mediaType: MediaKind | null;
+  mediaFileName: string | null;
+};
+
 export type SendTemplateStyledMessageParams = {
   channelId: string;
   channelType?: "whatsapp" | "instagram";
   contactId: string;
-  // Texto já substituído (variáveis resolvidas) e, no caso de envio manual de
-  // tarefa, possivelmente editado à mão pelo atendente antes de mandar.
-  message: string;
-  media?: {
-    templateId: string;
-    kind: MediaKind;
-    fileName?: string | null;
-  } | null;
+  // Um template é um conjunto ORDENADO de mensagens separadas — enviadas uma
+  // por uma, na ordem do array, cada uma como sua própria mensagem no
+  // WhatsApp/Instagram (não uma mensagem só concatenada).
+  items: TemplateMessageItem[];
 };
 
-// Regra de composição texto+anexo de um template: áudio nunca aceita legenda
-// (WhatsApp não tem esse conceito pra nota de voz — ver sendZapiAudio), então
-// o texto sai como mensagem separada ANTES do áudio, na ordem natural de uma
-// conversa. Imagem/vídeo/documento já embutem o texto como legenda na mesma
-// mensagem. Sem anexo, cai no envio de texto simples de sempre.
+// Regra de composição texto+anexo de cada mensagem do template: áudio nunca
+// aceita legenda (WhatsApp não tem esse conceito pra nota de voz — ver
+// sendZapiAudio), então o texto sai como mensagem separada ANTES do áudio,
+// na ordem natural de uma conversa. Imagem/vídeo/documento já embutem o
+// texto como legenda na mesma mensagem. Item sem anexo cai no envio de
+// texto simples de sempre. Envio é sequencial (aguarda cada item antes do
+// próximo) pra preservar a ordem escolhida no editor do template.
 export async function sendTemplateStyledMessage(
   params: SendTemplateStyledMessageParams
 ): Promise<{ ok: boolean; error?: string }> {
-  const text = params.message.trim();
+  for (const item of params.items) {
+    const text = item.content.trim();
 
-  if (!params.media) {
-    if (!text) return { ok: true };
-    const result = await sendTextMessage({
+    if (!item.mediaType) {
+      if (!text) continue;
+      const result = await sendTextMessage({
+        channelId: params.channelId,
+        channelType: params.channelType,
+        contactId: params.contactId,
+        message: text,
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      continue;
+    }
+
+    if (text && item.mediaType === "audio") {
+      const textResult = await sendTextMessage({
+        channelId: params.channelId,
+        channelType: params.channelType,
+        contactId: params.contactId,
+        message: text,
+      });
+      if (!textResult.ok) return { ok: false, error: textResult.error };
+    }
+
+    const mediaResult = await sendMediaMessage({
       channelId: params.channelId,
       channelType: params.channelType,
       contactId: params.contactId,
-      message: text,
+      sourceKey: `${mediaPrefix(item.mediaType)}/templates/${item.id}`,
+      mediaKind: item.mediaType,
+      caption: item.mediaType === "audio" ? undefined : text || undefined,
+      fileName: item.mediaFileName ?? undefined,
     });
-    return result.ok ? { ok: true } : { ok: false, error: result.error };
+    if (!mediaResult.ok) return { ok: false, error: mediaResult.error };
   }
 
-  if (text && params.media.kind === "audio") {
-    const textResult = await sendTextMessage({
-      channelId: params.channelId,
-      channelType: params.channelType,
-      contactId: params.contactId,
-      message: text,
-    });
-    if (!textResult.ok) return { ok: false, error: textResult.error };
-  }
-
-  const mediaResult = await sendMediaMessage({
-    channelId: params.channelId,
-    channelType: params.channelType,
-    contactId: params.contactId,
-    sourceKey: `${mediaPrefix(params.media.kind)}/templates/${params.media.templateId}`,
-    mediaKind: params.media.kind,
-    caption: params.media.kind === "audio" ? undefined : text || undefined,
-    fileName: params.media.fileName ?? undefined,
-  });
-
-  return mediaResult.ok ? { ok: true } : { ok: false, error: mediaResult.error };
+  return { ok: true };
 }

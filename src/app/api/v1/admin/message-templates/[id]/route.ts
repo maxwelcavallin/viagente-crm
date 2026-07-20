@@ -3,7 +3,9 @@ import { deleteMessageTemplateForApiKey, updateMessageTemplateForApiKey } from "
 
 export const dynamic = "force-dynamic";
 
-// PATCH /api/v1/admin/message-templates/:id  { name, content } — requer chave admin
+// PATCH /api/v1/admin/message-templates/:id  { name, items: [{ content }] } — requer
+// chave admin. Substitui o conjunto de mensagens inteiro (apaga anexos já
+// configurados nelas pela tela — ver comentário em updateMessageTemplateForApiKey).
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -12,12 +14,18 @@ export async function PATCH(
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
   const { id } = await params;
-  const body = (await request.json().catch(() => null)) as { name?: string; content?: string } | null;
-  if (!body?.name || !body?.content) {
-    return Response.json({ error: "name e content são obrigatórios." }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as {
+    name?: string;
+    items?: { content?: string }[];
+  } | null;
+  if (!body?.name || !body?.items?.length) {
+    return Response.json({ error: "name e items são obrigatórios." }, { status: 400 });
   }
 
-  const result = await updateMessageTemplateForApiKey(auth.apiKey, id, { name: body.name, content: body.content });
+  const result = await updateMessageTemplateForApiKey(auth.apiKey, id, {
+    name: body.name,
+    items: body.items.map((it) => ({ content: it.content ?? "" })),
+  });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
   return Response.json({ messageTemplate: result.data });
 }
