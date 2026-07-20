@@ -18,7 +18,15 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 lg:px-6">
         <div className="flex items-center gap-3">
           <MobileNavDrawer role={role} />
-          <span className="text-base font-bold">CRM Viagente</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo estática, sem next/image usado no restante do projeto */}
+          <img src="/viagente-logo.png" alt="Viagente" className="h-7 w-auto dark:hidden" />
+          {/* Versão clara do logo pro tema escuro (fundo #111111), mesmo padrão da tela de login. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/viagente-logo-dark.png"
+            alt="Viagente"
+            className="hidden h-7 w-auto dark:block"
+          />
         </div>
         <div className="flex items-center gap-3">
           <Button
