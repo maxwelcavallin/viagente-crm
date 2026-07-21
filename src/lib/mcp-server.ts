@@ -83,7 +83,7 @@ function errorResult(message: string) {
 
 const sequenceStepSchema = z.object({
   delayMinutes: z.number().int().min(0),
-  type: z.enum(["mensagem", "tarefa_generica", "tag", "mudar_etapa"]),
+  type: z.enum(["mensagem", "tarefa_generica", "tag", "mudar_etapa", "clonar_negocio"]),
   title: z.string().optional().nullable(),
   messageTemplateId: z.string().uuid().optional().nullable(),
   autoSend: z.boolean().optional(),
@@ -1028,7 +1028,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
       {
         title: "Criar sequência de automação",
         description:
-          "Cria uma sequência de automação completa (gatilho + passos) — ex: mensagem, tarefa genérica, tag ou mudar etapa, cada um com atraso configurável.",
+          "Cria uma sequência de automação completa (gatilho + passos) — ex: mensagem, tarefa genérica, tag, mover negócio de etapa (mudar_etapa) ou clonar negócio criando outro em outra etapa/pipeline sem alterar o original (clonar_negocio), cada um com atraso configurável.",
         inputSchema: {
           name: z.string().min(1),
           active: z.boolean().optional(),

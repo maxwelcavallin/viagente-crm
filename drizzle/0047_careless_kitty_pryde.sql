@@ -1,0 +1,1 @@
+ALTER TYPE "public"."sequence_step_type" ADD VALUE 'clonar_negocio';

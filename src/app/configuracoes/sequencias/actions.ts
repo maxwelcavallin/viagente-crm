@@ -19,7 +19,7 @@ const idle: SequenceFormState = { status: "idle" };
 
 type StepInput = {
   delayMinutes: number;
-  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa";
+  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa" | "clonar_negocio";
   title: string | null;
   messageTemplateId: string | null;
   autoSend: boolean;
@@ -118,7 +118,10 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
       return { error: "Todo passo de tag precisa de uma tag selecionada." };
     }
     if (step.type === "mudar_etapa" && !step.moveToStageId) {
-      return { error: "Todo passo de mudar etapa precisa de uma etapa de destino." };
+      return { error: "Todo passo de mover negócio precisa de uma etapa de destino." };
+    }
+    if (step.type === "clonar_negocio" && !step.moveToStageId) {
+      return { error: "Todo passo de clonar negócio precisa de uma etapa de destino." };
     }
   }
 

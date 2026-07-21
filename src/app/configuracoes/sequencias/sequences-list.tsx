@@ -46,7 +46,7 @@ export type SequenceStepRow = {
   id: string;
   order: number;
   delayMinutes: number;
-  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa";
+  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa" | "clonar_negocio";
   title: string | null;
   messageTemplateId: string | null;
   autoSend: boolean;
@@ -92,7 +92,8 @@ const STEP_TYPE_LABELS: Record<SequenceStepRow["type"], string> = {
   mensagem: "Mensagem",
   tarefa_generica: "Tarefa genérica",
   tag: "Adicionar tag",
-  mudar_etapa: "Mudar de etapa",
+  mudar_etapa: "Mover negócio para outra etapa",
+  clonar_negocio: "Clonar negócio (criar outro) em outra etapa",
 };
 
 const OPERATOR_LABELS: Record<NonNullable<SequenceCondition>["operator"], string> = {
@@ -309,7 +310,7 @@ function StepRowEditor({
         </div>
       )}
 
-      {step.type === "mudar_etapa" && (
+      {(step.type === "mudar_etapa" || step.type === "clonar_negocio") && (
         <div className="space-y-1">
           <Label className="text-xs">Etapa de destino</Label>
           <Select
@@ -328,6 +329,11 @@ function StepRowEditor({
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            {step.type === "mudar_etapa"
+              ? "O negócio atual é movido pra essa etapa (pode ser de outra pipeline)."
+              : "Cria um negócio novo nessa etapa, com status aberto; o negócio original não é alterado."}
+          </p>
         </div>
       )}
     </div>

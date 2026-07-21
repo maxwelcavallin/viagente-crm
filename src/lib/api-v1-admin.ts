@@ -809,7 +809,7 @@ export async function deleteTagAutomationForApiKey(
 
 type SequenceStepInput = {
   delayMinutes: number;
-  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa";
+  type: "mensagem" | "tarefa_generica" | "tag" | "mudar_etapa" | "clonar_negocio";
   title?: string | null;
   messageTemplateId?: string | null;
   autoSend?: boolean;
@@ -851,6 +851,7 @@ function validateSequenceInput(input: SequenceInput): { error: string } | null {
     if (step.type === "tarefa_generica" && !step.title?.trim()) return { error: "Todo passo type='tarefa_generica' precisa de title." };
     if (step.type === "tag" && !step.addTagId) return { error: "Todo passo type='tag' precisa de addTagId." };
     if (step.type === "mudar_etapa" && !step.moveToStageId) return { error: "Todo passo type='mudar_etapa' precisa de moveToStageId." };
+    if (step.type === "clonar_negocio" && !step.moveToStageId) return { error: "Todo passo type='clonar_negocio' precisa de moveToStageId." };
   }
   return null;
 }

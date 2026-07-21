@@ -330,6 +330,13 @@
       "when": 1784646105959,
       "tag": "0046_confused_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1784649795798,
+      "tag": "0047_careless_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

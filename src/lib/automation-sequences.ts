@@ -265,6 +265,55 @@ async function executeStep(run: RunRow, step: StepRow): Promise<void> {
       }
       break;
     }
+    case "clonar_negocio": {
+      if (!step.moveToStageId) break;
+      const [targetStage] = await db
+        .select({ pipelineId: stages.pipelineId })
+        .from(stages)
+        .where(eq(stages.id, step.moveToStageId))
+        .limit(1);
+      if (!targetStage) break;
+      const [source] = await db
+        .select({
+          contactId: deals.contactId,
+          ownerId: deals.ownerId,
+          title: deals.title,
+          value: deals.value,
+          source: deals.source,
+          customFields: deals.customFields,
+          temperature: deals.temperature,
+        })
+        .from(deals)
+        .where(eq(deals.id, run.dealId))
+        .limit(1);
+      if (!source) break;
+      // Diferente de "mudar_etapa": o negócio original NÃO é tocado (continua
+      // na pipeline/etapa/status em que está, ex: prospecção marcada como
+      // ganha) — cria-se um segundo negócio novo, sempre status "aberto",
+      // já na etapa de destino (ex: pós-venda/onboarding).
+      const [clone] = await db
+        .insert(deals)
+        .values({
+          contactId: source.contactId,
+          pipelineId: targetStage.pipelineId,
+          stageId: step.moveToStageId,
+          ownerId: source.ownerId,
+          title: source.title,
+          value: source.value,
+          source: source.source,
+          customFields: source.customFields,
+          temperature: source.temperature,
+        })
+        .returning({ id: deals.id });
+      await logDealActivity({
+        dealId: clone.id,
+        userId: null,
+        source: "automacao",
+        action: "criado",
+      });
+      void dispatchOutboundWebhooks("negocio_criado", clone.id);
+      break;
+    }
     case "tarefa_generica": {
       await db.insert(tasks).values({
         dealId: run.dealId,

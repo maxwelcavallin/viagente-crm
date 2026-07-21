@@ -120,6 +120,7 @@ export const sequenceStepTypeEnum = pgEnum("sequence_step_type", [
   "tarefa_generica",
   "tag",
   "mudar_etapa",
+  "clonar_negocio",
 ]);
 export const sequenceRunStatusEnum = pgEnum("sequence_run_status", [
   "em_andamento",
