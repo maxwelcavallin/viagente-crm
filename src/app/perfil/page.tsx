@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { googleCalendarConnections, googleCalendarShares, users } from "@/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
+import { AvatarSettings } from "./avatar-settings";
 import { disconnectGoogleAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,12 @@ export default async function PerfilPage({
   if (!session?.user) redirect("/login");
 
   const { connected, googleError } = await searchParams;
+
+  const [currentUser] = await db
+    .select({ name: users.name, avatarUrl: users.avatarUrl })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
 
   const [ownConnection] = await db
     .select()
@@ -56,6 +63,18 @@ export default async function PerfilPage({
           {session.user.name} — {session.user.role === "admin" ? "Administrador" : "Atendente"}
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Foto de perfil</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AvatarSettings
+            name={currentUser?.name ?? session.user.name ?? "?"}
+            avatarUrl={currentUser?.avatarUrl ?? null}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Check, ListTodo, MessageCircle, MoreVertical, Pencil } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MarkLostDialog } from "@/components/mark-lost-dialog";
-import { cn } from "@/lib/utils";
+import { cn, initialOf } from "@/lib/utils";
 import {
   formatCurrencyBRL,
   formatMessagePreviewDate,
@@ -42,8 +43,10 @@ export type DealCardData = {
   contactId: string;
   contactName: string;
   contactPhone: string;
+  contactAvatarUrl: string | null;
   ownerId: string | null;
   ownerName: string | null;
+  ownerAvatarUrl: string | null;
   tags: TagOption[];
   customFields: Record<string, unknown>;
   stageId: string;
@@ -103,13 +106,27 @@ export function DealCard({
           : `Negócio "${deal.title}" — Espaço pra selecionar e mover`
       }
       className={cn(
-        "cursor-grab space-y-2 rounded-xl border border-border bg-card p-3 text-sm transition-all active:cursor-grabbing",
+        "relative cursor-grab space-y-2 rounded-xl border border-border bg-card p-3 text-sm transition-all active:cursor-grabbing",
         "hover:border-primary/60",
         isGrabbed && "scale-[1.02] border-primary ring-2 ring-ring/20",
         selected && "border-primary ring-2 ring-primary/30",
         isInactive && "opacity-60"
       )}
     >
+      {deal.ownerId && (
+        <Avatar
+          size="sm"
+          title={deal.ownerName ?? undefined}
+          className="absolute -right-1.5 -bottom-1.5 z-10 ring-2 ring-background"
+        >
+          {deal.ownerAvatarUrl && (
+            <AvatarImage src={deal.ownerAvatarUrl} alt={deal.ownerName ?? ""} />
+          )}
+          <AvatarFallback>
+            {deal.ownerName ? initialOf(deal.ownerName) : "?"}
+          </AvatarFallback>
+        </Avatar>
+      )}
       {isGrabbed && (
         <p className="rounded-md bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
           Mover para &quot;{grabbedPreviewStageName}&quot; — ← → escolhe,
@@ -135,9 +152,12 @@ export function DealCard({
           >
             {selected && <Check size={11} strokeWidth={2.5} />}
           </button>
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-            {deal.contactName.charAt(0).toUpperCase()}
-          </span>
+          <Avatar className="size-7">
+            {deal.contactAvatarUrl && (
+              <AvatarImage src={deal.contactAvatarUrl} alt={deal.contactName} />
+            )}
+            <AvatarFallback>{initialOf(deal.contactName)}</AvatarFallback>
+          </Avatar>
           <div className="min-w-0">
             <Link
               href={`/negocios/${deal.id}`}

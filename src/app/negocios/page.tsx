@@ -37,11 +37,16 @@ export default async function NegociosPage({
       db.select().from(pipelines).orderBy(asc(pipelines.order)),
       db.select().from(tags).orderBy(tags.name),
       db
-        .select({ id: contacts.id, name: contacts.name, phone: contacts.phone })
+        .select({
+          id: contacts.id,
+          name: contacts.name,
+          phone: contacts.phone,
+          avatarUrl: contacts.avatarUrl,
+        })
         .from(contacts)
         .orderBy(asc(contacts.name)),
       db
-        .select({ id: users.id, name: users.name })
+        .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
         .from(users)
         .orderBy(asc(users.name)),
       db
@@ -161,8 +166,10 @@ export default async function NegociosPage({
       contactId: deal.contactId,
       contactName: contact?.name ?? "Contato",
       contactPhone: contact?.phone ?? "",
+      contactAvatarUrl: contact?.avatarUrl ?? null,
       ownerId: deal.ownerId,
       ownerName: owner?.name ?? null,
+      ownerAvatarUrl: owner?.avatarUrl ?? null,
       tags: tagIds
         .map((id) => tagById.get(id))
         .filter((tag): tag is TagOption => Boolean(tag)),

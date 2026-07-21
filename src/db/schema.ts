@@ -177,6 +177,11 @@ export const users = pgTable(
     restrictToOwnRecords: boolean("restrict_to_own_records")
       .notNull()
       .default(false),
+    // Foto de perfil do usuário (ver /perfil) — guarda o proxy interno
+    // "/api/avatars/{id}" (mesmo padrão de contacts.avatarUrl, mas o arquivo
+    // em si fica privado no R2, servido via redirect assinado, não uma URL
+    // pública). Null = sem foto, cai no fallback de iniciais.
+    avatarUrl: text("avatar_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
