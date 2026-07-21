@@ -279,7 +279,6 @@ export function DealFormDialog({
   owners,
   fieldDefinitions,
   allTags,
-  currentUserId,
   defaultPipelineId,
   defaultStageId,
   lockedContact,
@@ -303,9 +302,14 @@ export function DealFormDialog({
   const [stageId, setStageId] = useState(
     deal?.stageId ?? defaultStageId ?? ""
   );
-  const [ownerId, setOwnerId] = useState(
-    deal?.ownerId ?? (mode === "create" ? currentUserId : "")
-  );
+  // Nunca pré-seleciona o usuário logado como dono em modo "create" — isso
+  // fazia createDealAction sempre receber um ownerId explícito do form,
+  // então a distribuição automática da pipeline (resolveDistributedOwner)
+  // nunca rodava de verdade pra negócio criado manualmente (o "??" no server
+  // action só cai pra distribuição quando ownerId vem vazio). Deixa em
+  // branco: quem cria escolhe um dono só se quiser, senão a regra da
+  // pipeline decide.
+  const [ownerId, setOwnerId] = useState(deal?.ownerId ?? "");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(
     new Set(deal?.tagIds ?? [])
   );

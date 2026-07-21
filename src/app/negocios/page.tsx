@@ -14,7 +14,7 @@ import {
   tasks,
   users,
 } from "@/db/schema";
-import { getLastMessagePreviewsByDealId } from "@/lib/deals";
+import { getLastMessagePreviewsByContactId } from "@/lib/deals";
 import type { TagOption } from "@/lib/tags";
 import { ownerVisibilityFilter } from "@/lib/visibility";
 import { KanbanBoard } from "./kanban-board";
@@ -104,10 +104,11 @@ export default async function NegociosPage({
     : [];
 
   const dealIds = pipelineDeals.map((d) => d.id);
+  const contactIds = [...new Set(pipelineDeals.map((d) => d.contactId))];
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
   const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
 
-  const [dealTagRows, messagePreviewByDealId, pendingTaskRows, pipelineLossReasons] =
+  const [dealTagRows, messagePreviewByContactId, pendingTaskRows, pipelineLossReasons] =
     await Promise.all([
       dealIds.length > 0
         ? db
@@ -115,7 +116,7 @@ export default async function NegociosPage({
             .from(dealTags)
             .where(inArray(dealTags.dealId, dealIds))
         : Promise.resolve([]),
-      getLastMessagePreviewsByDealId(dealIds),
+      getLastMessagePreviewsByContactId(contactIds),
       dealIds.length > 0
         ? db
             .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
@@ -176,7 +177,7 @@ export default async function NegociosPage({
       customFields: (deal.customFields as Record<string, unknown>) ?? {},
       stageId: deal.stageId,
       pipelineId: deal.pipelineId,
-      messagePreview: messagePreviewByDealId.get(deal.id) ?? null,
+      messagePreview: messagePreviewByContactId.get(deal.contactId) ?? null,
       pendingTaskCount: pendingTaskCountByDeal.get(deal.id) ?? 0,
     };
   });

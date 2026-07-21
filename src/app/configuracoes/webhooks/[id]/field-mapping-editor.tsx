@@ -227,6 +227,21 @@ export function FieldMappingEditor({
     return map;
   }, [mapping]);
 
+  // Campo do CRM já escolhido por OUTRA linha some da busca — sem isso dava
+  // pra selecionar o mesmo campo em duas linhas, e a segunda escolha roubava
+  // o mapeamento da primeira em silêncio (setTargetForPath só permite um
+  // path por target). A própria linha sempre mantém seu valor atual na
+  // lista, senão o Select ficaria sem a opção que já está selecionada nela.
+  const usedTargets = useMemo(() => new Set(Object.keys(mapping)), [mapping]);
+  function itemsForRow(currentTarget: string) {
+    return comboboxItems.filter(
+      (item) =>
+        item.value === IGNORE_VALUE ||
+        item.value === currentTarget ||
+        !usedTargets.has(item.value)
+    );
+  }
+
   // Mapeamentos já salvos cujo caminho não aparece no payload de referência
   // escolhido agora (veio de outra execução, ou o payload mudou de formato) —
   // continuam visíveis e editáveis, nunca somem sozinhos.
@@ -268,24 +283,27 @@ export function FieldMappingEditor({
       </p>
 
       <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-        {discovered.map((field) => (
+        {discovered.map((field) => {
+          const target = pathToTarget.get(field.path) ?? IGNORE_VALUE;
+          return (
           <MappingRow
             key={field.path}
             path={field.path}
             preview={field.preview}
-            target={pathToTarget.get(field.path) ?? IGNORE_VALUE}
-            comboboxItems={comboboxItems}
+            target={target}
+            comboboxItems={itemsForRow(target)}
             stale={false}
-            onChange={(target) => setTargetForPath(field.path, target)}
+            onChange={(t) => setTargetForPath(field.path, t)}
           />
-        ))}
+          );
+        })}
         {staleRows.map((row) => (
           <MappingRow
             key={row.target}
             path={row.path}
             preview=""
             target={row.target}
-            comboboxItems={comboboxItems}
+            comboboxItems={itemsForRow(row.target)}
             stale
             onChange={(target) => setTargetForPath(row.path, target)}
             onRemove={() => removeMapping(row.target)}

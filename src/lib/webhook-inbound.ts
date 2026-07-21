@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { logDealActivity } from "@/lib/deal-activity-log";
 import { createAutomaticStageTasks } from "@/lib/deal-mutations";
+import { findDuplicateContact } from "@/lib/contact-merge";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -166,7 +167,7 @@ export async function processInboundPayload(
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const [existingContact] = await db
-    .select({ id: contacts.id })
+    .select({ id: contacts.id, phone: contacts.phone, email: contacts.email })
     .from(contacts)
     .where(or(...identityConditions))
     .limit(1);
@@ -174,6 +175,30 @@ export async function processInboundPayload(
   let contactId: string;
   if (existingContact) {
     contactId = existingContact.id;
+
+    // Lead pode cair de novo em outro funil/pipeline informando um contato
+    // atualizado (trocou de telefone ou de email) — casado por um dos dois
+    // campos, atualiza o outro pro valor mais recente informado. Nunca
+    // sobrescreve com um valor que já pertence a OUTRO contato (evitaria
+    // colidir com o índice único e criar ambiguidade de identidade).
+    const nextEmail =
+      contactFields.email && contactFields.email !== existingContact.email
+        ? contactFields.email
+        : undefined;
+    const nextPhone =
+      contactFields.phone && contactFields.phone !== existingContact.phone
+        ? contactFields.phone
+        : undefined;
+
+    if (nextEmail || nextPhone) {
+      const conflict = await findDuplicateContact(nextPhone ?? null, nextEmail ?? null, contactId);
+      const updates: { email?: string; phone?: string } = {};
+      if (nextEmail && conflict?.matchedField !== "email") updates.email = nextEmail;
+      if (nextPhone && conflict?.matchedField !== "telefone") updates.phone = nextPhone;
+      if (Object.keys(updates).length > 0) {
+        await db.update(contacts).set(updates).where(eq(contacts.id, contactId));
+      }
+    }
   } else {
     const fallbackName = contactFields.phone || contactFields.email!;
     const [created] = await db

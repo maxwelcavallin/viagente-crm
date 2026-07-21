@@ -195,3 +195,17 @@ export async function findOpenDealIdForContact(
 
   return deal?.id ?? null;
 }
+
+// Todos os negócios abertos do contato (não só "o mais recente") — usado
+// quando a ação precisa saber se a propagação de dono é inequívoca (ver
+// syncDealOwnerFromContact em owner-distribution.ts): com mais de um aberto,
+// cada um pode estar numa pipeline diferente com dono diferente, não dá pra
+// escolher um sozinho.
+export async function findOpenDealsForContact(
+  contactId: string
+): Promise<{ id: string }[]> {
+  return db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(and(eq(deals.contactId, contactId), eq(deals.status, "aberto")));
+}

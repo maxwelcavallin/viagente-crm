@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, deals, pipelineOwnerDistribution } from "@/db/schema";
-import { findOpenDealIdForContact } from "@/lib/messaging";
+import { findOpenDealsForContact } from "@/lib/messaging";
 
 // Rodízio ponderado determinístico: escolhe sempre quem está mais
 // "atrasado" em relação à cota (assignedCount/weight) — no longo prazo o
@@ -48,15 +48,21 @@ export async function syncContactOwnerFromDeal(
 }
 
 // Inverso: dono do atendimento mudou → propaga pro negócio aberto desse
-// contato, se existir (reaproveita a mesma heurística de "qual é o negócio
-// deste contato" já usada pro envio de mensagem — ver findOpenDealIdForContact).
+// contato, SE for o único aberto. Um contato pode ter negócio aberto em mais
+// de uma pipeline ao mesmo tempo, cada um com seu próprio dono (ver comentário
+// no schema de deals.ownerId) — trocar o dono aqui sem saber qual pipeline o
+// atendente tinha em mente já mexeu no negócio errado de outra pipeline no
+// passado (bug real: findOpenDealIdForContact pegava "o mais recente", sem
+// filtro de pipeline, e sobrescrevia silenciosamente). Com mais de um aberto,
+// não dá pra adivinhar — só atualiza o dono do contato, cada negócio mantém
+// o seu.
 export async function syncDealOwnerFromContact(
   contactId: string,
   ownerId: string | null
 ): Promise<void> {
   await db.update(contacts).set({ ownerId }).where(eq(contacts.id, contactId));
-  const openDealId = await findOpenDealIdForContact(contactId);
-  if (openDealId) {
-    await db.update(deals).set({ ownerId }).where(eq(deals.id, openDealId));
+  const openDeals = await findOpenDealsForContact(contactId);
+  if (openDeals.length === 1) {
+    await db.update(deals).set({ ownerId }).where(eq(deals.id, openDeals[0].id));
   }
 }

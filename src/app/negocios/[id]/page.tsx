@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, count, desc, eq, inArray } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -86,6 +86,7 @@ export default async function DealDetailPage({
     fieldDefRows,
     allowedChannelIds,
     pipelineLossReasons,
+    contactDealCount,
   ] = await Promise.all([
     db
       .select()
@@ -144,6 +145,14 @@ export default async function DealDetailPage({
       .from(lossReasons)
       .where(eq(lossReasons.pipelineId, deal.pipelineId))
       .orderBy(asc(lossReasons.order)),
+    // Resumo de quantos negócios esse contato tem no total — item 4:
+    // continua fácil perceber que o mesmo contato participa de mais de uma
+    // pipeline (cada uma com seu próprio dono, ver owner-distribution.ts).
+    db
+      .select({ count: count(deals.id) })
+      .from(deals)
+      .where(eq(deals.contactId, deal.contactId))
+      .then((r) => r[0]?.count ?? 0),
   ]);
 
   if (!contact) notFound();
@@ -555,26 +564,37 @@ export default async function DealDetailPage({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Dados do contato</CardTitle>
-            <ContactFormDialog
-              mode="edit"
-              contact={{
-                id: contact.id,
-                name: contact.name,
-                phone: contact.phone,
-                email: contact.email,
-                customFields: contactCustomFields,
-                tagIds: contactTagIds,
-              }}
-              fieldDefinitions={contactFieldDefinitions}
-              allTags={allTags}
-              trigger={<Button type="button" variant="outline" size="sm" />}
-              triggerLabel="Editar contato"
-            />
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" render={<Link href={`/contatos/${contact.id}`} />}>
+                Ver contato
+              </Button>
+              <ContactFormDialog
+                mode="edit"
+                contact={{
+                  id: contact.id,
+                  name: contact.name,
+                  phone: contact.phone,
+                  email: contact.email,
+                  customFields: contactCustomFields,
+                  tagIds: contactTagIds,
+                }}
+                fieldDefinitions={contactFieldDefinitions}
+                allTags={allTags}
+                trigger={<Button type="button" variant="outline" size="sm" />}
+                triggerLabel="Editar contato"
+              />
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {duplicateContact && (
               <DuplicateContactBanner contactId={contact.id} duplicate={duplicateContact} />
             )}
+            <Link
+              href={`/contatos/${contact.id}`}
+              className="block text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {contactDealCount} negócio{contactDealCount === 1 ? "" : "s"} com este contato
+            </Link>
             <dl className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-0.5">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
