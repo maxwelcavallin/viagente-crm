@@ -14,7 +14,7 @@ import {
 } from "@/db/schema";
 import { logApiWrite } from "@/lib/api-audit";
 import type { AuthenticatedApiKey } from "@/lib/api-keys";
-import { cancelActiveSequenceRuns } from "@/lib/automation-sequences";
+import { cancelActiveSequenceRuns, fireStatusSequenceTriggers } from "@/lib/automation-sequences";
 import { getAllowedChannelIds, userHasChannelAccess } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
 import { getThread, type ThreadMessage } from "@/lib/conversations";
@@ -358,6 +358,7 @@ export async function updateDealForApiKey(
     });
     if (params.status === "ganho" || params.status === "perdido") {
       await cancelActiveSequenceRuns(dealId);
+      await fireStatusSequenceTriggers(dealId, params.status);
       void dispatchOutboundWebhooks(params.status === "ganho" ? "negocio_ganho" : "negocio_perdido", dealId);
     }
   }

@@ -186,6 +186,7 @@ export default async function NegociosPage({
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Negócios</h1>
       <KanbanBoard
+        key={selectedPipelineId}
         pipelines={allPipelines.map((p) => ({ id: p.id, name: p.name }))}
         selectedPipelineId={selectedPipelineId}
         stages={allStages}

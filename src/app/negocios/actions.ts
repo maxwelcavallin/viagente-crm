@@ -736,6 +736,14 @@ export async function bulkSetStatusAction(
       oldValue: deal.status,
       newValue: status,
     });
+    // Mesmo disparo de setDealStatusAction — sem isso, marcar como ganho em
+    // lote nunca aciona sequência nem webhook de saída (só o botão de
+    // negócio único fazia isso).
+    if (status === "ganho") {
+      await cancelActiveSequenceRuns(deal.id);
+      await fireStatusSequenceTriggers(deal.id, "ganho");
+      void dispatchOutboundWebhooks("negocio_ganho", deal.id);
+    }
   }
 
   revalidatePath("/negocios");
@@ -775,6 +783,10 @@ export async function bulkSetLostAction(
       oldValue: deal.status,
       newValue: reason ? `Perdido — ${reason.label}` : "Perdido",
     });
+    // Mesmo disparo de setDealLostAction — ver comentário em bulkSetStatusAction.
+    await cancelActiveSequenceRuns(deal.id);
+    await fireStatusSequenceTriggers(deal.id, "perdido");
+    void dispatchOutboundWebhooks("negocio_perdido", deal.id);
   }
 
   revalidatePath("/negocios");

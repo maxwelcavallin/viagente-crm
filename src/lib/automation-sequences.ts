@@ -216,13 +216,36 @@ async function executeStep(run: RunRow, step: StepRow): Promise<void> {
     case "mudar_etapa": {
       if (!step.moveToStageId) break;
       const [previous] = await db
-        .select({ stageId: deals.stageId })
+        .select({ stageId: deals.stageId, pipelineId: deals.pipelineId })
         .from(deals)
         .where(eq(deals.id, run.dealId))
         .limit(1);
+      // moveToStageId pode ser de uma pipeline diferente da atual do negócio
+      // de propósito (ex: gatilho "Negócio ganho" de uma pipeline de leads
+      // movendo pra uma etapa de onboarding noutra) — sem atualizar
+      // deals.pipelineId junto, o negócio fica com stageId e pipelineId de
+      // pipelines diferentes e some de qualquer board (nem a pipeline antiga
+      // nem a nova o mostram corretamente).
+      const [targetStage] = await db
+        .select({ pipelineId: stages.pipelineId })
+        .from(stages)
+        .where(eq(stages.id, step.moveToStageId))
+        .limit(1);
+      if (!targetStage) break;
+      const changingPipeline =
+        previous != null && previous.pipelineId !== targetStage.pipelineId;
       await db
         .update(deals)
-        .set({ stageId: step.moveToStageId, stageEnteredAt: new Date(), updatedAt: new Date() })
+        .set({
+          stageId: step.moveToStageId,
+          pipelineId: targetStage.pipelineId,
+          // Ao mudar de pipeline via automação (ex: negócio ganho numa
+          // pipeline de leads movido pra onboarding), o negócio reinicia o
+          // ciclo naquela nova pipeline e deve voltar a aparecer como aberto.
+          ...(changingPipeline ? { status: "aberto" as const } : {}),
+          stageEnteredAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(deals.id, run.dealId));
       if (previous && previous.stageId !== step.moveToStageId) {
         const stageRows = await db
