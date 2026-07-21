@@ -8,6 +8,7 @@ import {
   MessageSquarePlus,
   Smile,
   Tag,
+  Thermometer,
   Upload,
   Users,
   Webhook,
@@ -30,6 +31,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/configuracoes/pipelines", label: "Pipelines e Etapas", icon: Workflow },
   { href: "/configuracoes/campos", label: "Campos Customizados", icon: ListChecks },
   { href: "/configuracoes/tags", label: "Tags", icon: Tag },
+  { href: "/configuracoes/temperatura", label: "Temperatura de negócios", icon: Thermometer },
   { href: "/configuracoes/automacoes", label: "Automações", icon: Zap },
   {
     href: "/configuracoes/negocio-automatico",
