@@ -9,6 +9,79 @@ import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 export type MutationActor = { userId: string | null; source: DealActivitySource };
 
+// Cria as tarefas automáticas (isAutomatic=true, sem triggerDelayMinutes) da
+// etapa informada pro negócio indicado — as demais (isAutomatic=false) ficam
+// só como modelo disponível pra adicionar manualmente (ver
+// addStageTaskToDealAction), e as com triggerDelayMinutes setado ficam pro
+// cron de automação varrer quando o tempo configurado for atingido. Se o
+// negócio já visitou essa etapa antes, cria de novo — não reaproveita
+// tarefas antigas já concluídas (regra explícita do critério de aceite).
+//
+// Chamado em TODO ponto onde um negócio passa a estar numa etapa nova: ao
+// mover no kanban (moveDealStage), ao criar/editar manualmente definindo a
+// etapa (negocios/actions.ts) e em todo ponto de criação automática de
+// negócio (importação CSV, webhook de entrada, negócio automático do
+// primeiro contato) — antes só o kanban disparava isso, deixando um negócio
+// criado direto numa etapa com tarefa automática sem nenhuma tarefa
+// (bug: só aparecia se o negócio chegasse ali via "mover de etapa").
+export async function createAutomaticStageTasks(
+  dealId: string,
+  stageId: string
+): Promise<void> {
+  const tasksForStage = await db
+    .select({
+      id: stageTasks.id,
+      title: stageTasks.title,
+      type: stageTasks.type,
+      daysToComplete: stageTasks.daysToComplete,
+      autoSend: stageTasks.autoSend,
+      autoSendChannelId: stageTasks.autoSendChannelId,
+      messageTemplateId: stageTasks.messageTemplateId,
+    })
+    .from(stageTasks)
+    .where(
+      and(
+        eq(stageTasks.stageId, stageId),
+        eq(stageTasks.isAutomatic, true),
+        isNull(stageTasks.triggerDelayMinutes)
+      )
+    );
+
+  if (tasksForStage.length === 0) return;
+
+  const now = Date.now();
+  const inserted = await db
+    .insert(tasks)
+    .values(
+      tasksForStage.map((st) => ({
+        dealId,
+        stageTaskId: st.id,
+        title: st.title,
+        type: st.type,
+        status: "pendente" as const,
+        dueAt:
+          st.daysToComplete != null
+            ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
+            : null,
+      }))
+    )
+    .returning({ id: tasks.id, stageTaskId: tasks.stageTaskId, dueAt: tasks.dueAt });
+
+  for (const task of inserted) {
+    const source = tasksForStage.find((st) => st.id === task.stageTaskId);
+    if (!source) continue;
+    await maybeAutoSendTask({
+      taskId: task.id,
+      dealId,
+      type: source.type,
+      dueAt: task.dueAt,
+      autoSend: source.autoSend,
+      autoSendChannelId: source.autoSendChannelId,
+      messageTemplateId: source.messageTemplateId,
+    });
+  }
+}
+
 // Núcleo de "mover negócio de etapa", extraído de moveDealStageAction
 // (negocios/actions.ts) pra ser chamado tanto pela action "use server" da UI
 // (actor manual, com requireSession()) quanto pela API pública/MCP da Etapa
@@ -52,65 +125,9 @@ export async function moveDealStage(
     });
   }
 
-  // Cria as tarefas automáticas da etapa de destino (Etapa 9). Só as
-  // marcadas isAutomatic=true — as demais ficam como modelo disponível pra
-  // adicionar manualmente (ver addStageTaskToDealAction). Se o negócio já
-  // visitou essa etapa antes, cria de novo — não reaproveita tarefas antigas
-  // já concluídas (regra explícita do critério de aceite). Tarefas com
-  // triggerDelayMinutes setado NÃO entram aqui — ficam pro cron de automação
-  // varrer quando o tempo configurado na etapa for atingido.
-  const tasksForStage = await db
-    .select({
-      id: stageTasks.id,
-      title: stageTasks.title,
-      type: stageTasks.type,
-      daysToComplete: stageTasks.daysToComplete,
-      autoSend: stageTasks.autoSend,
-      autoSendChannelId: stageTasks.autoSendChannelId,
-      messageTemplateId: stageTasks.messageTemplateId,
-    })
-    .from(stageTasks)
-    .where(
-      and(
-        eq(stageTasks.stageId, stageId),
-        eq(stageTasks.isAutomatic, true),
-        isNull(stageTasks.triggerDelayMinutes)
-      )
-    );
-
-  if (tasksForStage.length > 0) {
-    const now = Date.now();
-    const inserted = await db
-      .insert(tasks)
-      .values(
-        tasksForStage.map((st) => ({
-          dealId,
-          stageTaskId: st.id,
-          title: st.title,
-          type: st.type,
-          status: "pendente" as const,
-          dueAt:
-            st.daysToComplete != null
-              ? new Date(now + st.daysToComplete * 24 * 60 * 60 * 1000)
-              : null,
-        }))
-      )
-      .returning({ id: tasks.id, stageTaskId: tasks.stageTaskId, dueAt: tasks.dueAt });
-
-    for (const task of inserted) {
-      const source = tasksForStage.find((st) => st.id === task.stageTaskId);
-      if (!source) continue;
-      await maybeAutoSendTask({
-        taskId: task.id,
-        dealId,
-        type: source.type,
-        dueAt: task.dueAt,
-        autoSend: source.autoSend,
-        autoSendChannelId: source.autoSendChannelId,
-        messageTemplateId: source.messageTemplateId,
-      });
-    }
-  }
+  // Cria as tarefas automáticas da etapa de destino (Etapa 9) — ver
+  // createAutomaticStageTasks.
+  await createAutomaticStageTasks(dealId, stageId);
 
   await fireEtapaSequenceTriggers(dealId, stageId);
   void dispatchOutboundWebhooks("etapa_alterada", dealId);

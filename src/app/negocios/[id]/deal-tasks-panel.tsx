@@ -24,14 +24,32 @@ import {
 } from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
+import { cn } from "@/lib/utils";
 import { addStageTaskToDealAction, completeTaskAction } from "../actions";
 
 export type DealTask = TaskLike;
 
+export type PipelineStageInfo = {
+  id: string;
+  name: string;
+  order: number;
+};
+
+// Modelo de tarefa configurado na etapa (Configurações > Pipelines > editar)
+// — isAutomatic=true dispara sozinho quando o negócio entra na etapa (ver
+// createAutomaticStageTasks); isAutomatic=false só fica disponível pra
+// adicionar manualmente (ver addStageTaskToDealAction), de qualquer etapa,
+// não só a atual.
 export type ManualStageTask = {
   id: string;
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
+};
+
+export type StageTaskConfig = ManualStageTask & {
+  stageId: string;
+  isAutomatic: boolean;
+  order: number;
 };
 
 function formatDueAt(dueAt: string): string {
@@ -223,13 +241,30 @@ function AddManualTaskRow({
   );
 }
 
+// Tarefa automática configurada numa etapa que o negócio ainda não
+// materializou (etapa futura, ou etapa atual com gatilho por tempo — ver
+// triggerDelayMinutes — que o cron ainda não varreu) — só prévia, não é
+// executável (dispara sozinha quando chegar a hora).
+function AutomaticPreviewRow({ config }: { config: StageTaskConfig }) {
+  const Icon = TYPE_ICON[config.type];
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-border/60 p-2 text-sm text-muted-foreground opacity-70">
+      <Icon size={14} strokeWidth={1.75} className="shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{config.title}</span>
+      <Badge variant="secondary">Automática</Badge>
+    </div>
+  );
+}
+
 export function DealTasksPanel({
   dealId,
   contactId,
   contactEmail,
   isGoogleConnected,
   tasks,
-  manualStageTasks,
+  pipelineStages,
+  stageTaskConfigs,
+  currentStageId,
   channels,
   preselectedChannelId,
 }: {
@@ -238,26 +273,47 @@ export function DealTasksPanel({
   contactEmail: string | null;
   isGoogleConnected: boolean;
   tasks: DealTask[];
-  manualStageTasks: ManualStageTask[];
+  pipelineStages: PipelineStageInfo[];
+  stageTaskConfigs: StageTaskConfig[];
+  currentStageId: string;
   channels: { id: string; label: string }[];
   preselectedChannelId: string | null;
 }) {
   const router = useRouter();
+  const onDone = () => router.refresh();
 
-  const pending = tasks.filter((t) => t.status === "pendente");
-  const done = tasks.filter((t) => t.status === "concluida");
+  // Tarefa real sem modelo de etapa correspondente (nasceu de automação de
+  // tag, sequência, ou o stage_task de origem foi excluído depois) — não tem
+  // onde entrar na timeline por etapa, mostra à parte, sempre.
+  const configIds = new Set(stageTaskConfigs.map((c) => c.id));
+  const ungroupedTasks = tasks.filter(
+    (t) => !t.stageTaskId || !configIds.has(t.stageTaskId)
+  );
+  const ungroupedPending = ungroupedTasks.filter((t) => t.status === "pendente");
+  const ungroupedDone = ungroupedTasks.filter((t) => t.status === "concluida");
+
+  // Etapa atual sempre aparece, mesmo sem nenhuma tarefa configurada — é o
+  // marcador de "onde o negócio está" na timeline; as demais só entram se
+  // tiverem alguma tarefa configurada, senão vira ruído.
+  const stagesWithTasks = pipelineStages.filter(
+    (stage) => stage.id === currentStageId || stageTaskConfigs.some((c) => c.stageId === stage.id)
+  );
+
+  const isEmpty = ungroupedTasks.length === 0 && stagesWithTasks.length === 0;
 
   return (
-    <div className="space-y-3">
-      {tasks.length === 0 ? (
+    <div className="space-y-4">
+      {isEmpty && (
         <EmptyState
           icon={ListTodo}
           title="Nenhuma tarefa ainda"
           description="Tarefas automáticas aparecem aqui quando o negócio entra numa etapa com tarefas configuradas."
         />
-      ) : (
+      )}
+
+      {ungroupedTasks.length > 0 && (
         <div className="space-y-2">
-          {[...pending, ...done].map((task) => (
+          {[...ungroupedPending, ...ungroupedDone].map((task) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -267,26 +323,71 @@ export function DealTasksPanel({
               isGoogleConnected={isGoogleConnected}
               channels={channels}
               preselectedChannelId={preselectedChannelId}
-              onDone={() => router.refresh()}
+              onDone={onDone}
             />
           ))}
         </div>
       )}
-      {manualStageTasks.length > 0 && (
-        <div className="space-y-1.5 border-t border-border pt-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Tarefas disponíveis desta etapa
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {manualStageTasks.map((stageTask) => (
-              <AddManualTaskRow
-                key={stageTask.id}
-                stageTask={stageTask}
-                dealId={dealId}
-                onDone={() => router.refresh()}
-              />
-            ))}
-          </div>
+
+      {stagesWithTasks.length > 0 && (
+        <div className="space-y-2">
+          {stagesWithTasks.map((stage) => {
+            const configs = stageTaskConfigs
+              .filter((c) => c.stageId === stage.id)
+              .sort((a, b) => a.order - b.order);
+            const isCurrent = stage.id === currentStageId;
+
+            return (
+              <div
+                key={stage.id}
+                className={cn(
+                  "space-y-1.5 rounded-lg border p-2.5",
+                  isCurrent ? "border-primary/40 bg-primary/5" : "border-border"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold">{stage.name}</p>
+                  {isCurrent && <Badge variant="info">Etapa atual</Badge>}
+                </div>
+                <div className="space-y-1.5">
+                  {configs.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhuma tarefa configurada nesta etapa.
+                    </p>
+                  )}
+                  {configs.map((config) => {
+                    const instances = tasks.filter((t) => t.stageTaskId === config.id);
+                    if (instances.length > 0) {
+                      return instances.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          dealId={dealId}
+                          contactId={contactId}
+                          contactEmail={contactEmail}
+                          isGoogleConnected={isGoogleConnected}
+                          channels={channels}
+                          preselectedChannelId={preselectedChannelId}
+                          onDone={onDone}
+                        />
+                      ));
+                    }
+                    if (config.isAutomatic) {
+                      return <AutomaticPreviewRow key={config.id} config={config} />;
+                    }
+                    return (
+                      <AddManualTaskRow
+                        key={config.id}
+                        stageTask={config}
+                        dealId={dealId}
+                        onDone={onDone}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { autoDealSettings, deals } from "@/db/schema";
 import { logDealActivity } from "@/lib/deal-activity-log";
+import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import { resolveDistributedOwner, syncContactOwnerFromDeal } from "@/lib/owner-distribution";
 
 // Config global (não por canal nem por tipo de canal, ver schema.ts) —
@@ -31,6 +32,7 @@ export async function maybeCreateAutoDeal(
   // Mesmo raciocínio de processInboundPayload em webhook-inbound.ts: só
   // propaga quando a distribuição de fato escolheu alguém.
   if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
+  await createAutomaticStageTasks(createdDeal.id, settings.stageId);
 
   await logDealActivity({
     dealId: createdDeal.id,

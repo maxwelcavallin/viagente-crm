@@ -8,6 +8,7 @@ import {
   webhookLogs,
 } from "@/db/schema";
 import { logDealActivity } from "@/lib/deal-activity-log";
+import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -216,6 +217,7 @@ export async function processInboundPayload(
   // Só propaga quando a distribuição de fato escolheu alguém — um negócio
   // novo sem dono não deve apagar o dono que o contato já tinha.
   if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
+  await createAutomaticStageTasks(createdDeal.id, webhookConfig.defaultStageId);
 
   await logDealActivity({
     dealId: createdDeal.id,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -51,7 +51,7 @@ import { DealActivityLogCard } from "./deal-activity-log-card";
 import { DealStatusActions } from "./deal-status-actions";
 import { DealConversationCard } from "./deal-conversation-card";
 import { SyncMeetingNotesButton } from "./sync-meeting-notes-button";
-import { DealTasksPanel, type DealTask, type ManualStageTask } from "./deal-tasks-panel";
+import { DealTasksPanel, type DealTask, type StageTaskConfig } from "./deal-tasks-panel";
 import { EmailComposeDialog } from "@/components/email-compose-dialog";
 import { EmailsSentList } from "./emails-sent-list";
 import { MeetingNotesList, type MeetingNoteItem } from "@/components/meeting-notes-list";
@@ -148,12 +148,19 @@ export default async function DealDetailPage({
 
   if (!contact) notFound();
 
+  // Todas as etapas da pipeline deste negócio, em ordem — base da timeline
+  // de tarefas por etapa (ver DealTasksPanel), não só a etapa atual.
+  const pipelineStages = allStages
+    .filter((s) => s.pipelineId === deal.pipelineId)
+    .sort((a, b) => a.order - b.order);
+  const pipelineStageIds = pipelineStages.map((s) => s.id);
+
   const [
     threadPage,
     contactFieldDefRows,
     contactTagRows,
     taskRows,
-    manualStageTaskRows,
+    stageTaskConfigRows,
     allowedWhatsappChannels,
     allowedInstagramChannels,
     pendingScheduled,
@@ -186,6 +193,7 @@ export default async function DealDetailPage({
           type: tasks.type,
           status: tasks.status,
           dueAt: tasks.dueAt,
+          stageTaskId: tasks.stageTaskId,
           messageTemplateId: stageTasks.messageTemplateId,
           emailTemplateSubject: emailTemplates.subject,
           emailTemplateContent: emailTemplates.content,
@@ -194,13 +202,25 @@ export default async function DealDetailPage({
         .leftJoin(stageTasks, eq(tasks.stageTaskId, stageTasks.id))
         .leftJoin(emailTemplates, eq(stageTasks.emailTemplateId, emailTemplates.id))
         .where(eq(tasks.dealId, id)),
-      db
-        .select({ id: stageTasks.id, title: stageTasks.title, type: stageTasks.type })
-        .from(stageTasks)
-        .where(
-          and(eq(stageTasks.stageId, deal.stageId), eq(stageTasks.isAutomatic, false))
-        )
-        .orderBy(asc(stageTasks.order)),
+      // Todos os modelos de tarefa (automáticos e manuais) de TODAS as
+      // etapas da pipeline — não só a etapa atual — pra montar a timeline
+      // (ver DealTasksPanel): antes só trazia manual da etapa atual, então
+      // uma tarefa configurada numa etapa futura nunca aparecia até o
+      // negócio chegar lá.
+      pipelineStageIds.length > 0
+        ? db
+            .select({
+              id: stageTasks.id,
+              stageId: stageTasks.stageId,
+              title: stageTasks.title,
+              type: stageTasks.type,
+              isAutomatic: stageTasks.isAutomatic,
+              order: stageTasks.order,
+            })
+            .from(stageTasks)
+            .where(inArray(stageTasks.stageId, pipelineStageIds))
+            .orderBy(asc(stageTasks.order))
+        : Promise.resolve([]),
       allowedChannelIds.length > 0
         ? db
             .select({
@@ -275,10 +295,13 @@ export default async function DealDetailPage({
 
   const isGoogleConnected = googleConnectionOwner != null;
 
-  const manualStageTasks: ManualStageTask[] = manualStageTaskRows.map((row) => ({
+  const stageTaskConfigs: StageTaskConfig[] = stageTaskConfigRows.map((row) => ({
     id: row.id,
+    stageId: row.stageId,
     title: row.title,
     type: row.type,
+    isAutomatic: row.isAutomatic,
+    order: row.order,
   }));
 
   const allTags: TagOption[] = allTagRows.map((tag) => ({
@@ -362,6 +385,7 @@ export default async function DealDetailPage({
       type: row.type,
       status: row.status,
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+      stageTaskId: row.stageTaskId,
       messageItems: templateItems.map((it) => ({
         id: it.id,
         content: substituteTemplate(it.content, variableValues),
@@ -655,7 +679,9 @@ export default async function DealDetailPage({
             contactEmail={contact.email}
             isGoogleConnected={isGoogleConnected}
             tasks={dealTasks}
-            manualStageTasks={manualStageTasks}
+            pipelineStages={pipelineStages}
+            stageTaskConfigs={stageTaskConfigs}
+            currentStageId={deal.stageId}
             channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
             preselectedChannelId={preselectedChannelId}
           />

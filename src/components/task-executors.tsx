@@ -30,6 +30,11 @@ export type TaskLike = {
   messagePreview: string | null;
   dueAt: string | null;
   emailSubjectPreview?: string | null;
+  // Modelo de etapa de origem (stage_tasks.id) — null quando a tarefa nasceu
+  // de automação de tag/sequência, ou o modelo foi excluído depois. Usado só
+  // pela timeline por etapa da página do negócio (ver deal-tasks-panel.tsx),
+  // ausente/opcional pros demais consumidores de TaskLike (tarefas-list.tsx).
+  stageTaskId?: string | null;
   // type === "mensagem": conjunto ordenado de mensagens do template (já com
   // variáveis substituídas) — o executor manda cada uma como sua própria
   // mensagem, na ordem, igual o envio automático (ver sendTemplateStyledMessage).

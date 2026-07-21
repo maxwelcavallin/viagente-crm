@@ -25,6 +25,13 @@ export function SyncMeetingNotesButton({ dealId }: { dealId: string }) {
         `${result.created} reunião${result.created > 1 ? "ões" : ""} nova${result.created > 1 ? "s" : ""} sincronizada${result.created > 1 ? "s" : ""}.`
       );
       router.refresh();
+    } else if (result.permissionError) {
+      // Achou reunião(ões) mas a leitura da nota falhou por permissão do
+      // Drive — nunca deixa isso parecer "não achei nada" (bug real
+      // encontrado: conexão feita antes do escopo drive.readonly existir).
+      toast.error(
+        "Encontrei reunião(ões), mas não consegui ler as notas — a permissão de acesso ao Google Drive expirou ou nunca foi concedida. Reconecte o Google Agenda em Meu Perfil e tente de novo."
+      );
     } else {
       toast.info("Nenhuma reunião nova encontrada pra este negócio.");
     }

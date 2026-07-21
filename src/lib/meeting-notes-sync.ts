@@ -11,7 +11,19 @@ import { fetchDriveFileText } from "@/lib/google-drive";
 import { parseGeminiNotesDoc, TRANSCRIPT_TITLE_SUFFIX } from "@/lib/meeting-notes-parser";
 import { findOpenDealIdForContact } from "@/lib/messaging";
 
-const LOOKBACK_DAYS = 14;
+// Cron diário: 14 dias já dava margem de sobra pra pegar reunião recente
+// mesmo se uma execução falhasse (todo dia varre de novo), mas bug real
+// encontrado na prática — 3 reuniões de um lead com nota do Gemini de
+// verdade nunca sincronizaram porque aconteceram há mais de 14 dias antes de
+// qualquer varredura ter rodado (cron novo, ou período sem rodar). Subido
+// pra 30 como margem de segurança contra isso, sem custo muito maior (ainda
+// varre só uma janela, não o calendário inteiro).
+const LOOKBACK_DAYS = 30;
+// Sincronização manual por negócio (ver syncMeetingNotesForDeal) já filtra
+// por email via `q` — busca barata mesmo numa janela bem maior, então usa um
+// lookback bem mais generoso: é justamente pra backfill do histórico
+// completo do lead, não só o que aconteceu recentemente.
+const MANUAL_SYNC_LOOKBACK_DAYS = 730;
 const GOOGLE_DOC_MIME_TYPE = "application/vnd.google-apps.document";
 
 type SyncOutcome = "created" | "skipped";
@@ -108,11 +120,16 @@ export type MeetingNotesSyncResult = {
   created: number;
   skipped: number;
   errors: number;
+  // Quantos dos "errors" acima eram especificamente 403 de escopo do Drive
+  // (ver isDriveScopeError) — útil pra distinguir "precisa reconectar o
+  // Google Agenda" de falha pontual/transitória ao olhar o resultado do cron.
+  permissionErrors: number;
 };
 
 // Varredura diária (ver vercel.json + /api/cron/sync-meeting-notes): pra
-// cada conexão de Google Agenda ativa, lista os eventos dos últimos 14
-// dias e sincroniza os que têm nota do Gemini com convidado reconhecido.
+// cada conexão de Google Agenda ativa, lista os eventos dos últimos
+// LOOKBACK_DAYS dias e sincroniza os que têm nota do Gemini com convidado
+// reconhecido.
 // Erro numa conexão (token sem escopo Drive, revogado, etc.) ou num evento
 // específico não aborta a varredura inteira — mesmo idioma de tolerância a
 // falha por item do runNpsSweep (src/lib/nps.ts).
@@ -126,6 +143,7 @@ export async function runMeetingNotesSync(): Promise<MeetingNotesSyncResult> {
   let created = 0;
   let skipped = 0;
   let errors = 0;
+  let permissionErrors = 0;
 
   for (const connection of connections) {
     let events: CalendarEvent[];
@@ -146,24 +164,38 @@ export async function runMeetingNotesSync(): Promise<MeetingNotesSyncResult> {
       } catch (error) {
         console.error("[meeting-notes-sync] falha ao processar evento", event.id, error);
         errors++;
+        if (isDriveScopeError(error)) permissionErrors++;
       }
     }
   }
 
-  return { connections: connections.length, eventsProcessed, created, skipped, errors };
+  return { connections: connections.length, eventsProcessed, created, skipped, errors, permissionErrors };
+}
+
+// Google Drive respondeu 403 (ver fetchDriveFileText) — token sem o escopo
+// drive.readonly, geralmente porque a conexão foi feita antes desse escopo
+// existir (ver comentário no SCOPES de google-calendar.ts). Detectado pelo
+// prefixo da mensagem lançada, não pelo tipo do erro (fetch não tipa isso).
+function isDriveScopeError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("GOOGLE_DRIVE_ERROR: 403");
 }
 
 export type SyncMeetingNotesForDealResult =
-  | { ok: true; created: number; skipped: number }
+  | { ok: true; created: number; skipped: number; permissionError: boolean }
   | { ok: false; error: string };
 
 // Botão "Sincronizar reuniões" da página do negócio — alimenta as notas
-// exatamente como a varredura do cron (mesma syncEvent, mesma janela de
-// LOOKBACK_DAYS), mas nunca varre o intervalo inteiro de cada conexão: passa
-// o email do contato como busca (`q`) pro Google já filtrar server-side (ver
-// listCalendarEvents), então só os eventos que de fato mencionam esse email
-// voltam — evita a sobrecarga de listar/paginar todo o calendário de cada
-// conexão numa ação manual disparada a qualquer momento.
+// exatamente como a varredura do cron (mesma syncEvent), mas nunca varre o
+// intervalo inteiro de cada conexão: passa o email do contato como busca
+// (`q`) pro Google já filtrar server-side (ver listCalendarEvents), então só
+// os eventos que de fato mencionam esse email voltam — evita a sobrecarga de
+// listar/paginar todo o calendário de cada conexão numa ação manual disparada
+// a qualquer momento. Por isso pode (e deve) usar uma janela bem maior que o
+// cron (MANUAL_SYNC_LOOKBACK_DAYS, não LOOKBACK_DAYS): o objetivo aqui é
+// puxar o histórico completo de reuniões daquele lead, não só o que
+// aconteceu recentemente — bug real encontrado: reuniões de meses atrás
+// nunca apareciam porque essa função reusava a mesma janela de 14 dias do
+// cron.
 export async function syncMeetingNotesForDeal(
   dealId: string
 ): Promise<SyncMeetingNotesForDealResult> {
@@ -192,10 +224,15 @@ export async function syncMeetingNotesForDeal(
   }
 
   const timeMax = new Date();
-  const timeMin = new Date(timeMax.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const timeMin = new Date(timeMax.getTime() - MANUAL_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
   let created = 0;
   let skipped = 0;
+  // Erro de permissão do Drive não pode virar "nenhuma reunião encontrada"
+  // silenciosamente (bug real encontrado: reunião existia, tinha nota do
+  // Gemini, mas a leitura falhava com 403 e o botão dizia que não achou
+  // nada) — sinaliza pro caller mostrar uma mensagem acionável.
+  let permissionError = false;
   for (const connection of connections) {
     let events: CalendarEvent[];
     try {
@@ -212,9 +249,10 @@ export async function syncMeetingNotesForDeal(
         else skipped++;
       } catch (error) {
         console.error("[meeting-notes-sync] falha ao processar evento (sincronização por negócio)", event.id, error);
+        if (isDriveScopeError(error)) permissionError = true;
       }
     }
   }
 
-  return { ok: true, created, skipped };
+  return { ok: true, created, skipped, permissionError };
 }

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, customFieldDefinitions, deals } from "@/db/schema";
 import { findDuplicateContact } from "@/lib/contact-merge";
+import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -184,6 +185,13 @@ export async function importCsvBatch(params: {
     // Só propaga quando a distribuição de fato escolheu alguém — um
     // negócio novo sem dono não deve apagar o dono que o contato já tinha.
     if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
+    // "ganho"/"perdido" aqui é migração de dado histórico de outro CRM (ver
+    // comentário acima) — criar tarefa automática (mensagem de boas-vindas,
+    // lembrete etc.) pra um negócio que já nasce fechado não faz sentido,
+    // só pra "aberto" (sem status na planilha, ou status explícito aberto).
+    if (!dealStatus || dealStatus === "aberto") {
+      await createAutomaticStageTasks(createdDeal.id, stageId);
+    }
 
     if (resolved.contactTagNames.length > 0) {
       await attachTagsToContact(contactId, await resolveOrCreateTagIds(resolved.contactTagNames));
