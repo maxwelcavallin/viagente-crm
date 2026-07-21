@@ -445,6 +445,7 @@ function SequenceFormDialog({
             <Label htmlFor="seq-name">Nome</Label>
             <Input
               id="seq-name"
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
