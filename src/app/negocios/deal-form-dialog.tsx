@@ -27,6 +27,7 @@ import {
 import { CustomFieldInput } from "@/components/custom-field-input";
 import { TagPicker } from "@/components/tag-picker";
 import type { FieldDef } from "@/lib/custom-fields";
+import { formatBrazilianPhoneMask } from "@/lib/phone";
 import type { TagOption } from "@/lib/tags";
 import { createContactAction } from "@/app/contatos/actions";
 import {
@@ -167,9 +168,11 @@ function ContactPicker({
               onChange={(e) => setNewName(e.target.value)}
             />
             <Input
-              placeholder="Telefone"
+              placeholder="(18) 99679-8226"
+              type="tel"
+              inputMode="numeric"
               value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
+              onChange={(e) => setNewPhone(formatBrazilianPhoneMask(e.target.value))}
             />
             {creatingError && (
               <p className="text-xs text-destructive">{creatingError}</p>

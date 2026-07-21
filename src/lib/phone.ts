@@ -58,3 +58,28 @@ export function normalizePhoneNumber(raw: string): string | null {
   }
   return digits;
 }
+
+// Máscara visual pro campo de telefone nos formulários de contato — "(18)
+// 99679-8226" enquanto digita, sempre só o número nacional (DDD + número,
+// sem o "+55"): a imensa maioria digita/cola sem DDI, e normalizePhoneNumber
+// já resolve o DDI faltante na hora de salvar (ver acima) — a máscara aqui é
+// só orientação visual pra digitar certo, não muda o que é gravado.
+export function formatBrazilianPhoneMask(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  // Cola com DDI 55 incluído — tira, a máscara só trabalha com o nacional.
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  digits = digits.slice(0, 11);
+
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+
+  const ddd = digits.slice(0, 2);
+  const number = digits.slice(2);
+  // 11 dígitos no total = celular (DDD + 9 dígitos, com o "9" extra) separa
+  // 5+4; enquanto digita (ou fixo, 10 dígitos) separa 4+4.
+  const splitAt = digits.length === 11 ? 5 : 4;
+  const firstBlock = number.slice(0, splitAt);
+  const secondBlock = number.slice(splitAt);
+
+  return secondBlock ? `(${ddd}) ${firstBlock}-${secondBlock}` : `(${ddd}) ${firstBlock}`;
+}

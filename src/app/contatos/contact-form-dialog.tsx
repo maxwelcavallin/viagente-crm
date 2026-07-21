@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { CustomFieldInput } from "@/components/custom-field-input";
+import { PhoneInput } from "@/components/phone-input";
 import { TagPicker } from "@/components/tag-picker";
 import type { FieldDef } from "@/lib/custom-fields";
 import type { TagOption } from "@/lib/tags";
@@ -144,7 +145,7 @@ export function ContactFormDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Telefone</Label>
-            <Input id="phone" name="phone" defaultValue={contact?.phone ?? ""} />
+            <PhoneInput id="phone" name="phone" defaultValue={contact?.phone} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
