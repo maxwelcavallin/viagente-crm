@@ -1,6 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, googleCalendarConnections, meetingNotes, meetingNotesContacts } from "@/db/schema";
+import { contacts, deals, googleCalendarConnections, meetingNotes, meetingNotesContacts } from "@/db/schema";
 import {
   getValidAccessToken,
   listCalendarEvents,
@@ -151,4 +151,70 @@ export async function runMeetingNotesSync(): Promise<MeetingNotesSyncResult> {
   }
 
   return { connections: connections.length, eventsProcessed, created, skipped, errors };
+}
+
+export type SyncMeetingNotesForDealResult =
+  | { ok: true; created: number; skipped: number }
+  | { ok: false; error: string };
+
+// Botão "Sincronizar reuniões" da página do negócio — alimenta as notas
+// exatamente como a varredura do cron (mesma syncEvent, mesma janela de
+// LOOKBACK_DAYS), mas nunca varre o intervalo inteiro de cada conexão: passa
+// o email do contato como busca (`q`) pro Google já filtrar server-side (ver
+// listCalendarEvents), então só os eventos que de fato mencionam esse email
+// voltam — evita a sobrecarga de listar/paginar todo o calendário de cada
+// conexão numa ação manual disparada a qualquer momento.
+export async function syncMeetingNotesForDeal(
+  dealId: string
+): Promise<SyncMeetingNotesForDealResult> {
+  const [deal] = await db
+    .select({ contactId: deals.contactId })
+    .from(deals)
+    .where(eq(deals.id, dealId))
+    .limit(1);
+  if (!deal) return { ok: false, error: "Negócio não encontrado." };
+
+  const [contact] = await db
+    .select({ email: contacts.email })
+    .from(contacts)
+    .where(eq(contacts.id, deal.contactId))
+    .limit(1);
+  if (!contact?.email) {
+    return {
+      ok: false,
+      error: "O contato deste negócio não tem email cadastrado — a busca de reuniões usa o email como filtro.",
+    };
+  }
+
+  const connections = await db.select({ userId: googleCalendarConnections.userId }).from(googleCalendarConnections);
+  if (connections.length === 0) {
+    return { ok: false, error: "Nenhuma conexão com o Google Agenda configurada." };
+  }
+
+  const timeMax = new Date();
+  const timeMin = new Date(timeMax.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  let created = 0;
+  let skipped = 0;
+  for (const connection of connections) {
+    let events: CalendarEvent[];
+    try {
+      events = await listCalendarEvents(connection.userId, { timeMin, timeMax, q: contact.email });
+    } catch (error) {
+      console.error("[meeting-notes-sync] falha ao listar eventos (sincronização por negócio)", connection.userId, error);
+      continue;
+    }
+
+    for (const event of events) {
+      try {
+        const outcome = await syncEvent(connection.userId, event);
+        if (outcome === "created") created++;
+        else skipped++;
+      } catch (error) {
+        console.error("[meeting-notes-sync] falha ao processar evento (sincronização por negócio)", event.id, error);
+      }
+    }
+  }
+
+  return { ok: true, created, skipped };
 }

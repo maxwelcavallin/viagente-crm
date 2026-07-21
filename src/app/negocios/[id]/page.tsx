@@ -27,7 +27,7 @@ import {
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
-import { getThread } from "@/lib/conversations";
+import { getThreadPage } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { getDealActivityLogPage } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
@@ -41,7 +41,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DuplicateContactBanner } from "@/components/duplicate-contact-banner";
-import { MessageList } from "@/components/message-list";
 import { ScheduleMessageDialog } from "@/components/schedule-message-dialog";
 import { ScheduledMessagesList } from "@/components/scheduled-messages-list";
 import { ScheduleMeetingDialog } from "@/components/schedule-meeting-dialog";
@@ -50,6 +49,8 @@ import { DealFormDialog } from "../deal-form-dialog";
 import { DeleteDealDialog } from "../delete-deal-dialog";
 import { DealActivityLogCard } from "./deal-activity-log-card";
 import { DealStatusActions } from "./deal-status-actions";
+import { DealConversationCard } from "./deal-conversation-card";
+import { SyncMeetingNotesButton } from "./sync-meeting-notes-button";
 import { DealTasksPanel, type DealTask, type ManualStageTask } from "./deal-tasks-panel";
 import { EmailComposeDialog } from "@/components/email-compose-dialog";
 import { EmailsSentList } from "./emails-sent-list";
@@ -148,7 +149,7 @@ export default async function DealDetailPage({
   if (!contact) notFound();
 
   const [
-    thread,
+    threadPage,
     contactFieldDefRows,
     contactTagRows,
     taskRows,
@@ -165,8 +166,10 @@ export default async function DealDetailPage({
   ] = await Promise.all([
       // undefined = sem filtro de canal — esta página mostra o histórico
       // como referência mesclada, diferente do Atendimento (que separa por
-      // canal).
-      getThread(contact.id, undefined, allowedChannelIds),
+      // canal). Só a última página (ver DealConversationCard) — sem isso a
+      // conversa inteira carregava de uma vez, pesado pra contato com
+      // histórico longo.
+      getThreadPage(contact.id, undefined, allowedChannelIds),
       db
         .select()
         .from(customFieldDefinitions)
@@ -376,7 +379,7 @@ export default async function DealDetailPage({
     };
   });
 
-  const lastChannelId = [...thread].reverse().find((m) => m.channelId)?.channelId;
+  const lastChannelId = [...threadPage.messages].reverse().find((m) => m.channelId)?.channelId;
   const defaultChannel = allowedChannels.find((c) => c.isDefault);
   const preselectedChannelId =
     (lastChannelId && allowedChannels.some((c) => c.id === lastChannelId)
@@ -679,8 +682,9 @@ export default async function DealDetailPage({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Resumo de Reuniões</CardTitle>
+          <SyncMeetingNotesButton dealId={deal.id} />
         </CardHeader>
         <CardContent>
           <MeetingNotesList notes={meetingNoteItems} />
@@ -711,9 +715,10 @@ export default async function DealDetailPage({
           </a>
         </CardHeader>
         <CardContent>
-          <MessageList
-            messages={thread}
-            emptyMessage="Nenhuma conversa registrada com este contato ainda."
+          <DealConversationCard
+            dealId={deal.id}
+            initialMessages={threadPage.messages}
+            initialHasMore={threadPage.hasMore}
           />
         </CardContent>
       </Card>

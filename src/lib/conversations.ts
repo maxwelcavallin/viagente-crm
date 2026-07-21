@@ -1,5 +1,5 @@
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, instagramChannels, messages, users, whatsappChannels } from "@/db/schema";
 import { ownerVisibilityFilter, type VisibilityUser } from "@/lib/visibility";
@@ -206,26 +206,10 @@ export type ThreadMessage = {
   senderAvatarUrl: string | null;
 };
 
-// channelId identifica QUAL conversa do contato mostrar (ver comentário em
-// listConversations): um id real filtra pra aquele canal só, null filtra só
-// mensagens sem canal (raro, mas messages.channel_id é nullable), e
-// undefined não filtra por canal — traz tudo junto (usado só pelas telas
-// que ainda mostram o histórico mesclado como referência: contato, negócio,
-// API pública). allowedChannelIds continua sendo a checagem de
-// permissão/visibilidade, independente da conversa escolhida.
-export async function getThread(
-  contactId: string,
-  channelId: string | null | undefined,
-  allowedChannelIds: string[]
-): Promise<ThreadMessage[]> {
-  const channelFilter = buildChannelFilter(allowedChannelIds);
-  const conversationFilter =
-    channelId === undefined
-      ? undefined
-      : channelId
-        ? eq(messages.channelId, channelId)
-        : isNull(messages.channelId);
-  const rows = await db
+// Base compartilhada por getThread e getThreadPage — mesmas colunas/joins,
+// só muda o where/orderBy/limit final de cada uma.
+function threadBaseQuery() {
+  return db
     .select({
       id: messages.id,
       direction: messages.direction,
@@ -255,16 +239,86 @@ export async function getThread(
         eq(messages.replyToMessageId, replyToMessages.id),
         eq(messages.replyToCreatedAt, replyToMessages.createdAt)
       )
-    )
-    .where(and(eq(messages.contactId, contactId), conversationFilter, channelFilter))
-    .orderBy(asc(messages.createdAt));
+    );
+}
 
-  return rows.map(({ replyToType, replyToContent, ...row }) => ({
-    ...row,
-    replyTo: row.replyToMessageId
+type ThreadRow = Awaited<ReturnType<typeof threadBaseQuery>>[number];
+
+function mapThreadRow(row: ThreadRow): ThreadMessage {
+  const { replyToType, replyToContent, ...rest } = row;
+  return {
+    ...rest,
+    replyTo: rest.replyToMessageId
       ? { type: replyToType!, content: replyToContent }
       : null,
-  }));
+  };
+}
+
+function conversationFilterFor(channelId: string | null | undefined) {
+  return channelId === undefined
+    ? undefined
+    : channelId
+      ? eq(messages.channelId, channelId)
+      : isNull(messages.channelId);
+}
+
+// channelId identifica QUAL conversa do contato mostrar (ver comentário em
+// listConversations): um id real filtra pra aquele canal só, null filtra só
+// mensagens sem canal (raro, mas messages.channel_id é nullable), e
+// undefined não filtra por canal — traz tudo junto (usado só pelas telas
+// que ainda mostram o histórico mesclado como referência: contato, negócio,
+// API pública). allowedChannelIds continua sendo a checagem de
+// permissão/visibilidade, independente da conversa escolhida.
+export async function getThread(
+  contactId: string,
+  channelId: string | null | undefined,
+  allowedChannelIds: string[]
+): Promise<ThreadMessage[]> {
+  const channelFilter = buildChannelFilter(allowedChannelIds);
+  const rows = await threadBaseQuery()
+    .where(and(eq(messages.contactId, contactId), conversationFilterFor(channelId), channelFilter))
+    .orderBy(asc(messages.createdAt));
+
+  return rows.map(mapThreadRow);
+}
+
+const THREAD_PAGE_SIZE = 30;
+
+export type ThreadPage = { messages: ThreadMessage[]; hasMore: boolean };
+
+// Paginação por cursor (createdAt da mensagem mais antiga já carregada),
+// mesmo princípio de getDealActivityLogPage — mas em vez de "mais recentes
+// primeiro", a página é sempre devolvida em ordem cronológica (mais antiga →
+// mais nova) porque é assim que uma conversa se lê; "carregar mais" busca
+// mensagens mais antigas que o cursor e o caller as insere ANTES das que já
+// tem (ver deal-conversation-card.tsx). Usada pela página do negócio, que
+// mostra o histórico mesclado como referência sem carregar a conversa
+// inteira de uma vez — diferente de getThread (Atendimento, exportação),
+// que continua trazendo tudo.
+export async function getThreadPage(
+  contactId: string,
+  channelId: string | null | undefined,
+  allowedChannelIds: string[],
+  before?: string
+): Promise<ThreadPage> {
+  const channelFilter = buildChannelFilter(allowedChannelIds);
+  const beforeDate = before ? new Date(before) : undefined;
+
+  const rows = await threadBaseQuery()
+    .where(
+      and(
+        eq(messages.contactId, contactId),
+        conversationFilterFor(channelId),
+        channelFilter,
+        beforeDate ? lt(messages.createdAt, beforeDate) : undefined
+      )
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(THREAD_PAGE_SIZE + 1);
+
+  const hasMore = rows.length > THREAD_PAGE_SIZE;
+  const page = rows.slice(0, THREAD_PAGE_SIZE).reverse();
+  return { messages: page.map(mapThreadRow), hasMore };
 }
 
 // Canal da conversa mais recente de um contato — usado como padrão de qual

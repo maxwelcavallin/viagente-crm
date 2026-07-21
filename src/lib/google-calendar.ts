@@ -277,10 +277,14 @@ export type CalendarEvent = {
 // Lista eventos de um usuário conectado num intervalo de datas, paginando
 // até esgotar (Etapa 31 — sincronização de notas do Gemini). `attachments`
 // e `attendees` já vêm por padrão na representação completa do evento, sem
-// precisar de nenhum parâmetro extra na query.
+// precisar de nenhum parâmetro extra na query. `q` (busca livre da API do
+// Google, cobre título/descrição/local/nome e email de convidado e
+// organizador) filtra server-side — usado pela sincronização manual por
+// negócio (ver syncMeetingNotesForDeal) pra buscar só os eventos com aquele
+// email, em vez de trazer o intervalo inteiro como a varredura do cron faz.
 export async function listCalendarEvents(
   ownerUserId: string,
-  params: { timeMin: Date; timeMax: Date }
+  params: { timeMin: Date; timeMax: Date; q?: string }
 ): Promise<CalendarEvent[]> {
   const [connection] = await db
     .select({ calendarId: googleCalendarConnections.calendarId })
@@ -300,6 +304,7 @@ export async function listCalendarEvents(
       singleEvents: "true",
       orderBy: "startTime",
     });
+    if (params.q) query.set("q", params.q);
     if (pageToken) query.set("pageToken", pageToken);
 
     const res = await fetch(

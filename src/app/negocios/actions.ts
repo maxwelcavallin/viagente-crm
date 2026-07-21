@@ -23,6 +23,7 @@ import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
 import { logDealActivity, type DealActivitySource } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { moveDealStage } from "@/lib/deal-mutations";
+import { syncMeetingNotesForDeal } from "@/lib/meeting-notes-sync";
 import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
@@ -474,6 +475,24 @@ export async function setDealStatusAction(
   revalidatePath("/negocios");
   revalidatePath(`/negocios/${dealId}`);
   return { ok: true };
+}
+
+// Botão "Sincronizar reuniões" do card de Resumo de Reuniões — ver
+// syncMeetingNotesForDeal (busca só pelo email do contato deste negócio, não
+// varre tudo como o cron).
+export type SyncMeetingNotesActionResult =
+  | { ok: true; created: number; skipped: number }
+  | { ok: false; error: string };
+
+export async function syncMeetingNotesAction(
+  dealId: string
+): Promise<SyncMeetingNotesActionResult> {
+  const user = await requireSession();
+  if (!user) return { ok: false, error: "Acesso negado." };
+
+  const result = await syncMeetingNotesForDeal(dealId);
+  if (result.ok) revalidatePath(`/negocios/${dealId}`);
+  return result;
 }
 
 export async function setDealLostAction(
