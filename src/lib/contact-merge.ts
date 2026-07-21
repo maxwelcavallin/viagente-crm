@@ -204,6 +204,7 @@ export async function mergeContactsInto(
       instagramUserId: contacts.instagramUserId,
       instagramUsername: contacts.instagramUsername,
       customFields: contacts.customFields,
+      whatsappLid: contacts.whatsappLid,
     })
     .from(contacts)
     .where(eq(contacts.id, sourceContactId))
@@ -217,6 +218,7 @@ export async function mergeContactsInto(
       instagramUserId: contacts.instagramUserId,
       instagramUsername: contacts.instagramUsername,
       customFields: contacts.customFields,
+      whatsappLid: contacts.whatsappLid,
     })
     .from(contacts)
     .where(eq(contacts.id, targetContactId))
@@ -234,6 +236,16 @@ export async function mergeContactsInto(
 
   const fillUpdates: Partial<typeof contacts.$inferInsert> = {};
   if (!target.avatarUrl && source.avatarUrl) fillUpdates.avatarUrl = source.avatarUrl;
+  if (!target.whatsappLid && source.whatsappLid) {
+    // Libera o índice único (whatsapp_lid) antes de gravar no destino, mesmo
+    // padrão do instagramUserId logo abaixo — sem isso o update no destino
+    // esbarraria na própria linha de origem que ainda detém o valor.
+    await db
+      .update(contacts)
+      .set({ whatsappLid: null })
+      .where(eq(contacts.id, sourceContactId));
+    fillUpdates.whatsappLid = source.whatsappLid;
+  }
   if (!target.instagramUserId && source.instagramUserId) {
     // Libera o índice único antes de gravar no destino.
     await db

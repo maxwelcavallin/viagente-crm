@@ -137,7 +137,11 @@ async function handleIncomingMessage(
   let resolvedPhone = payload.phone;
   if (isMaskedPhone) {
     const resolved = await getZapiChatByLid(creds, payload.phone);
-    if (resolved?.phone) resolvedPhone = resolved.phone;
+    // /chats/{lid} não documentado formalmente — já visto devolvendo o
+    // telefone ora com "+" ora sem (diferente do "phone" normal do webhook,
+    // sempre só dígitos). Normaliza aqui pra não criar um contato duplicado
+    // toda vez que esse formato variar entre uma mensagem e outra.
+    if (resolved?.phone) resolvedPhone = resolved.phone.replace(/\D/g, "");
   }
   const whatsappLid = payload.chatLid ?? (isMaskedPhone ? payload.phone : null);
 

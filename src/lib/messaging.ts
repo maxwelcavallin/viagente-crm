@@ -67,32 +67,61 @@ export async function findOrCreateContactByPhone(
     // mascarado (só lid, sem telefone real) de volta pra esse mesmo contato.
     const nextLid =
       whatsappLid && whatsappLid !== match.whatsappLid ? whatsappLid : undefined;
-    if (nextName || nextAvatar || nextIsGroup !== undefined || nextLid) {
-      await db
-        .update(contacts)
-        .set({
-          ...(nextName ? { name: nextName } : {}),
-          ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
-          ...(nextIsGroup !== undefined ? { isGroup: nextIsGroup } : {}),
-          ...(nextLid ? { whatsappLid: nextLid } : {}),
-        })
-        .where(eq(contacts.id, match.id));
+    const baseUpdate = {
+      ...(nextName ? { name: nextName } : {}),
+      ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
+      ...(nextIsGroup !== undefined ? { isGroup: nextIsGroup } : {}),
+    };
+    if (nextLid) {
+      // contacts_whatsapp_lid_idx é único — se esse lid já pertencer a OUTRO
+      // contato (ex: duplicata de telefone ainda não mesclada, ou o mesmo
+      // chat resolvido com formatação de telefone diferente numa mensagem
+      // anterior), o update quebra. Salvar a mensagem em si NUNCA pode
+      // depender desse bookkeeping opcional de identidade — tenta com o lid,
+      // e se falhar por causa dele, tenta de novo sem (evento seguinte tenta
+      // de novo, sem custo real).
+      try {
+        await db
+          .update(contacts)
+          .set({ ...baseUpdate, whatsappLid: nextLid })
+          .where(eq(contacts.id, match.id));
+      } catch {
+        if (Object.keys(baseUpdate).length > 0) {
+          await db.update(contacts).set(baseUpdate).where(eq(contacts.id, match.id));
+        }
+      }
+    } else if (Object.keys(baseUpdate).length > 0) {
+      await db.update(contacts).set(baseUpdate).where(eq(contacts.id, match.id));
     }
     return match;
   }
 
-  const [created] = await db
-    .insert(contacts)
-    .values({
-      phone,
-      whatsappLid,
-      name: name?.trim() || phone,
-      isGroup: info?.isGroup ?? false,
-      avatarUrl: info?.avatarUrl,
-    })
-    .returning({ id: contacts.id });
-
-  return created;
+  try {
+    const [created] = await db
+      .insert(contacts)
+      .values({
+        phone,
+        whatsappLid,
+        name: name?.trim() || phone,
+        isGroup: info?.isGroup ?? false,
+        avatarUrl: info?.avatarUrl,
+      })
+      .returning({ id: contacts.id });
+    return created;
+  } catch {
+    // Mesmo risco do update acima (lid já usado por outro contato), agora na
+    // criação — cria sem o lid em vez de perder a mensagem inteira.
+    const [created] = await db
+      .insert(contacts)
+      .values({
+        phone,
+        name: name?.trim() || phone,
+        isGroup: info?.isGroup ?? false,
+        avatarUrl: info?.avatarUrl,
+      })
+      .returning({ id: contacts.id });
+    return created;
+  }
 }
 
 // Espelha findOrCreateContactByPhone, mas dedupe por instagramUserId (IGSID)
