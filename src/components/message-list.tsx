@@ -197,7 +197,17 @@ function DownloadLink({
 
 function MessageMedia({ message }: { message: ThreadMessage }) {
   const [open, setOpen] = useState(false);
-  if (!message.mediaUrl) return null;
+  // Mídia que a Z-API falhou em servir (ver comentário em handleIncomingMessage
+  // no webhook) ainda grava a mensagem, só sem mediaUrl — sem isso aqui, a
+  // bolha ficava totalmente vazia (nem o aviso aparecia).
+  if (!message.mediaUrl) {
+    return message.content ? (
+      <p className="flex items-start gap-1.5 break-words whitespace-pre-wrap text-muted-foreground">
+        <TriangleAlert size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+        {message.content}
+      </p>
+    ) : null;
+  }
 
   if (message.type === "imagem") {
     return (

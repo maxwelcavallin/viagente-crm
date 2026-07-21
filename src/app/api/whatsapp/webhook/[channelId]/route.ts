@@ -194,10 +194,23 @@ async function handleIncomingMessage(
   if (mediaSource) {
     const kind = type as MediaKind;
     const key = `${mediaPrefix(kind)}/${channelId}/${messageId}`;
-    const body = await downloadZapiMedia(mediaSource.url);
-    const contentType = mediaSource.mimeType ?? "application/octet-stream";
-    await uploadMediaToR2({ key, body, contentType });
-    mediaUrl = `/api/media/${messageId}`;
+    try {
+      const body = await downloadZapiMedia(mediaSource.url);
+      const contentType = mediaSource.mimeType ?? "application/octet-stream";
+      await uploadMediaToR2({ key, body, contentType });
+      mediaUrl = `/api/media/${messageId}`;
+    } catch (error) {
+      // A Z-API falha esporadicamente ao servir a mídia (503, conexão
+      // fechada no meio do download) — sem isso, o erro subia até o catch
+      // do POST e a mensagem inteira nunca era gravada (nem o texto/legenda),
+      // sumindo da conversa. Grava mesmo sem o anexo, com um aviso no lugar.
+      console.error(
+        "[webhook whatsapp] falha ao baixar/enviar mídia, salvando mensagem sem anexo",
+        error
+      );
+      const notice = "[Não foi possível baixar este anexo — confira no WhatsApp]";
+      content = content ? `${content}\n\n${notice}` : notice;
+    }
   }
 
   await db.insert(messages).values({
