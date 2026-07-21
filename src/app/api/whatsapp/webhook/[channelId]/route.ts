@@ -6,6 +6,8 @@ import { mediaPrefix, uploadMediaToR2, type MediaKind } from "@/lib/storage";
 import { findOpenDealIdForContact, findOrCreateContactByPhone } from "@/lib/messaging";
 import { notifyNewMessage } from "@/lib/notifications";
 import { maybeCreateAutoDeal } from "@/lib/auto-deal";
+import { decryptCredential } from "@/lib/credentials-crypto";
+import { getZapiChatByLid, type ZapiChannelCredentials } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,13 @@ type ZapiMediaPart = { mimeType?: string };
 type ZapiIncomingMessage = {
   messageId: string;
   phone: string;
+  // Identificador de privacidade do WhatsApp pro chat (ver
+  // developer.z-api.io/en/tips/lid) — mais estável que "phone", que pode vir
+  // mascarado como "<numero>@lid" em vez do número real (comum em mensagens
+  // mandadas direto do aparelho, fora do CRM). Usado em
+  // findOrCreateContactByPhone pra não criar um contato órfão a cada evento
+  // mascarado.
+  chatLid?: string;
   instanceId: string;
   fromMe?: boolean;
   // isGroup=true: "phone" é o id do grupo ("<id>-group"), "chatName" é o
@@ -99,7 +108,8 @@ async function handleStatusCallback(payload: ZapiStatusCallback) {
 
 async function handleIncomingMessage(
   channelId: string,
-  payload: ZapiIncomingMessage
+  payload: ZapiIncomingMessage,
+  creds: ZapiChannelCredentials
 ) {
   // fromMe=true e já existe uma linha com esse externalMessageId: foi o próprio
   // /api/messages/send que gravou na hora do envio, este webhook só está
@@ -115,13 +125,33 @@ async function handleIncomingMessage(
     if (existing) return;
   }
 
+  // "phone" pode vir mascarado como "<numero>@lid" (privacidade do WhatsApp,
+  // comum em mensagens fromMe — ver comentário no tipo ZapiIncomingMessage).
+  // Antes de identificar o contato, tenta resolver o telefone real via
+  // /chats/{lid} — não documentado oficialmente, mas confirmado ao vivo que
+  // devolve telefone+lid juntos pra chats que o WhatsApp já resolveu na
+  // sessão conectada (ver getZapiChatByLid). Só cai pro lid como identidade
+  // (via whatsappLid) quando o WhatsApp realmente nunca revelou o número —
+  // limitação de privacidade do próprio WhatsApp, não recuperável.
+  const isMaskedPhone = !payload.isGroup && payload.phone.endsWith("@lid");
+  let resolvedPhone = payload.phone;
+  if (isMaskedPhone) {
+    const resolved = await getZapiChatByLid(creds, payload.phone);
+    if (resolved?.phone) resolvedPhone = resolved.phone;
+  }
+  const whatsappLid = payload.chatLid ?? (isMaskedPhone ? payload.phone : null);
+
+  // Em mensagem individual mandada por nós (fromMe), "senderName" é o nome
+  // do NOSSO próprio perfil conectado, não o do contato — usá-lo aqui
+  // sobrescreveria o nome do contato com o nosso (ver comentário no tipo
+  // ZapiIncomingMessage sobre o mesmo problema de identidade com "phone").
   const contact = await findOrCreateContactByPhone(
-    payload.phone,
-    payload.isGroup ? payload.chatName : payload.senderName,
-    { isGroup: payload.isGroup, avatarUrl: payload.photo }
+    resolvedPhone,
+    payload.isGroup ? payload.chatName : payload.fromMe ? undefined : payload.senderName,
+    { isGroup: payload.isGroup, avatarUrl: payload.photo, whatsappLid }
   );
   const contactName =
-    (payload.isGroup ? payload.chatName : payload.senderName)?.trim() || payload.phone;
+    (payload.isGroup ? payload.chatName : payload.senderName)?.trim() || resolvedPhone;
 
   let dealId = await findOpenDealIdForContact(contact.id);
   // Só cria negócio automaticamente pra conversa individual nova (nunca
@@ -208,6 +238,8 @@ export async function POST(
     .select({
       id: whatsappChannels.id,
       zapiInstanceId: whatsappChannels.zapiInstanceId,
+      zapiToken: whatsappChannels.zapiToken,
+      zapiClientToken: whatsappChannels.zapiClientToken,
       relayWebhookUrl: whatsappChannels.relayWebhookUrl,
     })
     .from(whatsappChannels)
@@ -238,7 +270,11 @@ export async function POST(
       // fromMe=true também passa por aqui — handleIncomingMessage faz o
       // dedupe contra o que o nosso próprio /api/messages/send já gravou e
       // só insere de fato mensagens mandadas de outro aparelho conectado.
-      await handleIncomingMessage(channelId, payload);
+      await handleIncomingMessage(channelId, payload, {
+        zapiInstanceId: channel.zapiInstanceId,
+        zapiToken: decryptCredential(channel.zapiToken),
+        zapiClientToken: decryptCredential(channel.zapiClientToken),
+      });
     }
   } catch (error) {
     console.error("[webhook whatsapp] erro ao processar payload", error);

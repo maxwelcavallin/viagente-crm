@@ -402,6 +402,14 @@ export const contacts = pgTable(
     instagramUsername: text("instagram_username"),
     // Foto do contato ou do grupo (campo "photo"/"senderPhoto" da Z-API).
     avatarUrl: text("avatar_url"),
+    // Identificador de privacidade do WhatsApp pro chat (campo "chatLid" da
+    // Z-API, formato "<numero>@lid") — mais estável que "phone" quando o
+    // WhatsApp mascara o número real (ver developer.z-api.io/en/tips/lid).
+    // Guardado assim que aparece (mensagem recebida OU mandada direto do
+    // aparelho fora do CRM) pra resolver eventos futuros que só trazem o lid
+    // mascarado de volta pro mesmo contato, em vez de criar um órfão — ver
+    // handleIncomingMessage no webhook do WhatsApp.
+    whatsappLid: text("whatsapp_lid"),
     // Marca de leitura compartilhada pela equipe (inbox único, não por
     // usuário): zera o contador de não lidas quando qualquer atendente
     // abre a conversa — ver markContactRead em src/lib/conversations.ts.
@@ -427,6 +435,7 @@ export const contacts = pgTable(
   (t) => [
     uniqueIndex("contacts_phone_idx").on(t.phone),
     uniqueIndex("contacts_instagram_user_id_idx").on(t.instagramUserId),
+    uniqueIndex("contacts_whatsapp_lid_idx").on(t.whatsappLid),
   ]
 );
 

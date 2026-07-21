@@ -2,50 +2,90 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, deals } from "@/db/schema";
 
+// "phone" pode vir mascarado como um id de privacidade do WhatsApp (formato
+// "<numero>@lid") em vez do número real — acontece sobretudo em mensagens
+// mandadas direto do aparelho conectado, fora do CRM (ver handleIncomingMessage
+// no webhook do WhatsApp). Nesses casos "phone" sozinho não é uma identidade
+// confiável: o mesmo contato pode aparecer com o número real numa mensagem e
+// com um @lid mascarado noutra, o que criava um contato órfão novo a cada
+// evento mascarado. whatsappLid (campo "chatLid" da Z-API) é o identificador
+// estável recomendado pra esse cenário — ver developer.z-api.io/en/tips/lid.
 export async function findOrCreateContactByPhone(
   phone: string,
   name?: string,
-  info?: { isGroup?: boolean; avatarUrl?: string }
+  info?: { isGroup?: boolean; avatarUrl?: string; whatsappLid?: string | null }
 ): Promise<{ id: string }> {
-  const [existing] = await db
-    .select({
-      id: contacts.id,
-      name: contacts.name,
-      avatarUrl: contacts.avatarUrl,
-      isGroup: contacts.isGroup,
-    })
-    .from(contacts)
-    .where(eq(contacts.phone, phone))
-    .limit(1);
+  const whatsappLid = info?.whatsappLid ?? null;
 
-  if (existing) {
+  // Prioriza o lid quando disponível — é a identidade mais estável (ver
+  // comentário acima); só cai pro telefone se nenhum contato já tiver esse
+  // lid guardado (ex: primeira vez que esse chat aparece, ou telefone real
+  // já visto antes sem lid associado ainda).
+  const [existing] = whatsappLid
+    ? await db
+        .select({
+          id: contacts.id,
+          name: contacts.name,
+          avatarUrl: contacts.avatarUrl,
+          isGroup: contacts.isGroup,
+          phone: contacts.phone,
+          whatsappLid: contacts.whatsappLid,
+        })
+        .from(contacts)
+        .where(eq(contacts.whatsappLid, whatsappLid))
+        .limit(1)
+    : [];
+
+  const [existingByPhone] = !existing
+    ? await db
+        .select({
+          id: contacts.id,
+          name: contacts.name,
+          avatarUrl: contacts.avatarUrl,
+          isGroup: contacts.isGroup,
+          phone: contacts.phone,
+          whatsappLid: contacts.whatsappLid,
+        })
+        .from(contacts)
+        .where(eq(contacts.phone, phone))
+        .limit(1)
+    : [];
+
+  const match = existing ?? existingByPhone;
+
+  if (match) {
     // Nome/foto de contatos e grupos do WhatsApp mudam com o tempo — mantém
     // atualizado sem exigir edição manual no CRM.
     const trimmedName = name?.trim();
-    const nextName = trimmedName && trimmedName !== existing.name ? trimmedName : undefined;
+    const nextName = trimmedName && trimmedName !== match.name ? trimmedName : undefined;
     const nextAvatar =
-      info?.avatarUrl && info.avatarUrl !== existing.avatarUrl ? info.avatarUrl : undefined;
+      info?.avatarUrl && info.avatarUrl !== match.avatarUrl ? info.avatarUrl : undefined;
     const nextIsGroup =
-      info?.isGroup !== undefined && info.isGroup !== existing.isGroup
-        ? info.isGroup
-        : undefined;
-    if (nextName || nextAvatar || nextIsGroup !== undefined) {
+      info?.isGroup !== undefined && info.isGroup !== match.isGroup ? info.isGroup : undefined;
+    // Guarda o lid assim que aparece pra esse contato, mesmo que ele já
+    // exista via telefone — é o que permite resolver o próximo evento
+    // mascarado (só lid, sem telefone real) de volta pra esse mesmo contato.
+    const nextLid =
+      whatsappLid && whatsappLid !== match.whatsappLid ? whatsappLid : undefined;
+    if (nextName || nextAvatar || nextIsGroup !== undefined || nextLid) {
       await db
         .update(contacts)
         .set({
           ...(nextName ? { name: nextName } : {}),
           ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
           ...(nextIsGroup !== undefined ? { isGroup: nextIsGroup } : {}),
+          ...(nextLid ? { whatsappLid: nextLid } : {}),
         })
-        .where(eq(contacts.id, existing.id));
+        .where(eq(contacts.id, match.id));
     }
-    return existing;
+    return match;
   }
 
   const [created] = await db
     .insert(contacts)
     .values({
       phone,
+      whatsappLid,
       name: name?.trim() || phone,
       isGroup: info?.isGroup ?? false,
       avatarUrl: info?.avatarUrl,

@@ -199,6 +199,62 @@ export async function getZapiGroupMetadata(
   }
 }
 
+// Resolve um "@lid" (id de privacidade que o WhatsApp manda no lugar do
+// telefone real em mensagens fromMe de conversas com o número mascarado —
+// ver comentário em ZapiIncomingMessage.chatLid) de volta pro telefone real,
+// quando possível. Não documentado oficialmente, mas confirmado ao vivo: o
+// endpoint de detalhe de UM chat (/chats/{id}, "id" aceita tanto telefone
+// quanto lid) devolve telefone E lid juntos pra chats que o WhatsApp já
+// resolveu localmente na sessão conectada — o mesmo dado que aparece na
+// listagem paginada /chats, só que sem precisar paginar todos os chats da
+// instância a cada mensagem recebida. Quando o WhatsApp genuinamente nunca
+// revelou o número (contato com privacidade de número ativada), "phone"
+// volta vazio — nesse caso não tem como recuperar (limitação do próprio
+// WhatsApp, não da Z-API nem nossa).
+export async function getZapiChatByLid(
+  creds: ZapiChannelCredentials,
+  lid: string
+): Promise<{ phone: string; name: string | null } | null> {
+  try {
+    const res = await fetch(`${baseUrl(creds)}/chats/${encodeURIComponent(lid)}`, {
+      headers: { "Client-Token": creds.zapiClientToken },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { phone?: string; name?: string };
+    if (!data.phone) return null;
+    return { phone: data.phone, name: data.name ?? null };
+  } catch {
+    return null;
+  }
+}
+
+// Lista paginada de todos os chats da instância — cada chat individual
+// (isGroup=false) vem com "phone" E "lid" juntos quando o WhatsApp já
+// resolveu essa identidade na sessão conectada (mesmo dado por trás de
+// getZapiChatByLid, só que em lote — útil pra backfill de muitos contatos de
+// uma vez em vez de uma chamada por contato, ver scripts/backfill-whatsapp-lid.ts).
+export type ZapiChatSummary = {
+  phone: string;
+  lid?: string;
+  name?: string;
+  isGroup: boolean;
+};
+
+export async function getZapiChats(
+  creds: ZapiChannelCredentials,
+  page: number,
+  pageSize: number
+): Promise<ZapiChatSummary[]> {
+  const res = await fetch(`${baseUrl(creds)}/chats?page=${page}&pageSize=${pageSize}`, {
+    headers: { "Client-Token": creds.zapiClientToken },
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as unknown;
+  return Array.isArray(data) ? (data as ZapiChatSummary[]) : [];
+}
+
 export async function getZapiProfilePicture(
   creds: ZapiChannelCredentials,
   phone: string

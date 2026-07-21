@@ -302,6 +302,13 @@
       "when": 1784587223399,
       "tag": "0042_careless_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1784598415982,
+      "tag": "0043_furry_pandemic",
+      "breakpoints": true
     }
   ]
 }
