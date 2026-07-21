@@ -149,6 +149,11 @@ export default async function WebhookDetailPage({
                 initialMapping={(webhook.fieldMapping as Record<string, string>) ?? {}}
                 contactFieldDefs={contactFieldRows.map(toFieldDef)}
                 dealFieldDefs={dealFieldRows.map(toFieldDef)}
+                recentExecutions={logs.map((l) => ({
+                  id: l.id,
+                  createdAt: l.createdAt,
+                  payload: l.payload,
+                }))}
               />
             </CardContent>
           </Card>
