@@ -823,7 +823,7 @@ type SequenceConditionInput = { field: string; operator: "eq" | "gt" | "lt" | "c
 type SequenceInput = {
   name: string;
   active?: boolean;
-  triggerType: "etapa" | "tag" | "sem_resposta";
+  triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId?: string | null;
   triggerTagId?: string | null;
   noResponseDays?: number | null;

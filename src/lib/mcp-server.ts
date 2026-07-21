@@ -1032,7 +1032,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
         inputSchema: {
           name: z.string().min(1),
           active: z.boolean().optional(),
-          triggerType: z.enum(["etapa", "tag", "sem_resposta"]),
+          triggerType: z.enum(["etapa", "tag", "sem_resposta", "ganho", "perdido"]),
           triggerStageId: z.string().uuid().optional().nullable(),
           triggerTagId: z.string().uuid().optional().nullable(),
           noResponseDays: z.number().int().min(1).optional().nullable(),
@@ -1058,7 +1058,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           sequenceId: z.string().uuid(),
           name: z.string().min(1),
           active: z.boolean().optional(),
-          triggerType: z.enum(["etapa", "tag", "sem_resposta"]),
+          triggerType: z.enum(["etapa", "tag", "sem_resposta", "ganho", "perdido"]),
           triggerStageId: z.string().uuid().optional().nullable(),
           triggerTagId: z.string().uuid().optional().nullable(),
           noResponseDays: z.number().int().min(1).optional().nullable(),

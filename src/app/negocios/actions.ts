@@ -18,7 +18,7 @@ import {
   tasks,
   users,
 } from "@/db/schema";
-import { cancelActiveSequenceRuns } from "@/lib/automation-sequences";
+import { cancelActiveSequenceRuns, fireStatusSequenceTriggers } from "@/lib/automation-sequences";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
 import { logDealActivity, type DealActivitySource } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
@@ -467,6 +467,7 @@ export async function setDealStatusAction(
 
   if (status === "ganho") {
     await cancelActiveSequenceRuns(dealId);
+    await fireStatusSequenceTriggers(dealId, "ganho");
     void dispatchOutboundWebhooks("negocio_ganho", dealId);
   }
 
@@ -509,6 +510,7 @@ export async function setDealLostAction(
   });
 
   await cancelActiveSequenceRuns(dealId);
+  await fireStatusSequenceTriggers(dealId, "perdido");
   void dispatchOutboundWebhooks("negocio_perdido", dealId);
 
   revalidatePath("/negocios");

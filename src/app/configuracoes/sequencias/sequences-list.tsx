@@ -65,7 +65,7 @@ export type SequenceRow = {
   id: string;
   name: string;
   active: boolean;
-  triggerType: "etapa" | "tag" | "sem_resposta";
+  triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId: string | null;
   triggerTagId: string | null;
   noResponseDays: number | null;
@@ -82,6 +82,8 @@ const TRIGGER_LABELS: Record<SequenceRow["triggerType"], string> = {
   etapa: "Entrar na etapa",
   tag: "Ganhar a tag",
   sem_resposta: "Sem resposta há N dias",
+  ganho: "Negócio ganho",
+  perdido: "Negócio perdido",
 };
 
 const STEP_TYPE_LABELS: Record<SequenceStepRow["type"], string> = {

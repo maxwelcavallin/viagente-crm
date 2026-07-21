@@ -55,7 +55,7 @@ function parseConditions(raw: FormDataEntryValue | null): ConditionInput {
 type CommonFields = {
   name: string;
   active: boolean;
-  triggerType: "etapa" | "tag" | "sem_resposta";
+  triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId: string | null;
   triggerTagId: string | null;
   noResponseDays: number | null;
@@ -76,7 +76,13 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
   if (typeof name !== "string" || !name.trim()) {
     return { error: "Nome é obrigatório." };
   }
-  if (triggerType !== "etapa" && triggerType !== "tag" && triggerType !== "sem_resposta") {
+  if (
+    triggerType !== "etapa" &&
+    triggerType !== "tag" &&
+    triggerType !== "sem_resposta" &&
+    triggerType !== "ganho" &&
+    triggerType !== "perdido"
+  ) {
     return { error: "Gatilho inválido." };
   }
   if (triggerType === "etapa" && (typeof triggerStageId !== "string" || !triggerStageId)) {
@@ -111,7 +117,7 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
   return {
     name: name.trim(),
     active,
-    triggerType: triggerType as "etapa" | "tag" | "sem_resposta",
+    triggerType: triggerType as "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido",
     triggerStageId: triggerType === "etapa" ? (triggerStageId as string) : null,
     triggerTagId: triggerType === "tag" ? (triggerTagId as string) : null,
     noResponseDays: triggerType === "sem_resposta" ? noResponseDays : null,

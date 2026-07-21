@@ -124,6 +124,26 @@ export async function fireEtapaSequenceTriggers(dealId: string, stageId: string)
   }
 }
 
+// Chamado por setDealStatusAction (ganho) e setDealLostAction (perdido) —
+// mesmo instante em que os webhooks de saída negocio_ganho/negocio_perdido
+// já disparavam (ver dispatchOutboundWebhooks nesses call sites). Vale pra
+// qualquer negócio/pipeline, sem escopo adicional — diferente do gatilho
+// "etapa", que é preso a uma etapa específica.
+export async function fireStatusSequenceTriggers(
+  dealId: string,
+  status: "ganho" | "perdido"
+): Promise<void> {
+  const sequences = await db
+    .select()
+    .from(automationSequences)
+    .where(and(eq(automationSequences.active, true), eq(automationSequences.triggerType, status)));
+
+  for (const seq of sequences) {
+    if (!(await conditionMatches(dealId, seq.conditions as SequenceCondition))) continue;
+    await createRun(seq.id, dealId);
+  }
+}
+
 // Chamado de dentro de fireTagAddedAutomations (task-automation.ts) — mesmo
 // evento síncrono que dispara tag_automations.
 export async function fireTagSequenceTriggers(

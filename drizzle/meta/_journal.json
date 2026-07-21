@@ -316,6 +316,13 @@
       "when": 1784604718509,
       "tag": "0044_fixed_gamma_corps",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1784644342738,
+      "tag": "0045_glorious_ravenous",
+      "breakpoints": true
     }
   ]
 }

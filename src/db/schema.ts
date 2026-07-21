@@ -112,6 +112,8 @@ export const sequenceTriggerTypeEnum = pgEnum("sequence_trigger_type", [
   "etapa",
   "tag",
   "sem_resposta",
+  "ganho",
+  "perdido",
 ]);
 export const sequenceStepTypeEnum = pgEnum("sequence_step_type", [
   "mensagem",
