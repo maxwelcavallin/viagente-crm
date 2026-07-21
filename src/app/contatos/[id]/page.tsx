@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
-import { ArrowLeft, Briefcase } from "lucide-react";
+import { ArrowLeft, ArrowRight, Briefcase } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
   contactTags,
   contacts,
   customFieldDefinitions,
+  deals,
   meetingNotes,
   meetingNotesContacts,
   pipelines,
@@ -18,6 +19,7 @@ import {
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
 import { getThread } from "@/lib/conversations";
+import { formatCurrencyBRL } from "@/lib/deal-format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DuplicateContactBanner } from "@/components/duplicate-contact-banner";
@@ -58,6 +60,7 @@ export default async function ContatoDetailPage({
     allStages,
     ownerRows,
     meetingNoteRows,
+    contactDealRows,
   ] = await Promise.all([
     db
       .select()
@@ -96,6 +99,19 @@ export default async function ContatoDetailPage({
       .innerJoin(meetingNotes, eq(meetingNotesContacts.meetingNoteId, meetingNotes.id))
       .where(eq(meetingNotesContacts.contactId, id))
       .orderBy(desc(meetingNotes.meetingDate)),
+    db
+      .select({
+        id: deals.id,
+        title: deals.title,
+        value: deals.value,
+        status: deals.status,
+        stageId: deals.stageId,
+        pipelineId: deals.pipelineId,
+        createdAt: deals.createdAt,
+      })
+      .from(deals)
+      .where(eq(deals.contactId, id))
+      .orderBy(desc(deals.createdAt)),
   ]);
 
   // undefined = sem filtro de canal — esta página mostra o histórico como
@@ -131,6 +147,19 @@ export default async function ContatoDetailPage({
     type: row.type,
     options: (row.options as { value: string; label: string }[] | null) ?? null,
   }));
+
+  const stageById = new Map(allStages.map((s) => [s.id, s]));
+  const pipelineById = new Map(allPipelines.map((p) => [p.id, p]));
+  const STATUS_BADGE = {
+    aberto: "info",
+    ganho: "success",
+    perdido: "danger",
+  } as const;
+  const STATUS_LABEL = {
+    aberto: "Aberto",
+    ganho: "Ganho",
+    perdido: "Perdido",
+  } as const;
 
   const meetingNoteItems: MeetingNoteItem[] = meetingNoteRows.map((row) => ({
     id: row.id,
@@ -231,6 +260,51 @@ export default async function ContatoDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Negócios vinculados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {contactDealRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum negócio vinculado a este contato ainda.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {contactDealRows.map((deal) => {
+                const stage = stageById.get(deal.stageId);
+                const pipeline = pipelineById.get(deal.pipelineId);
+                const value = formatCurrencyBRL(deal.value);
+                return (
+                  <li key={deal.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">{deal.title}</span>
+                        <Badge variant={STATUS_BADGE[deal.status]}>
+                          {STATUS_LABEL[deal.status]}
+                        </Badge>
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {pipeline?.name ?? "—"}
+                        {stage ? ` > ${stage.name}` : ""}
+                        {value ? ` · ${value}` : ""}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/negocios/${deal.id}`}
+                      className="flex shrink-0 items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                      Ir para negócio
+                      <ArrowRight size={14} strokeWidth={1.75} />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
