@@ -93,14 +93,27 @@ async function createRun(sequenceId: string, dealId: string): Promise<void> {
   if (!firstStep) return; // sequência sem passos — nada a agendar
 
   const now = new Date();
-  await db.insert(automationSequenceRuns).values({
-    sequenceId,
-    dealId,
-    currentStepOrder: firstStep.order,
-    status: "em_andamento",
-    startedAt: now,
-    nextStepAt: new Date(now.getTime() + firstStep.delayMinutes * MS_PER_MINUTE),
-  });
+  const [created] = await db
+    .insert(automationSequenceRuns)
+    .values({
+      sequenceId,
+      dealId,
+      currentStepOrder: firstStep.order,
+      status: "em_andamento",
+      startedAt: now,
+      nextStepAt: new Date(now.getTime() + firstStep.delayMinutes * MS_PER_MINUTE),
+    })
+    .returning();
+
+  // Primeiro passo sem atraso configurado: executa na hora, no mesmo
+  // espírito dos gatilhos imediatos (etapa/tag disparam a run na hora — ver
+  // fireEtapaSequenceTriggers/fireTagSequenceTriggers). Sem isso, mesmo um
+  // passo "sem atraso" ficava esperando a próxima varredura horária do cron
+  // (até ~1h), o que parece uma automação travada pra quem acabou de marcar
+  // o negócio ganho/perdido e esperava o passo imediato.
+  if (firstStep.delayMinutes === 0) {
+    await advanceRun(created);
+  }
 }
 
 // Chamado sincronamente por moveDealStageAction quando o negócio entra numa
@@ -401,6 +414,44 @@ async function alreadyFiredSinceLastReply(sequenceId: string, dealId: string): P
   return !newerInbound;
 }
 
+// Executa o passo atual de uma run e avança pro próximo (ou conclui, se era
+// o último) — compartilhado entre a varredura horária e a execução imediata
+// de um primeiro passo sem atraso (ver createRun).
+async function advanceRun(run: RunRow): Promise<void> {
+  const steps = await db
+    .select()
+    .from(automationSequenceSteps)
+    .where(eq(automationSequenceSteps.sequenceId, run.sequenceId))
+    .orderBy(asc(automationSequenceSteps.order));
+
+  const currentIndex = steps.findIndex((s) => s.order === run.currentStepOrder);
+  if (currentIndex === -1) {
+    await db
+      .update(automationSequenceRuns)
+      .set({ status: "concluida", nextStepAt: null })
+      .where(eq(automationSequenceRuns.id, run.id));
+    return;
+  }
+
+  await executeStep(run, steps[currentIndex]);
+
+  const nextStep = steps[currentIndex + 1];
+  if (nextStep) {
+    await db
+      .update(automationSequenceRuns)
+      .set({
+        currentStepOrder: nextStep.order,
+        nextStepAt: new Date(Date.now() + nextStep.delayMinutes * MS_PER_MINUTE),
+      })
+      .where(eq(automationSequenceRuns.id, run.id));
+  } else {
+    await db
+      .update(automationSequenceRuns)
+      .set({ status: "concluida", nextStepAt: null })
+      .where(eq(automationSequenceRuns.id, run.id));
+  }
+}
+
 // Varredura horária (mesmo cron da Etapa 13, ver /api/cron/task-automation):
 // detecta o gatilho 'sem_resposta' e avança os passos de runs vencidos.
 export async function runSequenceSweep(): Promise<{
@@ -435,39 +486,8 @@ export async function runSequenceSweep(): Promise<{
     );
 
   for (const run of dueRuns) {
-    const steps = await db
-      .select()
-      .from(automationSequenceSteps)
-      .where(eq(automationSequenceSteps.sequenceId, run.sequenceId))
-      .orderBy(asc(automationSequenceSteps.order));
-
-    const currentIndex = steps.findIndex((s) => s.order === run.currentStepOrder);
-    if (currentIndex === -1) {
-      await db
-        .update(automationSequenceRuns)
-        .set({ status: "concluida", nextStepAt: null })
-        .where(eq(automationSequenceRuns.id, run.id));
-      continue;
-    }
-
-    await executeStep(run, steps[currentIndex]);
+    await advanceRun(run);
     stepsExecuted += 1;
-
-    const nextStep = steps[currentIndex + 1];
-    if (nextStep) {
-      await db
-        .update(automationSequenceRuns)
-        .set({
-          currentStepOrder: nextStep.order,
-          nextStepAt: new Date(Date.now() + nextStep.delayMinutes * MS_PER_MINUTE),
-        })
-        .where(eq(automationSequenceRuns.id, run.id));
-    } else {
-      await db
-        .update(automationSequenceRuns)
-        .set({ status: "concluida", nextStepAt: null })
-        .where(eq(automationSequenceRuns.id, run.id));
-    }
   }
 
   return { triggered, stepsExecuted };
