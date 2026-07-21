@@ -529,9 +529,9 @@ export function AtendimentoShell({
                         {conversation.channelLabel && (
                           <Badge
                             variant="secondary"
-                            className="max-w-24 shrink truncate px-1.5 text-[10px]"
+                            className="max-w-24 shrink px-1.5 text-[10px]"
                           >
-                            {conversation.channelLabel}
+                            <span className="min-w-0 truncate">{conversation.channelLabel}</span>
                           </Badge>
                         )}
                         {conversation.isGroup && (
