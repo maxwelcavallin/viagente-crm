@@ -27,7 +27,7 @@ function ComboboxInputGroup({
   )
 }
 
-function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
+function ComboboxInput({ className, onFocus, ...props }: ComboboxPrimitive.Input.Props) {
   return (
     <ComboboxPrimitive.Input
       data-slot="combobox-input"
@@ -35,6 +35,13 @@ function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
         "h-6 w-full min-w-0 flex-1 bg-transparent text-sm whitespace-nowrap text-ellipsis outline-none placeholder:text-muted-foreground",
         className
       )}
+      // Sem isso, o texto do item já selecionado fica no input sem ficar
+      // selecionado — digitar pra buscar só insere no meio/fim dele em vez
+      // de substituir (ex: "Não mapear" + "empresa" vira "Não mapearempresa").
+      onFocus={(e) => {
+        e.target.select();
+        onFocus?.(e);
+      }}
       {...props}
     />
   )

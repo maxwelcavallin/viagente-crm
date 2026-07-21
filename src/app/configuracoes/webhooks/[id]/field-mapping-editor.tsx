@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -12,17 +11,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Combobox,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxInputGroup,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+} from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Radio } from "lucide-react";
+import { Radio, X } from "lucide-react";
 import { FieldQuickCreate } from "@/components/field-quick-create";
 import { CONTACT_SYSTEM_FIELDS, flattenPayloadPaths } from "@/lib/webhook-fields";
 import type { FieldDef } from "@/lib/custom-fields";
 import { updateFieldMappingAction } from "../actions";
 
-// Valor sentinela do select pra "digitar manualmente" — nunca colide com um
-// caminho de payload real, que sempre tem pelo menos um "." ou é uma chave
-// de nível raiz (nunca igual a essa string exata).
-const MANUAL_ENTRY = "__digitar_manualmente__";
+const IGNORE_VALUE = "__nao_mapear__";
+
+// Mesma lista de campos de destino da importação de CSV (ver buildMappingOptions
+// em import-wizard.tsx), sem os campos de negócio que o webhook de entrada não
+// usa (deal.title/value/status — webhook sempre cria negócio "aberto" com
+// título derivado do nome do contato).
+function buildTargetOptions(contactFieldDefs: FieldDef[], dealFieldDefs: FieldDef[]) {
+  return [
+    ...CONTACT_SYSTEM_FIELDS,
+    ...contactFieldDefs.map((f) => ({ key: `contact.custom.${f.key}`, label: `${f.label} (contato)` })),
+    ...dealFieldDefs.map((f) => ({ key: `deal.custom.${f.key}`, label: `${f.label} (negócio)` })),
+  ].sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
 
 function ExecutionPicker({
   executions,
@@ -63,64 +80,58 @@ function ExecutionPicker({
 }
 
 function MappingRow({
-  label,
-  value,
-  discovered,
+  path,
+  preview,
+  target,
+  comboboxItems,
+  stale,
   onChange,
+  onRemove,
 }: {
-  label: string;
-  value: string;
-  discovered: { path: string; preview: string }[];
-  onChange: (path: string) => void;
+  path: string;
+  preview: string;
+  target: string;
+  comboboxItems: { value: string; label: string }[];
+  stale: boolean;
+  onChange: (target: string) => void;
+  onRemove?: () => void;
 }) {
-  // Um caminho já salvo que não aparece no payload de referência atual (veio
-  // de outra execução, ou foi digitado antes dessa opção existir) continua
-  // selecionável — nunca lo perdemos por não bater com o payload escolhido
-  // agora.
-  const options = value && !discovered.some((d) => d.path === value)
-    ? [{ path: value, preview: "não está no payload de referência atual" }, ...discovered]
-    : discovered;
-  const isManual = value !== "" && !options.some((o) => o.path === value);
-
+  const selectedItem = comboboxItems.find((o) => o.value === target) ?? null;
   return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <Select
-        items={Object.fromEntries([
-          ["", "— não mapeado —"],
-          ...options.map((o) => [o.path, `${o.path}  (${o.preview})`]),
-          [MANUAL_ENTRY, "Digitar manualmente..."],
-        ])}
-        value={isManual ? MANUAL_ENTRY : value || ""}
-        onValueChange={(v) => {
-          if (v === MANUAL_ENTRY) {
-            onChange(" "); // valor não-vazio pra cair no modo manual abaixo, sem escolher um caminho ainda
-            return;
-          }
-          onChange(v ?? "");
-        }}
+    <div className="grid grid-cols-1 items-center gap-2 rounded-lg border border-border p-2.5 sm:grid-cols-[1fr_1fr_auto]">
+      <div className="min-w-0">
+        <p className="truncate font-mono text-sm font-medium" title={path}>
+          {path}
+        </p>
+        <p className="truncate text-xs text-muted-foreground" title={preview}>
+          {stale ? "não está no payload de referência atual" : preview}
+        </p>
+      </div>
+      <Combobox
+        items={comboboxItems}
+        value={selectedItem}
+        onValueChange={(item) => onChange(item?.value ?? IGNORE_VALUE)}
       >
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="— não mapeado —" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">— não mapeado —</SelectItem>
-          {options.map((o) => (
-            <SelectItem key={o.path} value={o.path} className="font-mono text-xs">
-              {o.path} <span className="text-muted-foreground">({o.preview})</span>
-            </SelectItem>
-          ))}
-          <SelectItem value={MANUAL_ENTRY}>Digitar manualmente...</SelectItem>
-        </SelectContent>
-      </Select>
-      {isManual && (
-        <Input
-          value={value.trim()}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="ex: answers.gasto_cartao"
-          className="font-mono text-xs"
-          autoFocus
-        />
+        <ComboboxInputGroup>
+          <ComboboxInput placeholder="Buscar campo..." />
+        </ComboboxInputGroup>
+        <ComboboxPopup>
+          <ComboboxEmpty>Nenhum campo encontrado.</ComboboxEmpty>
+          <ComboboxList>
+            {(item: { value: string; label: string }) => (
+              <ComboboxItem key={item.value} value={item}>
+                {item.label}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxPopup>
+      </Combobox>
+      {stale && onRemove ? (
+        <Button type="button" variant="ghost" size="icon" onClick={onRemove} title="Remover mapeamento">
+          <X size={16} strokeWidth={1.75} />
+        </Button>
+      ) : (
+        <div />
       )}
     </div>
   );
@@ -149,9 +160,44 @@ export function FieldMappingEditor({
     recentExecutions[0]?.id ?? null
   );
 
-  function setPath(key: string, path: string) {
+  const targetOptions = useMemo(
+    () => buildTargetOptions(contactFields, dealFields),
+    [contactFields, dealFields]
+  );
+  // Itens do combobox precisam ser objetos estáveis (mesma referência entre
+  // renders) pra o Combobox conseguir casar o "value" selecionado com o item
+  // certo da lista — ver mesma observação em import-wizard.tsx.
+  const comboboxItems = useMemo(
+    () => [
+      { value: IGNORE_VALUE, label: "Não mapear" },
+      ...targetOptions.map((o) => ({ value: o.key, label: o.label })),
+    ],
+    [targetOptions]
+  );
+
+  // O campo de destino de cada linha vem do payload que chega no webhook, não
+  // o inverso — nem todo campo customizável do CRM aparece em toda origem, e
+  // listar todos fixos na tela (como era antes) obrigava a rolar dezenas de
+  // campos irrelevantes pra essa origem específica.
+  function setTargetForPath(path: string, target: string) {
     setSaved(false);
-    setMapping((prev) => ({ ...prev, [key]: path }));
+    setMapping((prev) => {
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(next)) {
+        if (value === path) delete next[key];
+      }
+      if (target !== IGNORE_VALUE) next[target] = path;
+      return next;
+    });
+  }
+
+  function removeMapping(target: string) {
+    setSaved(false);
+    setMapping((prev) => {
+      const next = { ...prev };
+      delete next[target];
+      return next;
+    });
   }
 
   async function handleSave() {
@@ -172,8 +218,21 @@ export function FieldMappingEditor({
     () => (selectedExecution ? flattenPayloadPaths(selectedExecution.payload) : []),
     [selectedExecution]
   );
+  const discoveredPaths = useMemo(() => new Set(discovered.map((d) => d.path)), [discovered]);
+  const pathToTarget = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [key, value] of Object.entries(mapping)) {
+      if (value) map.set(value, key);
+    }
+    return map;
+  }, [mapping]);
 
-  const systemRows = CONTACT_SYSTEM_FIELDS.map((f) => ({ key: f.key, label: f.label }));
+  // Mapeamentos já salvos cujo caminho não aparece no payload de referência
+  // escolhido agora (veio de outra execução, ou o payload mudou de formato) —
+  // continuam visíveis e editáveis, nunca somem sozinhos.
+  const staleRows = Object.entries(mapping)
+    .filter(([, path]) => path && !discoveredPaths.has(path))
+    .map(([target, path]) => ({ path, target }));
 
   if (recentExecutions.length === 0) {
     return (
@@ -203,41 +262,37 @@ export function FieldMappingEditor({
         )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {systemRows.map((row) => (
+      <p className="text-sm text-muted-foreground">
+        Pra cada campo que chegou nesse payload, escolha em qual campo do CRM ele deve entrar (ou
+        deixe como &quot;Não mapear&quot;).
+      </p>
+
+      <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+        {discovered.map((field) => (
           <MappingRow
-            key={row.key}
-            label={row.label}
-            value={mapping[row.key] ?? ""}
-            discovered={discovered}
-            onChange={(path) => setPath(row.key, path)}
+            key={field.path}
+            path={field.path}
+            preview={field.preview}
+            target={pathToTarget.get(field.path) ?? IGNORE_VALUE}
+            comboboxItems={comboboxItems}
+            stale={false}
+            onChange={(target) => setTargetForPath(field.path, target)}
           />
         ))}
-        {contactFields.map((f) => {
-          const key = `contact.custom.${f.key}`;
-          return (
-            <MappingRow
-              key={key}
-              label={`${f.label} (contato)`}
-              value={mapping[key] ?? ""}
-              discovered={discovered}
-              onChange={(path) => setPath(key, path)}
-            />
-          );
-        })}
-        {dealFields.map((f) => {
-          const key = `deal.custom.${f.key}`;
-          return (
-            <MappingRow
-              key={key}
-              label={`${f.label} (negócio)`}
-              value={mapping[key] ?? ""}
-              discovered={discovered}
-              onChange={(path) => setPath(key, path)}
-            />
-          );
-        })}
+        {staleRows.map((row) => (
+          <MappingRow
+            key={row.target}
+            path={row.path}
+            preview=""
+            target={row.target}
+            comboboxItems={comboboxItems}
+            stale
+            onChange={(target) => setTargetForPath(row.path, target)}
+            onRemove={() => removeMapping(row.target)}
+          />
+        ))}
       </div>
+
       <div className="flex flex-wrap gap-4">
         <FieldQuickCreate
           entity="contact"
