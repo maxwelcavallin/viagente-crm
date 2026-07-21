@@ -901,6 +901,12 @@ export const webhookConfigs = pgTable("webhook_configs", {
   // quando essa tag específica é adicionada (ex: "Qualificado"). Ignorado
   // pelos demais eventos.
   tagId: uuid("tag_id").references(() => tags.id, { onDelete: "cascade" }),
+  // Saída: formato customizado do corpo do POST — JSON com placeholders
+  // "{{caminho}}" (ex: {{deal.title}}, {{contact.phone}}), substituídos pelos
+  // dados reais do evento na hora do disparo (ver buildOutboundBody em
+  // webhook-outbound.ts). Null = usa o formato padrão fixo (compatibilidade
+  // com todo webhook configurado antes dessa opção existir).
+  payloadTemplate: text("payload_template"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -191,6 +191,24 @@ export async function updateInboundWebhookAction(
   return { status: "success", webhookId: id };
 }
 
+// Null quando o usuário limpa o campo (volta pro formato padrão fixo — ver
+// buildOutboundBody em webhook-outbound.ts) — string vazia é tratada igual a
+// "sem customização", nunca um JSON vazio de verdade.
+export async function updatePayloadTemplateAction(
+  webhookId: string,
+  payloadTemplate: string
+): Promise<{ ok: boolean }> {
+  if (!(await requireAdmin())) return { ok: false };
+
+  await db
+    .update(webhookConfigs)
+    .set({ payloadTemplate: payloadTemplate.trim() || null })
+    .where(eq(webhookConfigs.id, webhookId));
+
+  revalidatePath(`/configuracoes/webhooks/${webhookId}`);
+  return { ok: true };
+}
+
 export async function updateFieldMappingAction(
   webhookId: string,
   mapping: Record<string, string>

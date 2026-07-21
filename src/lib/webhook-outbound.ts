@@ -36,10 +36,85 @@ async function findMatchingConfigs(
   });
 }
 
+// Resolve "deal.customFields.gasto_cartao" dentro do objeto de contexto —
+// mesma notação de ponto usada em fieldMapping (entrada), aqui pro sentido
+// contrário (montar o payload de saída em vez de ler um de entrada).
+function getByPath(source: unknown, path: string): unknown {
+  const parts = path.split(".").filter(Boolean);
+  let current: unknown = source;
+  for (const part of parts) {
+    if (current == null || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+// Substitui cada "{{caminho}}" pelo valor resolvido no contexto —
+// placeholder sozinho numa posição de valor JSON (ex: `"valor": {{deal.value}}`)
+// vira o JSON literal daquele valor (número, objeto, null…); embutido dentro
+// de uma string já entre aspas (ex: `"nome": "Oi {{contact.name}}"`) vira o
+// texto puro. Mesma convenção "{{}}" já usada nos templates de mensagem (ver
+// src/lib/templates.ts) — só que aqui o resultado final precisa ser JSON
+// válido, então placeholder ausente vira "null" em vez de string vazia.
+function fillPayloadTemplate(template: string, context: Record<string, unknown>): string {
+  // Passo 1: placeholder que É o valor inteiro entre aspas coladas, sem mais
+  // nada dentro — ex: `"email": "{{contact.email}}"`. Aqui dá pra decidir
+  // sozinho se o resultado final leva aspas (string) ou não (null/número/
+  // objeto): sem esse passo, um campo nullable (contact.email sem valor)
+  // escrito com aspas virava a STRING "null" em vez do null de verdade do
+  // JSON — o contrário do que o template quis dizer.
+  let result = template.replace(/"\{\{\s*([\w.]+)\s*\}\}"/g, (match, path: string) => {
+    const value = getByPath(context, path);
+    return value === undefined ? "null" : JSON.stringify(value);
+  });
+  // Passo 2: o que sobrou — sem aspas coladas dos dois lados, seja um valor
+  // bruto sem aspas (ex: `{{deal.value}}`) ou embutido no meio de um texto
+  // maior (ex: `"Oi {{contact.name}}"`) — sempre insere o conteúdo cru,
+  // escapado pra não quebrar a string ao redor quando for string (aspas/
+  // barra/quebra de linha do valor real).
+  result = result.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, path: string) => {
+    const value = getByPath(context, path);
+    if (value === undefined) return "null";
+    return typeof value === "string" ? JSON.stringify(value).slice(1, -1) : JSON.stringify(value);
+  });
+  return result;
+}
+
+// Null (sem template customizado) usa o formato padrão fixo; com template,
+// substitui os placeholders e valida que o resultado é JSON de verdade —
+// erro de sintaxe (parêntese/vírgula esquecido no template) vira log de erro
+// em vez de mandar lixo pro destino (ver sendOne, mesmo tratamento de falha
+// de rede/HTTP).
+function buildOutboundBody(
+  template: string | null,
+  context: Record<string, unknown>
+): { ok: true; body: unknown } | { ok: false; error: string } {
+  if (!template) return { ok: true, body: context };
+  const filled = fillPayloadTemplate(template, context);
+  try {
+    return { ok: true, body: JSON.parse(filled) };
+  } catch {
+    return { ok: false, error: "payloadTemplate não é um JSON válido depois de substituir os placeholders." };
+  }
+}
+
 async function sendOne(
   config: typeof webhookConfigs.$inferSelect,
-  body: unknown
+  context: Record<string, unknown>
 ): Promise<void> {
+  const built = buildOutboundBody(config.payloadTemplate, context);
+  if (!built.ok) {
+    await db.insert(webhookLogs).values({
+      webhookConfigId: config.id,
+      direction: "saida",
+      payload: context as object,
+      status: "erro",
+      errorMessage: built.error,
+    });
+    return;
+  }
+  const body = built.body;
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -109,7 +184,10 @@ export async function dispatchOutboundWebhooks(
       tag = row ?? null;
     }
 
-    const body = {
+    // Também é o formato padrão fixo (quando o webhook não tem
+    // payloadTemplate customizado, ver sendOne) e o conjunto de placeholders
+    // disponíveis pra quem customiza (ex: {{deal.title}}, {{contact.phone}}).
+    const context = {
       event,
       deal: {
         id: deal.id,
@@ -132,7 +210,7 @@ export async function dispatchOutboundWebhooks(
       ...(tag ? { tag } : {}),
     };
 
-    await Promise.all(configs.map((config) => sendOne(config, body)));
+    await Promise.all(configs.map((config) => sendOne(config, context)));
   } catch (error) {
     console.error("[webhook-outbound] falha inesperada ao processar evento", error);
   }

@@ -21,6 +21,7 @@ import { WebhookTagsEditor } from "./webhook-tags-editor";
 import { TestPayloadPanel } from "./test-payload-panel";
 import { LogsList, type LogRow } from "./logs-list";
 import { EditOutboundForm } from "./edit-outbound-form";
+import { PayloadTemplateEditor } from "./payload-template-editor";
 import { EditInboundForm } from "./edit-inbound-form";
 import { DeleteWebhookDialog } from "./delete-webhook-dialog";
 
@@ -176,27 +177,41 @@ export default async function WebhookDetailPage({
           </Card>
         </>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuração</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EditOutboundForm
-              webhook={{
-                id: webhook.id,
-                name: webhook.name,
-                targetUrl: webhook.targetUrl,
-                events: (webhook.events as string[] | null) ?? [],
-                pipelineId: webhook.pipelineId,
-                stageId: webhook.stageId,
-                tagId: webhook.tagId,
-              }}
-              pipelines={allPipelines}
-              stages={allStages}
-              tags={allTags}
-            />
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuração</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EditOutboundForm
+                webhook={{
+                  id: webhook.id,
+                  name: webhook.name,
+                  targetUrl: webhook.targetUrl,
+                  events: (webhook.events as string[] | null) ?? [],
+                  pipelineId: webhook.pipelineId,
+                  stageId: webhook.stageId,
+                  tagId: webhook.tagId,
+                }}
+                pipelines={allPipelines}
+                stages={allStages}
+                tags={allTags}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Formato do payload</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PayloadTemplateEditor
+                webhookId={webhook.id}
+                initialTemplate={webhook.payloadTemplate}
+              />
+            </CardContent>
+          </Card>
+        </>
       )}
 
       <Card>
