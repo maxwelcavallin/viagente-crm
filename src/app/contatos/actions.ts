@@ -15,6 +15,7 @@ import {
 import { findDuplicateContact, mergeContactsInto } from "@/lib/contact-merge";
 import { markContactRead, markContactUnread } from "@/lib/conversations";
 import { syncDealOwnerFromContact } from "@/lib/owner-distribution";
+import { normalizePhoneNumber } from "@/lib/phone";
 
 async function requireSession() {
   const session = await auth();
@@ -83,7 +84,8 @@ export async function createContactAction(
     return { status: "error", message: "Nome é obrigatório." };
   }
 
-  const normalizedPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
+  const normalizedPhone =
+    typeof phone === "string" && phone.trim() ? normalizePhoneNumber(phone) : null;
   const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
   if (!normalizedPhone && !normalizedEmail) {
     return { status: "error", message: "Informe telefone e/ou email." };
@@ -140,7 +142,8 @@ export async function updateContactAction(
     return { status: "error", message: "Nome é obrigatório." };
   }
 
-  const normalizedPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
+  const normalizedPhone =
+    typeof phone === "string" && phone.trim() ? normalizePhoneNumber(phone) : null;
   const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
   if (!normalizedPhone && !normalizedEmail) {
     return { status: "error", message: "Informe telefone e/ou email." };

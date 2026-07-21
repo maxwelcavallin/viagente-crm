@@ -4,6 +4,7 @@
 // instantâneo antes de confirmar) — mesmo problema de fronteira
 // client/server documentado em deal-format.ts / webhook-fields.ts.
 
+import { normalizePhoneNumber } from "@/lib/phone";
 import { splitTagNames } from "@/lib/tag-parse";
 
 export const STAGE_COLUMN_KEY = "_stage";
@@ -33,11 +34,11 @@ export function parseImportNumber(raw: string): string | null {
   return amount.toFixed(2);
 }
 
-// Normaliza telefone só removendo espaços/pontuação de formatação comum
-// (mantém dígitos e o "+" opcional) — mesma tolerância usada no resto do
-// app pra bater com o índice único de contacts.phone.
+// Normaliza pro formato canônico (DDI + DDD + número, ver normalizePhoneNumber
+// em lib/phone.ts) — usado na importação de CSV pra já gravar contacts.phone
+// no mesmo formato usado pelo resto do app, nunca o valor cru da planilha.
 export function normalizePhone(raw: string): string {
-  return raw.replace(/[^\d+]/g, "");
+  return normalizePhoneNumber(raw) ?? "";
 }
 
 export type DealStatus = "aberto" | "ganho" | "perdido";

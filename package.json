@@ -13,7 +13,8 @@
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "create-admin": "tsx --env-file=.env.local scripts/create-admin.ts",
     "sync-whatsapp-profiles": "tsx --env-file=.env.local scripts/sync-whatsapp-profiles.ts",
-    "seed:help": "tsx --env-file=.env.local scripts/seed-help-articles.ts"
+    "seed:help": "tsx --env-file=.env.local scripts/seed-help-articles.ts",
+    "normalize-contact-phones": "tsx --env-file=.env.local scripts/normalize-contact-phones.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",

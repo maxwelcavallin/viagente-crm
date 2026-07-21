@@ -12,6 +12,7 @@ import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
 } from "@/lib/owner-distribution";
+import { normalizePhoneNumber } from "@/lib/phone";
 import { attachTagsToContact, attachTagsToDeal } from "@/lib/tags";
 
 // Resolve um caminho tipo "answers.gasto_cartao" ou "payload.nome" dentro de
@@ -136,7 +137,8 @@ export async function processInboundPayload(
     const stringValue = String(value);
 
     if (mappingKey === "contact.name") contactFields.name = stringValue;
-    else if (mappingKey === "contact.phone") contactFields.phone = stringValue;
+    else if (mappingKey === "contact.phone")
+      contactFields.phone = normalizePhoneNumber(stringValue) ?? undefined;
     else if (mappingKey === "contact.email") contactFields.email = stringValue;
     else if (mappingKey.startsWith("contact.custom."))
       contactCustomFields[mappingKey.replace("contact.custom.", "")] = stringValue;

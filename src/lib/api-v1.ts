@@ -25,6 +25,7 @@ import {
   resolveDistributedOwner,
   syncContactOwnerFromDeal,
 } from "@/lib/owner-distribution";
+import { normalizePhoneNumber } from "@/lib/phone";
 import { sendTextMessage } from "@/lib/send-message";
 import { fireTagAddedAutomations } from "@/lib/task-automation";
 import { canViewOwnedRecord, ownerVisibilityFilter } from "@/lib/visibility";
@@ -529,7 +530,7 @@ export async function createContactForApiKey(
 ): Promise<ApiResult<{ id: string }>> {
   if (!params.name.trim()) return { ok: false, status: 400, error: "name é obrigatório." };
 
-  const normalizedPhone = params.phone?.trim() || null;
+  const normalizedPhone = params.phone?.trim() ? normalizePhoneNumber(params.phone) : null;
   const normalizedEmail = params.email?.trim() || null;
   if (!normalizedPhone && !normalizedEmail) {
     return { ok: false, status: 400, error: "Informe phone e/ou email." };
@@ -575,7 +576,12 @@ export async function updateContactForApiKey(
     return { ok: false, status: 404, error: "Contato não encontrado." };
   }
 
-  const nextPhone = params.phone !== undefined ? params.phone?.trim() || null : current.phone;
+  const nextPhone =
+    params.phone !== undefined
+      ? params.phone?.trim()
+        ? normalizePhoneNumber(params.phone)
+        : null
+      : current.phone;
   const nextEmail = params.email !== undefined ? params.email?.trim() || null : current.email;
   if (!nextPhone && !nextEmail) {
     return { ok: false, status: 400, error: "Contato precisa ter phone e/ou email." };

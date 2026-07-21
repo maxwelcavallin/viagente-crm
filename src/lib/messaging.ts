@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, deals } from "@/db/schema";
+import { normalizePhoneNumber } from "@/lib/phone";
 
 // "phone" pode vir mascarado como um id de privacidade do WhatsApp (formato
 // "<numero>@lid") em vez do número real — acontece sobretudo em mensagens
@@ -16,6 +17,12 @@ export async function findOrCreateContactByPhone(
   info?: { isGroup?: boolean; avatarUrl?: string; whatsappLid?: string | null }
 ): Promise<{ id: string }> {
   const whatsappLid = info?.whatsappLid ?? null;
+  // Grupo do WhatsApp: "phone" é o id do grupo (formato "<id>-group"), não um
+  // telefone real — nunca passa pela normalização de DDI, senão a limpeza de
+  // dígitos corrompe o id. Conversa individual sempre grava no formato
+  // canônico (ver normalizePhoneNumber), pra nunca haver mismatch com o que a
+  // Z-API espera ao enviar mensagem.
+  phone = info?.isGroup ? phone : (normalizePhoneNumber(phone) ?? phone);
 
   // Prioriza o lid quando disponível — é a identidade mais estável (ver
   // comentário acima); só cai pro telefone se nenhum contato já tiver esse
