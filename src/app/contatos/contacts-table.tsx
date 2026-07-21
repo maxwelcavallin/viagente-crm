@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Search, TriangleAlert, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
@@ -29,50 +27,25 @@ export type ContactRow = ContactData & {
   duplicateName: string | null;
 };
 
-function matchesSearch(contact: ContactRow, term: string): boolean {
-  if (!term) return true;
-  const normalized = term.toLowerCase();
-  return (
-    contact.name.toLowerCase().includes(normalized) ||
-    (contact.phone ?? "").toLowerCase().includes(normalized) ||
-    (contact.email ?? "").toLowerCase().includes(normalized)
-  );
-}
-
 export function ContactsTable({
   contacts,
   fieldDefinitions,
   visibleFieldDefs,
   allTags,
+  hasAnyFilter,
 }: {
   contacts: ContactRow[];
   fieldDefinitions: FieldDef[];
   visibleFieldDefs: FieldDef[];
   allTags: TagOption[];
+  // Busca/filtros agora rodam no servidor (ver page.tsx) — só pra escolher
+  // a mensagem certa quando a página atual vem vazia (filtro sem resultado
+  // vs. nenhum contato cadastrado ainda).
+  hasAnyFilter: boolean;
 }) {
-  const [search, setSearch] = useState("");
-
-  const filtered = useMemo(
-    () => contacts.filter((c) => matchesSearch(c, search)),
-    [contacts, search]
-  );
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
-          <Search
-            size={16}
-            strokeWidth={1.75}
-            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, telefone ou email..."
-            className="h-9 pl-8"
-          />
-        </div>
+      <div className="flex justify-end">
         <ContactFormDialog
           mode="create"
           fieldDefinitions={fieldDefinitions}
@@ -88,17 +61,19 @@ export function ContactsTable({
       </div>
 
       {contacts.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Nenhum contato cadastrado"
-          description="Crie o primeiro contato pelo botão acima."
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title="Nenhum contato encontrado"
-          description="Tente buscar por outro nome, telefone ou email."
-        />
+        hasAnyFilter ? (
+          <EmptyState
+            icon={Search}
+            title="Nenhum contato encontrado"
+            description="Tente ajustar a busca ou os filtros acima."
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="Nenhum contato cadastrado"
+            description="Crie o primeiro contato pelo botão acima."
+          />
+        )
       ) : (
         <Table>
           <TableHeader>
@@ -114,7 +89,7 @@ export function ContactsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((contact) => (
+            {contacts.map((contact) => (
               <TableRow key={contact.id}>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
