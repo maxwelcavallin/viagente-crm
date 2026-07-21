@@ -69,6 +69,13 @@ export const messageStatusEnum = pgEnum("message_status", [
   "lido",
   "falhou",
 ]);
+// "everyone" = apagou pro contato também (recall real no WhatsApp); "me" =
+// só saiu do nosso lado (Z-API deleteForMe), o contato ainda vê a mensagem
+// no aparelho dele — ver deleteWhatsappMessage em lib/send-message.ts.
+export const messageDeleteScopeEnum = pgEnum("message_delete_scope", [
+  "everyone",
+  "me",
+]);
 export const messageChannelTypeEnum = pgEnum("message_channel_type", [
   "whatsapp",
   "instagram",
@@ -792,6 +799,15 @@ export const messages = pgTable(
     // pra chave completa (id, created_at), igual à PK da tabela.
     replyToMessageId: uuid("reply_to_message_id"),
     replyToCreatedAt: timestamp("reply_to_created_at", { withTimezone: true }),
+    // Editar/apagar (ver lib/send-message.ts editWhatsappMessage/
+    // deleteWhatsappMessage) só existe pro WhatsApp (Z-API), só pra mensagem
+    // que nós mandamos (direction='saida'). "content"/"mediaUrl" nunca são
+    // apagados do banco quando deletedAt é preenchido — a tela esconde o
+    // conteúdo real e mostra um aviso no lugar (ver message-list.tsx),
+    // preservando o histórico original pra auditoria.
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedScope: messageDeleteScopeEnum("deleted_scope"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

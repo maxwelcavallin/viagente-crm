@@ -120,6 +120,71 @@ export async function sendZapiText(
   return { messageId: data.messageId };
 }
 
+// Edita uma mensagem de texto já enviada — mesmo endpoint de envio
+// (send-text), só com "editMessageId" apontando pro messageId original
+// (developer.z-api.io/message/send-text). A Z-API exige o webhook
+// configurado pra essa função funcionar — já é o caso de todo canal
+// cadastrado no CRM (ver create-channel-form.tsx). Só funciona pra mensagem
+// de texto e só pra quem a mandou (não dá pra editar mensagem recebida).
+export async function editZapiText(
+  creds: ZapiChannelCredentials,
+  phone: string,
+  editMessageId: string,
+  message: string
+): Promise<{ messageId: string }> {
+  const res = await fetch(`${baseUrl(creds)}/send-text`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Client-Token": creds.zapiClientToken,
+    },
+    body: JSON.stringify({ phone, message, editMessageId }),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Falha ao editar mensagem via Z-API (status ${res.status}): ${text}`
+    );
+  }
+
+  const data = (await res.json()) as { messageId?: string };
+  if (!data.messageId) {
+    throw new Error("Z-API não retornou messageId na resposta de edição");
+  }
+
+  return { messageId: data.messageId };
+}
+
+// Apaga uma mensagem já enviada — developer.z-api.io/message/delete-message.
+// "owner: true" sempre (só apagamos mensagem que nós mesmos mandamos, nunca
+// recebida). "deleteForMe": true apaga só do nosso lado (o contato ainda vê
+// no aparelho dele); omitido/false apaga pra todo mundo (recall real do
+// WhatsApp).
+export async function deleteZapiMessage(
+  creds: ZapiChannelCredentials,
+  phone: string,
+  messageId: string,
+  options?: { deleteForMe?: boolean }
+): Promise<void> {
+  const params = new URLSearchParams({ messageId, phone, owner: "true" });
+  if (options?.deleteForMe) params.set("deleteForMe", "true");
+
+  const res = await fetch(`${baseUrl(creds)}/messages?${params.toString()}`, {
+    method: "DELETE",
+    headers: { "Client-Token": creds.zapiClientToken },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Falha ao apagar mensagem via Z-API (status ${res.status}): ${text}`
+    );
+  }
+}
+
 async function postZapiMedia(
   creds: ZapiChannelCredentials,
   path: string,

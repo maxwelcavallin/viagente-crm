@@ -8,9 +8,14 @@ import type { ThreadMessage } from "@/lib/conversations";
 // Mensagem chega da API com datas serializadas em string (JSON) — reconverte
 // pra Date antes de guardar no state, mesmo formato que o server component
 // já entrega na carga inicial (ver ThreadMessage).
-type RawThreadMessage = Omit<ThreadMessage, "createdAt" | "replyToCreatedAt"> & {
+type RawThreadMessage = Omit<
+  ThreadMessage,
+  "createdAt" | "replyToCreatedAt" | "editedAt" | "deletedAt"
+> & {
   createdAt: string;
   replyToCreatedAt: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
 };
 
 function toThreadMessage(raw: RawThreadMessage): ThreadMessage {
@@ -18,6 +23,8 @@ function toThreadMessage(raw: RawThreadMessage): ThreadMessage {
     ...raw,
     createdAt: new Date(raw.createdAt),
     replyToCreatedAt: raw.replyToCreatedAt ? new Date(raw.replyToCreatedAt) : null,
+    editedAt: raw.editedAt ? new Date(raw.editedAt) : null,
+    deletedAt: raw.deletedAt ? new Date(raw.deletedAt) : null,
   };
 }
 

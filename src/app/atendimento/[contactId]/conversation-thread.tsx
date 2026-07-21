@@ -265,6 +265,7 @@ export function ConversationThread({
           favoritesOnly={showFavoritesOnly}
           onReply={setReplyingTo}
           isGroup={isGroup}
+          canEditDelete
         />
       </div>
 

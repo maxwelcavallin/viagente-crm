@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, instagramChannels, messages, whatsappChannels } from "@/db/schema";
 import { decryptCredential } from "@/lib/credentials-crypto";
@@ -10,6 +10,8 @@ import {
   sendInstagramText,
 } from "@/lib/instagram-graph";
 import {
+  deleteZapiMessage,
+  editZapiText,
   sendZapiAudio,
   sendZapiDocument,
   sendZapiImage,
@@ -359,6 +361,140 @@ export async function sendTemplateStyledMessage(
     });
     if (!mediaResult.ok) return { ok: false, error: mediaResult.error };
   }
+
+  return { ok: true };
+}
+
+export type EditDeleteMessageResult = { ok: true } | { ok: false; error: string };
+
+// Carrega o essencial pra editar/apagar uma mensagem via Z-API — sempre pelo
+// par (id, createdAt): messages é particionada por created_at, então
+// qualquer update precisa dos dois pra podar pra partição certa (mesmo
+// padrão de /api/messages/favorite).
+async function loadEditableMessage(messageId: string, createdAt: Date) {
+  const [message] = await db
+    .select({
+      id: messages.id,
+      createdAt: messages.createdAt,
+      contactId: messages.contactId,
+      channelId: messages.channelId,
+      channelType: messages.channelType,
+      direction: messages.direction,
+      type: messages.type,
+      externalMessageId: messages.externalMessageId,
+      deletedAt: messages.deletedAt,
+    })
+    .from(messages)
+    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)))
+    .limit(1);
+  return message;
+}
+
+// Editar/apagar só existe pro WhatsApp (Z-API) e só pra mensagem que nós
+// mesmos mandamos — não dá pra editar/apagar mensagem recebida do contato,
+// nem mensagem de Instagram (Graph API não oferece isso).
+function assertEditableWhatsappMessage(
+  message: Awaited<ReturnType<typeof loadEditableMessage>>
+): { ok: true } | { ok: false; error: string } {
+  if (!message) return { ok: false, error: "Mensagem não encontrada" };
+  if (message.direction !== "saida") {
+    return { ok: false, error: "Só é possível editar/apagar mensagens enviadas por nós" };
+  }
+  if (message.channelType !== "whatsapp") {
+    return { ok: false, error: "Editar/apagar só é suportado no WhatsApp" };
+  }
+  if (message.deletedAt) return { ok: false, error: "Mensagem já apagada" };
+  if (!message.channelId || !message.externalMessageId) {
+    return { ok: false, error: "Mensagem sem canal ou id externo — não é possível editar/apagar" };
+  }
+  return { ok: true };
+}
+
+async function loadWhatsappSendContext(channelId: string, contactId: string) {
+  const [channel] = await db
+    .select()
+    .from(whatsappChannels)
+    .where(eq(whatsappChannels.id, channelId))
+    .limit(1);
+  if (!channel) return { ok: false as const, error: "Canal não encontrado" };
+
+  const [contact] = await db
+    .select({ phone: contacts.phone })
+    .from(contacts)
+    .where(eq(contacts.id, contactId))
+    .limit(1);
+  if (!contact?.phone) return { ok: false as const, error: "Contato não tem telefone (WhatsApp)" };
+
+  return {
+    ok: true as const,
+    phone: contact.phone,
+    creds: {
+      zapiInstanceId: channel.zapiInstanceId,
+      zapiToken: decryptCredential(channel.zapiToken),
+      zapiClientToken: decryptCredential(channel.zapiClientToken),
+    },
+  };
+}
+
+// Só mensagem de texto — send-text (via editMessageId) é a única forma que a
+// Z-API oferece de editar, não existe equivalente pra legenda de mídia.
+export async function editWhatsappMessage(
+  messageId: string,
+  createdAt: Date,
+  newContent: string
+): Promise<EditDeleteMessageResult> {
+  const message = await loadEditableMessage(messageId, createdAt);
+  const check = assertEditableWhatsappMessage(message);
+  if (!check.ok) return check;
+  if (message!.type !== "texto") {
+    return { ok: false, error: "Só é possível editar mensagens de texto" };
+  }
+
+  const context = await loadWhatsappSendContext(message!.channelId!, message!.contactId);
+  if (!context.ok) return { ok: false, error: context.error };
+
+  try {
+    await editZapiText(context.creds, context.phone, message!.externalMessageId!, newContent);
+  } catch (error) {
+    console.error("[message-edit] falha ao editar via Z-API", error);
+    return { ok: false, error: "Falha ao editar mensagem no WhatsApp" };
+  }
+
+  await db
+    .update(messages)
+    .set({ content: newContent, editedAt: new Date() })
+    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)));
+
+  return { ok: true };
+}
+
+export async function deleteWhatsappMessage(
+  messageId: string,
+  createdAt: Date,
+  scope: "me" | "everyone"
+): Promise<EditDeleteMessageResult> {
+  const message = await loadEditableMessage(messageId, createdAt);
+  const check = assertEditableWhatsappMessage(message);
+  if (!check.ok) return check;
+
+  const context = await loadWhatsappSendContext(message!.channelId!, message!.contactId);
+  if (!context.ok) return { ok: false, error: context.error };
+
+  try {
+    await deleteZapiMessage(context.creds, context.phone, message!.externalMessageId!, {
+      deleteForMe: scope === "me",
+    });
+  } catch (error) {
+    console.error("[message-delete] falha ao apagar via Z-API", error);
+    return { ok: false, error: "Falha ao apagar mensagem no WhatsApp" };
+  }
+
+  // Nunca apaga content/mediaUrl do banco — só marca como apagada (ver
+  // comentário no schema). A tela esconde o conteúdo e mostra um aviso.
+  await db
+    .update(messages)
+    .set({ deletedAt: new Date(), deletedScope: scope })
+    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)));
 
   return { ok: true };
 }

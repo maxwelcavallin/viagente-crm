@@ -204,6 +204,9 @@ export type ThreadMessage = {
   senderName: string | null;
   senderPhone: string | null;
   senderAvatarUrl: string | null;
+  editedAt: Date | null;
+  deletedAt: Date | null;
+  deletedScope: "everyone" | "me" | null;
 };
 
 // Base compartilhada por getThread e getThreadPage — mesmas colunas/joins,
@@ -229,6 +232,9 @@ function threadBaseQuery() {
       senderName: messages.senderName,
       senderPhone: messages.senderPhone,
       senderAvatarUrl: messages.senderAvatarUrl,
+      editedAt: messages.editedAt,
+      deletedAt: messages.deletedAt,
+      deletedScope: messages.deletedScope,
     })
     .from(messages)
     .leftJoin(whatsappChannels, eq(messages.channelId, whatsappChannels.id))

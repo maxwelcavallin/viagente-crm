@@ -6,12 +6,22 @@ import {
   CheckCheck,
   Download,
   Maximize2,
+  MoreVertical,
+  Pencil,
   Reply,
   Star,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, initialOf } from "@/lib/utils";
 import type { ThreadMessage } from "@/lib/conversations";
@@ -93,6 +103,153 @@ function ReplyButton({ onClick }: { onClick: () => void }) {
     >
       <Reply size={13} strokeWidth={1.75} />
     </button>
+  );
+}
+
+// Override local (edição/exclusão) aplicado por cima da mensagem vinda do
+// servidor — mesmo padrão do "overrides" de favorito, mas guardando o
+// resultado inteiro em vez de só um booleano, já que edição/exclusão mudam
+// mais de um campo.
+type ContentOverride = {
+  content?: string | null;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  deletedScope?: "everyone" | "me" | null;
+};
+
+function EditMessageForm({
+  message,
+  onSaved,
+  onCancel,
+}: {
+  message: ThreadMessage;
+  onSaved: (content: string, editedAt: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(message.content ?? "");
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === message.content) {
+      onCancel();
+      return;
+    }
+    setIsPending(true);
+    setError(null);
+    const res = await fetch("/api/messages/edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: message.id,
+        createdAt: message.createdAt.toISOString(),
+        content: trimmed,
+      }),
+    });
+    setIsPending(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Falha ao editar mensagem.");
+      return;
+    }
+    onSaved(trimmed, new Date().toISOString());
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <textarea
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            void handleSave();
+          }
+          if (e.key === "Escape") onCancel();
+        }}
+        rows={2}
+        className="min-h-[40px] w-full rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+      />
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" disabled={isPending} onClick={handleSave}>
+          {isPending ? "Salvando..." : "Salvar"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Editar mensagem"
+      className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <Pencil size={13} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+function DeleteMessageMenu({
+  message,
+  onDeleted,
+}: {
+  message: ThreadMessage;
+  onDeleted: (scope: "everyone" | "me", deletedAt: string) => void;
+}) {
+  async function handleDelete(scope: "everyone" | "me") {
+    const res = await fetch("/api/messages/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: message.id,
+        createdAt: message.createdAt.toISOString(),
+        scope,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Falha ao apagar mensagem.");
+      return;
+    }
+    onDeleted(scope, new Date().toISOString());
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Apagar mensagem"
+            className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+          />
+        }
+      >
+        <MoreVertical size={13} strokeWidth={1.75} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleDelete("me")}>
+          <Trash2 size={13} strokeWidth={1.75} />
+          Apagar pra mim
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => handleDelete("everyone")}
+          className="text-destructive"
+        >
+          <Trash2 size={13} strokeWidth={1.75} />
+          Apagar pra todos
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -337,14 +494,21 @@ export function MessageList({
   favoritesOnly = false,
   onReply,
   isGroup = false,
+  // Editar/apagar só faz sentido no Atendimento (conversa ao vivo) — a
+  // referência mesclada da página do negócio (deal-conversation-card.tsx)
+  // não passa essa prop, então fica read-only lá.
+  canEditDelete = false,
 }: {
   messages: ThreadMessage[];
   emptyMessage?: string;
   favoritesOnly?: boolean;
   onReply?: (message: ThreadMessage) => void;
   isGroup?: boolean;
+  canEditDelete?: boolean;
 }) {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [contentOverrides, setContentOverrides] = useState<Record<string, ContentOverride>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function isFavorite(message: ThreadMessage): boolean {
     return overrides[message.id] ?? message.isFavorite;
@@ -352,6 +516,29 @@ export function MessageList({
 
   function handleToggle(id: string, next: boolean) {
     setOverrides((prev) => ({ ...prev, [id]: next }));
+  }
+
+  function effectiveMessage(message: ThreadMessage): ThreadMessage {
+    const override = contentOverrides[message.id];
+    if (!override) return message;
+    return {
+      ...message,
+      content: override.content !== undefined ? override.content : message.content,
+      editedAt:
+        override.editedAt !== undefined
+          ? override.editedAt
+            ? new Date(override.editedAt)
+            : null
+          : message.editedAt,
+      deletedAt:
+        override.deletedAt !== undefined
+          ? override.deletedAt
+            ? new Date(override.deletedAt)
+            : null
+          : message.deletedAt,
+      deletedScope:
+        override.deletedScope !== undefined ? override.deletedScope : message.deletedScope,
+    };
   }
 
   const visibleMessages = favoritesOnly
@@ -370,7 +557,8 @@ export function MessageList({
 
   return (
     <div className="space-y-3">
-      {visibleMessages.map((message, index) => {
+      {visibleMessages.map((rawMessage, index) => {
+        const message = effectiveMessage(rawMessage);
         const senderKey = message.senderPhone ?? message.senderName ?? "";
         const previous = index > 0 ? visibleMessages[index - 1] : null;
         const previousSenderKey = previous
@@ -381,6 +569,11 @@ export function MessageList({
           message.direction === "entrada" &&
           Boolean(message.senderName) &&
           (previous?.direction !== "entrada" || previousSenderKey !== senderKey);
+        const isDeleted = Boolean(message.deletedAt);
+        const isEditing = editingId === message.id;
+        const canEdit =
+          canEditDelete && message.direction === "saida" && message.type === "texto" && !isDeleted;
+        const canDelete = canEditDelete && message.direction === "saida" && !isDeleted;
 
         return (
         <div
@@ -408,30 +601,70 @@ export function MessageList({
                 {message.senderName}
               </p>
             )}
-            {message.replyTo && message.replyToMessageId && (
-              <ReplyQuoteCard
-                replyTo={message.replyTo}
-                onClick={() => scrollToMessage(message.replyToMessageId!)}
-              />
-            )}
-            {message.type === "texto" ? (
-              <p className="break-words whitespace-pre-wrap">{message.content}</p>
-            ) : (
-              <MessageMedia message={message} />
-            )}
-            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <FavoriteToggle
+            {isDeleted ? (
+              <p className="flex items-center gap-1.5 text-muted-foreground italic">
+                <Trash2 size={13} strokeWidth={1.75} className="shrink-0" />
+                {message.deletedScope === "me"
+                  ? "Você apagou esta mensagem (o contato ainda vê no aparelho dele)."
+                  : "Você apagou esta mensagem."}
+              </p>
+            ) : isEditing ? (
+              <EditMessageForm
                 message={message}
-                isFavorite={isFavorite(message)}
-                onToggle={handleToggle}
+                onCancel={() => setEditingId(null)}
+                onSaved={(content, editedAt) => {
+                  setContentOverrides((prev) => ({
+                    ...prev,
+                    [message.id]: { ...prev[message.id], content, editedAt },
+                  }));
+                  setEditingId(null);
+                }}
               />
-              {onReply && <ReplyButton onClick={() => onReply(message)} />}
-              {message.channelLabel && <span>{message.channelLabel}</span>}
-              <span>{formatTimestamp(message.createdAt)}</span>
-              {message.direction === "saida" && (
-                <StatusTick status={message.status} />
-              )}
-            </div>
+            ) : (
+              <>
+                {message.replyTo && message.replyToMessageId && (
+                  <ReplyQuoteCard
+                    replyTo={message.replyTo}
+                    onClick={() => scrollToMessage(message.replyToMessageId!)}
+                  />
+                )}
+                {message.type === "texto" ? (
+                  <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                ) : (
+                  <MessageMedia message={message} />
+                )}
+              </>
+            )}
+            {!isEditing && (
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                {!isDeleted && (
+                  <FavoriteToggle
+                    message={message}
+                    isFavorite={isFavorite(message)}
+                    onToggle={handleToggle}
+                  />
+                )}
+                {!isDeleted && onReply && <ReplyButton onClick={() => onReply(message)} />}
+                {canEdit && <EditButton onClick={() => setEditingId(message.id)} />}
+                {canDelete && (
+                  <DeleteMessageMenu
+                    message={message}
+                    onDeleted={(scope, deletedAt) => {
+                      setContentOverrides((prev) => ({
+                        ...prev,
+                        [message.id]: { ...prev[message.id], deletedAt, deletedScope: scope },
+                      }));
+                    }}
+                  />
+                )}
+                {!isDeleted && message.channelLabel && <span>{message.channelLabel}</span>}
+                {!isDeleted && message.editedAt && <span>(editado)</span>}
+                <span>{formatTimestamp(message.createdAt)}</span>
+                {!isDeleted && message.direction === "saida" && (
+                  <StatusTick status={message.status} />
+                )}
+              </div>
+            )}
           </div>
         </div>
         );
