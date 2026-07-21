@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Workflow } from "lucide-react";
+import { Check, Plus, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { MarkLostDialog } from "@/components/mark-lost-dialog";
 import { formatCurrencyBRL } from "@/lib/deal-format";
+import { cn } from "@/lib/utils";
 import {
   bulkAddTagAction,
   bulkDeleteDealsAction,
@@ -198,6 +199,28 @@ export function KanbanBoard({
     setSelectedDealIds(new Set());
   }
 
+  // "Todos" respeita os filtros ativos (DealFiltersBar) — seleciona só o que
+  // está de fato visível no board, igual ao padrão de outras telas com
+  // seleção em massa (ver AtendimentoShell).
+  const allFilteredSelected =
+    filteredDeals.length > 0 && filteredDeals.every((d) => selectedDealIds.has(d.id));
+
+  function toggleSelectAll() {
+    setSelectedDealIds(allFilteredSelected ? new Set() : new Set(filteredDeals.map((d) => d.id)));
+  }
+
+  function toggleSelectStage(stageDealIds: string[]) {
+    const allSelected = stageDealIds.length > 0 && stageDealIds.every((id) => selectedDealIds.has(id));
+    setSelectedDealIds((prev) => {
+      const next = new Set(prev);
+      for (const id of stageDealIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
   async function handleBulkMoveStage(stageId: string) {
     const ids = Array.from(selectedDealIds);
     setDeals((prev) =>
@@ -375,13 +398,34 @@ export function KanbanBoard({
         />
       </div>
 
-      <DealFiltersBar
-        filters={filters}
-        onChange={setFilters}
-        owners={formProps.owners}
-        allTags={formProps.allTags}
-        currentUserId={formProps.currentUserId}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <DealFiltersBar
+          filters={filters}
+          onChange={setFilters}
+          owners={formProps.owners}
+          allTags={formProps.allTags}
+          currentUserId={formProps.currentUserId}
+        />
+        {filteredDeals.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <span
+              className={cn(
+                "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+                allFilteredSelected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input"
+              )}
+            >
+              {allFilteredSelected && <Check size={11} strokeWidth={2.5} />}
+            </span>
+            {allFilteredSelected ? "Limpar seleção" : "Selecionar todos"}
+          </button>
+        )}
+      </div>
 
       {selectedDealIds.size > 0 && (
         <BulkActionsBar
@@ -451,8 +495,31 @@ export function KanbanBoard({
                 }
               >
                 <div className="flex items-baseline justify-between rounded-lg bg-secondary px-3 py-2">
-                  <span className="text-sm font-semibold">{stage.name}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    {stageDeals.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectStage(stageDeals.map((d) => d.id))}
+                        aria-label={
+                          stageDeals.every((d) => selectedDealIds.has(d.id))
+                            ? `Remover todos de "${stage.name}" da seleção`
+                            : `Selecionar todos de "${stage.name}"`
+                        }
+                        className={cn(
+                          "flex size-4 shrink-0 items-center justify-center self-center rounded border transition-colors",
+                          stageDeals.every((d) => selectedDealIds.has(d.id))
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input hover:border-primary/60"
+                        )}
+                      >
+                        {stageDeals.every((d) => selectedDealIds.has(d.id)) && (
+                          <Check size={11} strokeWidth={2.5} />
+                        )}
+                      </button>
+                    )}
+                    <span className="truncate text-sm font-semibold">{stage.name}</span>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {stageDeals.length} · {formatCurrencyBRL(sum.toFixed(2))}
                   </span>
                 </div>
