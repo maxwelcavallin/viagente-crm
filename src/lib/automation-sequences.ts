@@ -126,17 +126,27 @@ export async function fireEtapaSequenceTriggers(dealId: string, stageId: string)
 
 // Chamado por setDealStatusAction (ganho) e setDealLostAction (perdido) —
 // mesmo instante em que os webhooks de saída negocio_ganho/negocio_perdido
-// já disparavam (ver dispatchOutboundWebhooks nesses call sites). Vale pra
-// qualquer negócio/pipeline, sem escopo adicional — diferente do gatilho
-// "etapa", que é preso a uma etapa específica.
+// já disparavam (ver dispatchOutboundWebhooks nesses call sites). Diferente
+// do gatilho "etapa" (que já sabe a pipeline via triggerStageId), esses dois
+// gatilhos exigem triggerPipelineId explícito — só dispara pro negócio
+// ganho/perdido daquela pipeline específica, nunca de qualquer uma.
 export async function fireStatusSequenceTriggers(
   dealId: string,
   status: "ganho" | "perdido"
 ): Promise<void> {
+  const [deal] = await db.select({ pipelineId: deals.pipelineId }).from(deals).where(eq(deals.id, dealId)).limit(1);
+  if (!deal) return;
+
   const sequences = await db
     .select()
     .from(automationSequences)
-    .where(and(eq(automationSequences.active, true), eq(automationSequences.triggerType, status)));
+    .where(
+      and(
+        eq(automationSequences.active, true),
+        eq(automationSequences.triggerType, status),
+        eq(automationSequences.triggerPipelineId, deal.pipelineId)
+      )
+    );
 
   for (const seq of sequences) {
     if (!(await conditionMatches(dealId, seq.conditions as SequenceCondition))) continue;

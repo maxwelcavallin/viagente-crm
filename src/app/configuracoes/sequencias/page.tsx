@@ -16,7 +16,7 @@ import { SequencesList, type SequenceRow } from "./sequences-list";
 export const dynamic = "force-dynamic";
 
 export default async function SequenciasPage() {
-  const [sequenceRows, stepRows, stageRows, allTags, templates, channels, dealFieldDefRows] =
+  const [sequenceRows, stepRows, stageRows, pipelineRows, allTags, templates, channels, dealFieldDefRows] =
     await Promise.all([
       db.select().from(automationSequences).orderBy(asc(automationSequences.createdAt)),
       db.select().from(automationSequenceSteps).orderBy(asc(automationSequenceSteps.order)),
@@ -30,6 +30,7 @@ export default async function SequenciasPage() {
         .from(stages)
         .innerJoin(pipelines, eq(stages.pipelineId, pipelines.id))
         .orderBy(asc(pipelines.order), asc(stages.order)),
+      db.select({ id: pipelines.id, name: pipelines.name }).from(pipelines).orderBy(asc(pipelines.order)),
       db.select({ id: tags.id, name: tags.name }).from(tags).orderBy(asc(tags.name)),
       db.select({ id: messageTemplates.id, name: messageTemplates.name }).from(messageTemplates),
       db.select({ id: whatsappChannels.id, label: whatsappChannels.label }).from(whatsappChannels),
@@ -54,6 +55,7 @@ export default async function SequenciasPage() {
     triggerType: seq.triggerType,
     triggerStageId: seq.triggerStageId,
     triggerTagId: seq.triggerTagId,
+    triggerPipelineId: seq.triggerPipelineId,
     noResponseDays: seq.noResponseDays,
     conditions: seq.conditions,
     steps: (stepsBySequence.get(seq.id) ?? []).map((s) => ({
@@ -96,6 +98,7 @@ export default async function SequenciasPage() {
           <SequencesList
             sequences={sequences}
             stages={stageRows}
+            pipelines={pipelineRows}
             allTags={allTags}
             templates={templates}
             channels={channels}

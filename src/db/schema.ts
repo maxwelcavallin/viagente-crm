@@ -1122,6 +1122,13 @@ export const automationSequences = pgTable("automation_sequences", {
   triggerTagId: uuid("trigger_tag_id").references(() => tags.id, {
     onDelete: "cascade",
   }),
+  // Só usado quando triggerType='ganho'|'perdido' — esses dois gatilhos não
+  // têm uma etapa pra herdar a pipeline (diferente de 'etapa', que já sabe
+  // a pipeline via triggerStageId), então precisam da própria pipeline
+  // explícita pra não disparar pra negócio ganho/perdido em qualquer uma.
+  triggerPipelineId: uuid("trigger_pipeline_id").references(() => pipelines.id, {
+    onDelete: "cascade",
+  }),
   // Só usado quando triggerType='sem_resposta'. Em dias (não minutos) —
   // diferente do delay entre passos, esse número tende a ser falado em dias
   // corridos pelo usuário ("5 dias sem resposta"), sem necessidade de

@@ -826,6 +826,7 @@ type SequenceInput = {
   triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId?: string | null;
   triggerTagId?: string | null;
+  triggerPipelineId?: string | null;
   noResponseDays?: number | null;
   conditions?: SequenceConditionInput;
   steps: SequenceStepInput[];
@@ -835,6 +836,12 @@ function validateSequenceInput(input: SequenceInput): { error: string } | null {
   if (!input.name.trim()) return { error: "name é obrigatório." };
   if (input.triggerType === "etapa" && !input.triggerStageId) return { error: "triggerStageId é obrigatório para triggerType='etapa'." };
   if (input.triggerType === "tag" && !input.triggerTagId) return { error: "triggerTagId é obrigatório para triggerType='tag'." };
+  if (
+    (input.triggerType === "ganho" || input.triggerType === "perdido") &&
+    !input.triggerPipelineId
+  ) {
+    return { error: "triggerPipelineId é obrigatório para triggerType='ganho'|'perdido'." };
+  }
   if (input.triggerType === "sem_resposta" && (!input.noResponseDays || input.noResponseDays <= 0)) {
     return { error: "noResponseDays (>0) é obrigatório para triggerType='sem_resposta'." };
   }
@@ -891,6 +898,10 @@ export async function createAutomationSequenceForApiKey(
       triggerType: params.triggerType,
       triggerStageId: params.triggerType === "etapa" ? (params.triggerStageId ?? null) : null,
       triggerTagId: params.triggerType === "tag" ? (params.triggerTagId ?? null) : null,
+      triggerPipelineId:
+        params.triggerType === "ganho" || params.triggerType === "perdido"
+          ? (params.triggerPipelineId ?? null)
+          : null,
       noResponseDays: params.triggerType === "sem_resposta" ? (params.noResponseDays ?? null) : null,
       conditions: params.conditions ?? null,
     })
@@ -933,6 +944,10 @@ export async function updateAutomationSequenceForApiKey(
       triggerType: params.triggerType,
       triggerStageId: params.triggerType === "etapa" ? (params.triggerStageId ?? null) : null,
       triggerTagId: params.triggerType === "tag" ? (params.triggerTagId ?? null) : null,
+      triggerPipelineId:
+        params.triggerType === "ganho" || params.triggerType === "perdido"
+          ? (params.triggerPipelineId ?? null)
+          : null,
       noResponseDays: params.triggerType === "sem_resposta" ? (params.noResponseDays ?? null) : null,
       conditions: params.conditions ?? null,
     })

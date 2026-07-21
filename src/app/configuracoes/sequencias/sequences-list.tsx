@@ -68,12 +68,14 @@ export type SequenceRow = {
   triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId: string | null;
   triggerTagId: string | null;
+  triggerPipelineId: string | null;
   noResponseDays: number | null;
   conditions: SequenceCondition;
   steps: SequenceStepRow[];
 };
 
 type StageOption = { id: string; name: string; pipelineId: string; pipelineName: string };
+type PipelineOption = { id: string; name: string };
 type TagOption = { id: string; name: string };
 type TemplateOption = { id: string; name: string };
 type ChannelOption = { id: string; label: string };
@@ -338,6 +340,7 @@ const CONDITION_FIELD_TAGS = "tags";
 function SequenceFormDialog({
   sequence,
   stages,
+  pipelines,
   allTags,
   templates,
   channels,
@@ -346,6 +349,7 @@ function SequenceFormDialog({
 }: {
   sequence?: SequenceRow;
   stages: StageOption[];
+  pipelines: PipelineOption[];
   allTags: TagOption[];
   templates: TemplateOption[];
   channels: ChannelOption[];
@@ -363,6 +367,9 @@ function SequenceFormDialog({
   );
   const [triggerTagId, setTriggerTagId] = useState<string | null>(
     sequence?.triggerTagId ?? allTags[0]?.id ?? null
+  );
+  const [triggerPipelineId, setTriggerPipelineId] = useState<string | null>(
+    sequence?.triggerPipelineId ?? pipelines[0]?.id ?? null
   );
   const [noResponseDays, setNoResponseDays] = useState(sequence?.noResponseDays ?? 5);
   const [hasCondition, setHasCondition] = useState(sequence?.conditions != null);
@@ -439,6 +446,7 @@ function SequenceFormDialog({
           <input type="hidden" name="triggerType" value={triggerType} />
           <input type="hidden" name="triggerStageId" value={triggerStageId ?? ""} />
           <input type="hidden" name="triggerTagId" value={triggerTagId ?? ""} />
+          <input type="hidden" name="triggerPipelineId" value={triggerPipelineId ?? ""} />
           <input type="hidden" name="noResponseDays" value={noResponseDays || ""} />
           <input type="hidden" name="conditions" value={conditionsPayload} />
           <input type="hidden" name="steps" value={stepsPayload} />
@@ -518,6 +526,28 @@ function SequenceFormDialog({
                   {allTags.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {(triggerType === "ganho" || triggerType === "perdido") && (
+            <div className="space-y-2">
+              <Label>Pipeline</Label>
+              <Select
+                items={Object.fromEntries(pipelines.map((p) => [p.id, p.name]))}
+                value={triggerPipelineId}
+                onValueChange={(v) => setTriggerPipelineId(v ?? null)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma pipeline" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -676,6 +706,7 @@ function DeleteSequenceDialog({ sequence }: { sequence: SequenceRow }) {
 export function SequencesList({
   sequences,
   stages,
+  pipelines,
   allTags,
   templates,
   channels,
@@ -683,6 +714,7 @@ export function SequencesList({
 }: {
   sequences: SequenceRow[];
   stages: StageOption[];
+  pipelines: PipelineOption[];
   allTags: TagOption[];
   templates: TemplateOption[];
   channels: ChannelOption[];
@@ -693,6 +725,7 @@ export function SequencesList({
       <div className="flex justify-end">
         <SequenceFormDialog
           stages={stages}
+          pipelines={pipelines}
           allTags={allTags}
           templates={templates}
           channels={channels}
@@ -752,6 +785,7 @@ export function SequencesList({
                     <SequenceFormDialog
                       sequence={seq}
                       stages={stages}
+                      pipelines={pipelines}
                       allTags={allTags}
                       templates={templates}
                       channels={channels}

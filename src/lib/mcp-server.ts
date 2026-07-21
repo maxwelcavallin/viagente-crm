@@ -1035,6 +1035,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           triggerType: z.enum(["etapa", "tag", "sem_resposta", "ganho", "perdido"]),
           triggerStageId: z.string().uuid().optional().nullable(),
           triggerTagId: z.string().uuid().optional().nullable(),
+          triggerPipelineId: z.string().uuid().optional().nullable(),
           noResponseDays: z.number().int().min(1).optional().nullable(),
           conditions: z
             .object({ field: z.string(), operator: z.enum(["eq", "gt", "lt", "contains"]), value: z.string() })
@@ -1061,6 +1062,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           triggerType: z.enum(["etapa", "tag", "sem_resposta", "ganho", "perdido"]),
           triggerStageId: z.string().uuid().optional().nullable(),
           triggerTagId: z.string().uuid().optional().nullable(),
+          triggerPipelineId: z.string().uuid().optional().nullable(),
           noResponseDays: z.number().int().min(1).optional().nullable(),
           conditions: z
             .object({ field: z.string(), operator: z.enum(["eq", "gt", "lt", "contains"]), value: z.string() })

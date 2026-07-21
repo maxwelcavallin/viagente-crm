@@ -1,0 +1,2 @@
+ALTER TABLE "automation_sequences" ADD COLUMN "trigger_pipeline_id" uuid;--> statement-breakpoint
+ALTER TABLE "automation_sequences" ADD CONSTRAINT "automation_sequences_trigger_pipeline_id_pipelines_id_fk" FOREIGN KEY ("trigger_pipeline_id") REFERENCES "public"."pipelines"("id") ON DELETE cascade ON UPDATE no action;

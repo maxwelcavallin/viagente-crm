@@ -58,6 +58,7 @@ type CommonFields = {
   triggerType: "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido";
   triggerStageId: string | null;
   triggerTagId: string | null;
+  triggerPipelineId: string | null;
   noResponseDays: number | null;
   conditions: ConditionInput;
   steps: StepInput[];
@@ -69,6 +70,7 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
   const triggerType = formData.get("triggerType");
   const triggerStageId = formData.get("triggerStageId");
   const triggerTagId = formData.get("triggerTagId");
+  const triggerPipelineId = formData.get("triggerPipelineId");
   const noResponseDaysRaw = formData.get("noResponseDays");
   const steps = parseSteps(formData.get("steps"));
   const conditions = parseConditions(formData.get("conditions"));
@@ -90,6 +92,12 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
   }
   if (triggerType === "tag" && (typeof triggerTagId !== "string" || !triggerTagId)) {
     return { error: "Selecione a tag que dispara a sequência." };
+  }
+  if (
+    (triggerType === "ganho" || triggerType === "perdido") &&
+    (typeof triggerPipelineId !== "string" || !triggerPipelineId)
+  ) {
+    return { error: "Selecione a pipeline que dispara a sequência." };
   }
   const noResponseDays =
     typeof noResponseDaysRaw === "string" && noResponseDaysRaw ? Number(noResponseDaysRaw) : null;
@@ -120,6 +128,8 @@ function readCommonFields(formData: FormData): CommonFields | { error: string } 
     triggerType: triggerType as "etapa" | "tag" | "sem_resposta" | "ganho" | "perdido",
     triggerStageId: triggerType === "etapa" ? (triggerStageId as string) : null,
     triggerTagId: triggerType === "tag" ? (triggerTagId as string) : null,
+    triggerPipelineId:
+      triggerType === "ganho" || triggerType === "perdido" ? (triggerPipelineId as string) : null,
     noResponseDays: triggerType === "sem_resposta" ? noResponseDays : null,
     conditions,
     steps,
@@ -143,6 +153,7 @@ export async function createSequenceAction(
       triggerType: fields.triggerType,
       triggerStageId: fields.triggerStageId,
       triggerTagId: fields.triggerTagId,
+      triggerPipelineId: fields.triggerPipelineId,
       noResponseDays: fields.noResponseDays,
       conditions: fields.conditions,
     })
@@ -187,6 +198,7 @@ export async function updateSequenceAction(
       triggerType: fields.triggerType,
       triggerStageId: fields.triggerStageId,
       triggerTagId: fields.triggerTagId,
+      triggerPipelineId: fields.triggerPipelineId,
       noResponseDays: fields.noResponseDays,
       conditions: fields.conditions,
     })
