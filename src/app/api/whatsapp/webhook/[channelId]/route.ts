@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { messages, whatsappChannels } from "@/db/schema";
@@ -81,7 +82,12 @@ const STATUS_MAP: Record<ZapiStatusCallback["status"], "enviado" | "entregue" | 
 // instância Z-API (ver whatsappChannels.relayWebhookUrl) — a Z-API só
 // aceita uma URL cadastrada por evento, então quem precisa de mais de um
 // consumidor tem que replicar por conta própria. Nunca lança e nunca
-// bloqueia/atrasa o processamento normal do webhook.
+// bloqueia/atrasa o processamento normal do webhook. Precisa ser chamada
+// dentro de after() (ver POST): um fire-and-forget solto (só "void") é
+// congelado pela Vercel assim que a response é enviada, abortando o
+// fetch no meio quase toda vez — era exatamente esse o bug (656 erros
+// de AbortError em produção, nenhum repasse chegando no destino).
+
 async function relayZapiPayload(url: string, payload: unknown): Promise<void> {
   try {
     const controller = new AbortController();
@@ -323,7 +329,8 @@ export async function POST(
   }
 
   if (channel.relayWebhookUrl) {
-    void relayZapiPayload(channel.relayWebhookUrl, payload);
+    const relayUrl = channel.relayWebhookUrl;
+    after(() => relayZapiPayload(relayUrl, payload));
   }
 
   try {
