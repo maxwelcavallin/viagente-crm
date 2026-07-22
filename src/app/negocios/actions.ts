@@ -18,7 +18,11 @@ import {
   tasks,
   users,
 } from "@/db/schema";
-import { cancelActiveSequenceRuns, fireStatusSequenceTriggers } from "@/lib/automation-sequences";
+import {
+  cancelActiveSequenceRuns,
+  fireEtapaSequenceTriggers,
+  fireStatusSequenceTriggers,
+} from "@/lib/automation-sequences";
 import { buildCustomFieldsFromForm } from "@/lib/custom-fields";
 import { logDealActivity, type DealActivitySource } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
@@ -317,6 +321,7 @@ export async function createDealAction(
   // automáticas que ganharia se chegasse ali via "mover de etapa" (ver
   // createAutomaticStageTasks).
   await createAutomaticStageTasks(created.id, fields.stageId);
+  await fireEtapaSequenceTriggers(created.id, fields.stageId);
   await logDealActivity({ dealId: created.id, userId: user.id, source: "manual", action: "criado" });
   const newTagIds = await syncDealTags(created.id, fields.tagIds, {
     userId: user.id,
@@ -371,7 +376,10 @@ export async function updateDealAction(
   // Edição manual pode trocar a etapa fora do fluxo do kanban — mesma regra
   // de moveDealStage, senão a etapa nova fica sem as tarefas automáticas
   // configuradas pra ela.
-  if (stageChanged) await createAutomaticStageTasks(id, fields.stageId);
+  if (stageChanged) {
+    await createAutomaticStageTasks(id, fields.stageId);
+    await fireEtapaSequenceTriggers(id, fields.stageId);
+  }
   await logDealFieldDiffs(user.id, id, current, fields);
   const newTagIds = await syncDealTags(id, fields.tagIds, { userId: user.id, source: "manual" });
   await fireTagAddedAutomations(id, newTagIds);

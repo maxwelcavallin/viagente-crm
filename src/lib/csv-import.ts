@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, customFieldDefinitions, deals } from "@/db/schema";
+import { fireEtapaSequenceTriggers } from "@/lib/automation-sequences";
 import { findDuplicateContact } from "@/lib/contact-merge";
 import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import {
@@ -191,6 +192,7 @@ export async function importCsvBatch(params: {
     // só pra "aberto" (sem status na planilha, ou status explícito aberto).
     if (!dealStatus || dealStatus === "aberto") {
       await createAutomaticStageTasks(createdDeal.id, stageId);
+      await fireEtapaSequenceTriggers(createdDeal.id, stageId);
     }
 
     if (resolved.contactTagNames.length > 0) {

@@ -7,6 +7,7 @@ import {
   temperatureRules,
   webhookLogs,
 } from "@/db/schema";
+import { fireEtapaSequenceTriggers } from "@/lib/automation-sequences";
 import { logDealActivity } from "@/lib/deal-activity-log";
 import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import { findDuplicateContact } from "@/lib/contact-merge";
@@ -243,6 +244,10 @@ export async function processInboundPayload(
   // novo sem dono não deve apagar o dono que o contato já tinha.
   if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
   await createAutomaticStageTasks(createdDeal.id, webhookConfig.defaultStageId);
+  // Negócio nasce direto nessa etapa (não passa por moveDealStage) — sem
+  // isto, sequências de gatilho "etapa" nunca disparavam pra leads criados
+  // via webhook, só pra negócios movidos manualmente.
+  await fireEtapaSequenceTriggers(createdDeal.id, webhookConfig.defaultStageId);
 
   await logDealActivity({
     dealId: createdDeal.id,

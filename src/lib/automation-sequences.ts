@@ -12,7 +12,7 @@ import {
   tasks,
 } from "@/db/schema";
 import { logDealActivity } from "@/lib/deal-activity-log";
-import { maybeAutoSendTask } from "@/lib/task-automation";
+import { fireTagAddedAutomations, maybeAutoSendTask } from "@/lib/task-automation";
 import { dispatchOutboundWebhooks } from "@/lib/webhook-outbound";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -223,6 +223,11 @@ async function executeStep(run: RunRow, step: StepRow): Promise<void> {
           newValue: tag?.name ?? null,
         });
         void dispatchOutboundWebhooks("tag_adicionada", run.dealId, step.addTagId);
+        // Mesmo choke point das outras origens de tag (form, ação em massa,
+        // webhook de entrada, API, CSV — ver tags.ts) — sem isso, uma tag
+        // adicionada por sequência nunca disparava automação de tag nem
+        // outra sequência com gatilho "tag".
+        await fireTagAddedAutomations(run.dealId, [step.addTagId]);
       }
       break;
     }

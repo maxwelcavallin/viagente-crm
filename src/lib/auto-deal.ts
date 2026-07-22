@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { autoDealSettings, deals } from "@/db/schema";
+import { fireEtapaSequenceTriggers } from "@/lib/automation-sequences";
 import { logDealActivity } from "@/lib/deal-activity-log";
 import { createAutomaticStageTasks } from "@/lib/deal-mutations";
 import { resolveDistributedOwner, syncContactOwnerFromDeal } from "@/lib/owner-distribution";
@@ -33,6 +34,7 @@ export async function maybeCreateAutoDeal(
   // propaga quando a distribuição de fato escolheu alguém.
   if (distributedOwnerId) await syncContactOwnerFromDeal(contactId, distributedOwnerId);
   await createAutomaticStageTasks(createdDeal.id, settings.stageId);
+  await fireEtapaSequenceTriggers(createdDeal.id, settings.stageId);
 
   await logDealActivity({
     dealId: createdDeal.id,
