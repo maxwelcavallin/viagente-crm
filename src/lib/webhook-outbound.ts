@@ -1,6 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, deals, tags, webhookConfigs, webhookLogs } from "@/db/schema";
+import {
+  contactTags,
+  contacts,
+  deals,
+  stages,
+  tags,
+  users,
+  webhookConfigs,
+  webhookLogs,
+} from "@/db/schema";
 
 export type OutboundEvent =
   | "negocio_criado"
@@ -8,6 +17,15 @@ export type OutboundEvent =
   | "negocio_ganho"
   | "negocio_perdido"
   | "tag_adicionada";
+
+// Rótulo em PT-BR de deals.status — mesma palavra já usada na UI (kanban,
+// filtros). Quem consome o webhook (ex: Make) decide como traduzir/mapear
+// pro vocabulário do destino final (ex: Meta CAPI "LOST"/"WON").
+const DEAL_STATUS_LABEL: Record<string, string> = {
+  aberto: "Aberto",
+  ganho: "Ganho",
+  perdido: "Perdido",
+};
 
 async function findMatchingConfigs(
   event: OutboundEvent,
@@ -178,6 +196,30 @@ export async function dispatchOutboundWebhooks(
       .where(eq(contacts.id, deal.contactId))
       .limit(1);
 
+    const [stage] = await db
+      .select({ name: stages.name })
+      .from(stages)
+      .where(eq(stages.id, deal.stageId))
+      .limit(1);
+
+    const owner = deal.ownerId
+      ? (
+          await db
+            .select({ id: users.id, name: users.name, email: users.email })
+            .from(users)
+            .where(eq(users.id, deal.ownerId))
+            .limit(1)
+        )[0] ?? null
+      : null;
+
+    const contactTagRows = contact
+      ? await db
+          .select({ name: tags.name })
+          .from(contactTags)
+          .innerJoin(tags, eq(contactTags.tagId, tags.id))
+          .where(eq(contactTags.contactId, contact.id))
+      : [];
+
     let tag: { id: string; name: string } | null = null;
     if (event === "tag_adicionada" && tagId) {
       const [row] = await db.select({ id: tags.id, name: tags.name }).from(tags).where(eq(tags.id, tagId)).limit(1);
@@ -186,7 +228,8 @@ export async function dispatchOutboundWebhooks(
 
     // Também é o formato padrão fixo (quando o webhook não tem
     // payloadTemplate customizado, ver sendOne) e o conjunto de placeholders
-    // disponíveis pra quem customiza (ex: {{deal.title}}, {{contact.phone}}).
+    // disponíveis pra quem customiza (ex: {{deal.title}}, {{contact.phone}},
+    // {{deal.stageName}}, {{deal.ownerEmail}}).
     const context = {
       event,
       deal: {
@@ -194,9 +237,14 @@ export async function dispatchOutboundWebhooks(
         title: deal.title,
         value: deal.value,
         status: deal.status,
+        statusLabel: DEAL_STATUS_LABEL[deal.status] ?? deal.status,
         temperature: deal.temperature,
         pipelineId: deal.pipelineId,
         stageId: deal.stageId,
+        stageName: stage?.name ?? null,
+        ownerId: deal.ownerId,
+        ownerName: owner?.name ?? null,
+        ownerEmail: owner?.email ?? null,
         customFields: deal.customFields,
       },
       contact: contact
@@ -205,6 +253,7 @@ export async function dispatchOutboundWebhooks(
             name: contact.name,
             phone: contact.phone,
             email: contact.email,
+            tags: contactTagRows.map((r) => r.name),
           }
         : null,
       ...(tag ? { tag } : {}),

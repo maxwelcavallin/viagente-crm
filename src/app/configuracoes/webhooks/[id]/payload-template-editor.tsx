@@ -16,16 +16,22 @@ const DEFAULT_TEMPLATE = `{
     "title": "{{deal.title}}",
     "value": {{deal.value}},
     "status": "{{deal.status}}",
+    "statusLabel": "{{deal.statusLabel}}",
     "temperature": "{{deal.temperature}}",
     "pipelineId": "{{deal.pipelineId}}",
     "stageId": "{{deal.stageId}}",
+    "stageName": "{{deal.stageName}}",
+    "ownerId": "{{deal.ownerId}}",
+    "ownerName": "{{deal.ownerName}}",
+    "ownerEmail": "{{deal.ownerEmail}}",
     "customFields": {{deal.customFields}}
   },
   "contact": {
     "id": "{{contact.id}}",
     "name": "{{contact.name}}",
     "phone": "{{contact.phone}}",
-    "email": "{{contact.email}}"
+    "email": "{{contact.email}}",
+    "tags": {{contact.tags}}
   }
 }`;
 
@@ -35,14 +41,20 @@ const AVAILABLE_PLACEHOLDERS = [
   "{{deal.title}}",
   "{{deal.value}}",
   "{{deal.status}}",
+  "{{deal.statusLabel}}",
   "{{deal.temperature}}",
   "{{deal.pipelineId}}",
   "{{deal.stageId}}",
+  "{{deal.stageName}}",
+  "{{deal.ownerId}}",
+  "{{deal.ownerName}}",
+  "{{deal.ownerEmail}}",
   "{{deal.customFields}}",
   "{{contact.id}}",
   "{{contact.name}}",
   "{{contact.phone}}",
   "{{contact.email}}",
+  "{{contact.tags}}",
   "{{tag.id}}",
   "{{tag.name}}",
 ];
