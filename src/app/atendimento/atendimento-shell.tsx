@@ -44,6 +44,7 @@ const ALL_CHANNELS = "__todos__";
 const ALL_OWNERS = "__todos__";
 const OWNER_MINE = "__meus__";
 const OWNER_UNASSIGNED = "__sem_dono__";
+const ALL_TAGS = "__todas__";
 
 const LIST_WIDTH_STORAGE_KEY = "atendimento-list-width";
 const MIN_LIST_WIDTH = 280;
@@ -106,11 +107,13 @@ export function AtendimentoShell({
   conversations,
   currentUserId,
   users,
+  tags,
   children,
 }: {
   conversations: ConversationSummary[];
   currentUserId: string;
   users: { id: string; name: string }[];
+  tags: { id: string; name: string }[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -124,6 +127,7 @@ export function AtendimentoShell({
   const [channelFilter, setChannelFilter] = useState(ALL_CHANNELS);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState(ALL_OWNERS);
+  const [tagFilter, setTagFilter] = useState(ALL_TAGS);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkPending, setIsBulkPending] = useState(false);
@@ -244,15 +248,26 @@ export function AtendimentoShell({
         c.ownerId !== ownerFilter
       )
         return false;
+      if (tagFilter !== ALL_TAGS && !c.tags.some((t) => t.id === tagFilter)) return false;
       if (unreadOnly && c.unreadCount === 0) return false;
       if (term && !c.contactName.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [conversations, search, channelFilter, kindFilter, ownerFilter, unreadOnly, currentUserId]);
+  }, [
+    conversations,
+    search,
+    channelFilter,
+    kindFilter,
+    ownerFilter,
+    tagFilter,
+    unreadOnly,
+    currentUserId,
+  ]);
 
   const activeFilterCount =
     (channelFilter !== ALL_CHANNELS ? 1 : 0) +
     (ownerFilter !== ALL_OWNERS ? 1 : 0) +
+    (tagFilter !== ALL_TAGS ? 1 : 0) +
     (unreadOnly ? 1 : 0);
 
   return (
@@ -346,6 +361,29 @@ export function AtendimentoShell({
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Tag</Label>
+                  <Select
+                    items={Object.fromEntries([
+                      [ALL_TAGS, "Todas as tags"],
+                      ...tags.map((t) => [t.id, t.name]),
+                    ])}
+                    value={tagFilter}
+                    onValueChange={(value) => setTagFilter(value ?? ALL_TAGS)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_TAGS}>Todas as tags</SelectItem>
+                      {tags.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center justify-between border-t border-border pt-3">
                   <Label htmlFor="unread-only">Mostrar apenas não lidas</Label>
                   <Switch id="unread-only" checked={unreadOnly} onCheckedChange={setUnreadOnly} />
@@ -356,6 +394,7 @@ export function AtendimentoShell({
                     onClick={() => {
                       setChannelFilter(ALL_CHANNELS);
                       setOwnerFilter(ALL_OWNERS);
+                      setTagFilter(ALL_TAGS);
                       setUnreadOnly(false);
                     }}
                     className="text-xs text-muted-foreground hover:text-foreground"

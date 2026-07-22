@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { messages, whatsappChannels } from "@/db/schema";
 import { mediaPrefix, uploadMediaToR2, type MediaKind } from "@/lib/storage";
@@ -7,6 +7,7 @@ import { findOpenDealIdForContact, findOrCreateContactByPhone } from "@/lib/mess
 import { notifyNewMessage } from "@/lib/notifications";
 import { maybeCreateAutoDeal } from "@/lib/auto-deal";
 import { decryptCredential } from "@/lib/credentials-crypto";
+import { createdAtMatch } from "@/lib/message-lookup";
 import { getZapiChatByLid, type ZapiChannelCredentials } from "@/lib/zapi";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,21 @@ type ZapiIncomingMessage = {
   video?: ZapiMediaPart & { videoUrl: string; caption?: string };
   audio?: ZapiMediaPart & { audioUrl: string };
   document?: ZapiMediaPart & { documentUrl: string; fileName?: string };
+  // Reação a uma mensagem (payload documentado em
+  // developer.z-api.io/webhooks/on-message-received-examples) — vem com o
+  // mesmo formato de webhook de mensagem, mas sem text/image/etc, só o campo
+  // "reaction". value="" significa que a pessoa removeu a reação.
+  reaction?: {
+    value: string;
+    time: number;
+    reactionBy: string;
+    referencedMessage: {
+      messageId: string;
+      fromMe: boolean;
+      phone: string;
+      participant: string | null;
+    };
+  };
 };
 type ZapiStatusCallback = {
   type: "MessageStatusCallback";
@@ -104,6 +120,36 @@ async function handleStatusCallback(payload: ZapiStatusCallback) {
     .update(messages)
     .set({ status })
     .where(inArray(messages.externalMessageId, payload.ids));
+}
+
+// Reação não é uma mensagem nova — só anota quem reagiu (e com qual emoji) na
+// mensagem já existente que foi reagida. Antes desse tratamento, esse
+// payload caía no branch genérico de handleIncomingMessage e virava uma
+// mensagem de texto fantasma (sem content, sem replyTo), poluindo a conversa.
+async function handleReaction(channelId: string, reaction: NonNullable<ZapiIncomingMessage["reaction"]>) {
+  const [target] = await db
+    .select({ id: messages.id, createdAt: messages.createdAt, reactions: messages.reactions })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.channelId, channelId),
+        eq(messages.externalMessageId, reaction.referencedMessage.messageId)
+      )
+    )
+    .limit(1);
+  if (!target) return;
+
+  const nextReactions = { ...target.reactions };
+  if (reaction.value) {
+    nextReactions[reaction.reactionBy] = reaction.value;
+  } else {
+    delete nextReactions[reaction.reactionBy];
+  }
+
+  await db
+    .update(messages)
+    .set({ reactions: nextReactions })
+    .where(and(eq(messages.id, target.id), ...createdAtMatch(target.createdAt)));
 }
 
 async function handleIncomingMessage(
@@ -283,6 +329,8 @@ export async function POST(
   try {
     if ("type" in payload && payload.type === "MessageStatusCallback") {
       await handleStatusCallback(payload);
+    } else if ("reaction" in payload && payload.reaction) {
+      await handleReaction(channelId, payload.reaction);
     } else if ("messageId" in payload) {
       // fromMe=true também passa por aqui — handleIncomingMessage faz o
       // dedupe contra o que o nosso próprio /api/messages/send já gravou e

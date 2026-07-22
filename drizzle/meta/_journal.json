@@ -365,6 +365,13 @@
       "when": 1784685822480,
       "tag": "0051_useful_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1784730726277,
+      "tag": "0052_silent_strong_guy",
+      "breakpoints": true
     }
   ]
 }

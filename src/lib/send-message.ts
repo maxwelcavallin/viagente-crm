@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, instagramChannels, messages, whatsappChannels } from "@/db/schema";
 import { decryptCredential } from "@/lib/credentials-crypto";
+import { createdAtMatch } from "@/lib/message-lookup";
 import { findOpenDealIdForContact } from "@/lib/messaging";
 import { copyMediaInR2, getMediaSignedUrl, mediaPrefix, type MediaKind } from "@/lib/storage";
 import {
@@ -385,7 +386,7 @@ async function loadEditableMessage(messageId: string, createdAt: Date) {
       deletedAt: messages.deletedAt,
     })
     .from(messages)
-    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)))
+    .where(and(eq(messages.id, messageId), ...createdAtMatch(createdAt)))
     .limit(1);
   return message;
 }
@@ -463,7 +464,7 @@ export async function editWhatsappMessage(
   await db
     .update(messages)
     .set({ content: newContent, editedAt: new Date() })
-    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)));
+    .where(and(eq(messages.id, messageId), ...createdAtMatch(createdAt)));
 
   return { ok: true };
 }
@@ -494,7 +495,7 @@ export async function deleteWhatsappMessage(
   await db
     .update(messages)
     .set({ deletedAt: new Date(), deletedScope: scope })
-    .where(and(eq(messages.id, messageId), eq(messages.createdAt, createdAt)));
+    .where(and(eq(messages.id, messageId), ...createdAtMatch(createdAt)));
 
   return { ok: true };
 }

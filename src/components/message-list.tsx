@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Check,
   CheckCheck,
@@ -288,6 +288,50 @@ function ReplyQuoteCard({
   );
 }
 
+// Formatação estilo WhatsApp: *negrito*, _itálico_ e ~tachado~. Cada marcador
+// só é aplicado se tiver o par fechando na mesma linha lógica (sem espaço logo
+// depois de abrir/antes de fechar), igual às regras do próprio WhatsApp.
+const WHATSAPP_FORMAT_REGEX = /(\*[^*\s](?:[^*]*[^*\s])?\*|_[^_\s](?:[^_]*[^_\s])?_|~[^~\s](?:[^~]*[^~\s])?~)/g;
+
+function renderWhatsappFormatting(text: string): ReactNode[] {
+  const parts = text.split(WHATSAPP_FORMAT_REGEX);
+  return parts.map((part, index) => {
+    if (part.length >= 2) {
+      const marker = part[0];
+      const inner = part.slice(1, -1);
+      if (marker === "*" && part.endsWith("*")) {
+        return <strong key={index}>{inner}</strong>;
+      }
+      if (marker === "_" && part.endsWith("_")) {
+        return <em key={index}>{inner}</em>;
+      }
+      if (marker === "~" && part.endsWith("~")) {
+        return <s key={index}>{inner}</s>;
+      }
+    }
+    return part;
+  });
+}
+
+// Badge de reação estilo WhatsApp — sobrepõe o canto inferior da bolha.
+// "reactions" mapeia telefone de quem reagiu -> emoji (ver handleReaction no
+// webhook do WhatsApp); mais de uma pessoa pode reagir com emojis diferentes.
+function ReactionBadge({ reactions }: { reactions: Record<string, string> }) {
+  const emojis = Object.values(reactions);
+  if (emojis.length === 0) return null;
+  const unique = Array.from(new Set(emojis));
+  return (
+    <div className="absolute -bottom-2.5 right-1.5 flex items-center gap-0.5 rounded-full border border-border bg-background px-1 py-0.5 text-xs leading-none shadow-sm">
+      {unique.slice(0, 3).map((emoji) => (
+        <span key={emoji}>{emoji}</span>
+      ))}
+      {emojis.length > 1 && (
+        <span className="text-[10px] text-muted-foreground">{emojis.length}</span>
+      )}
+    </div>
+  );
+}
+
 function scrollToMessage(messageId: string) {
   document
     .getElementById(`message-${messageId}`)
@@ -382,7 +426,9 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
           />
         </button>
         {message.content && (
-          <p className="mt-1 break-words whitespace-pre-wrap">{message.content}</p>
+          <p className="mt-1 break-words whitespace-pre-wrap">
+            {renderWhatsappFormatting(message.content)}
+          </p>
         )}
         <div className="mt-1">
           <DownloadLink message={message} />
@@ -431,7 +477,9 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
           </button>
         </div>
         {message.content && (
-          <p className="mt-1 break-words whitespace-pre-wrap">{message.content}</p>
+          <p className="mt-1 break-words whitespace-pre-wrap">
+            {renderWhatsappFormatting(message.content)}
+          </p>
         )}
         <div className="mt-1">
           <DownloadLink message={message} />
@@ -592,9 +640,11 @@ export function MessageList({
             </Avatar>
           )}
           <div
-            className={`max-w-md min-w-0 rounded-lg px-3 py-2 text-sm ${
+            className={cn(
+              "relative min-w-0 rounded-lg px-3 py-2 text-sm",
+              isEditing ? "w-full" : "max-w-md",
               message.direction === "saida" ? "bg-accent" : "bg-muted"
-            }`}
+            )}
           >
             {showGroupSender && (
               <p className={cn("mb-0.5 text-xs font-semibold", senderColorClass(senderKey))}>
@@ -629,7 +679,9 @@ export function MessageList({
                   />
                 )}
                 {message.type === "texto" ? (
-                  <p className="break-words whitespace-pre-wrap">{message.content}</p>
+                  <p className="break-words whitespace-pre-wrap">
+                    {message.content ? renderWhatsappFormatting(message.content) : message.content}
+                  </p>
                 ) : (
                   <MessageMedia message={message} />
                 )}
@@ -665,6 +717,7 @@ export function MessageList({
                 )}
               </div>
             )}
+            {!isDeleted && !isEditing && <ReactionBadge reactions={message.reactions} />}
           </div>
         </div>
         );

@@ -842,6 +842,12 @@ export const messages = pgTable(
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedScope: messageDeleteScopeEnum("deleted_scope"),
+    // Reações do WhatsApp (webhook "reaction" da Z-API) — chave é o telefone
+    // de quem reagiu, valor é o emoji. Um contato só tem uma reação ativa por
+    // vez (o próprio WhatsApp sobrescreve); reaction.value="" no webhook
+    // significa "removeu a reação", tratado removendo a chave do map (ver
+    // handleIncomingMessage no webhook do WhatsApp).
+    reactions: jsonb("reactions").notNull().default({}).$type<Record<string, string>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

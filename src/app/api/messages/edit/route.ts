@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { messages } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { userHasChannelAccess } from "@/lib/channel-access";
+import { createdAtMatch } from "@/lib/message-lookup";
 import { editWhatsappMessage } from "@/lib/send-message";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   const [message] = await db
     .select({ channelId: messages.channelId })
     .from(messages)
-    .where(and(eq(messages.id, body.id), eq(messages.createdAt, createdAt)))
+    .where(and(eq(messages.id, body.id), ...createdAtMatch(createdAt)))
     .limit(1);
   if (!message) {
     return Response.json({ error: "Mensagem não encontrada" }, { status: 404 });

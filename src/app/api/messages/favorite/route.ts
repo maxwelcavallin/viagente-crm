@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { messages } from "@/db/schema";
 import { userHasChannelAccess } from "@/lib/channel-access";
+import { createdAtMatch } from "@/lib/message-lookup";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   }
 
   const where = body.createdAt
-    ? and(eq(messages.id, body.id), eq(messages.createdAt, new Date(body.createdAt)))
+    ? and(eq(messages.id, body.id), ...createdAtMatch(new Date(body.createdAt)))
     : eq(messages.id, body.id);
 
   const [message] = await db

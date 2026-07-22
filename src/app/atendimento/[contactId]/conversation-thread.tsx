@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Clock, Paperclip, Reply, Star, Users, X } from "lucide-react";
@@ -77,14 +77,41 @@ export function ConversationThread({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ThreadMessage | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<{
+    file: File | Blob;
+    fileName?: string;
+    previewUrl: string;
+    isImage: boolean;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const selectedChannel = channels.find((c) => c.id === channelId);
   const isInstagramChannel = selectedChannel?.channelType === "instagram";
 
+  // Mensagens vêm da mais antiga pra mais nova (ver getThread em
+  // conversations.ts) — sem isso, o overflow-y-auto abre parado no topo
+  // (mensagens antigas) em vez de mostrar a mais recente.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [initialMessages]);
+
+  function clearPendingAttachment() {
+    setPendingAttachment((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
+
   async function handleSend() {
     const message = text.trim();
+    if (pendingAttachment) {
+      await sendMediaFile(pendingAttachment.file, pendingAttachment.fileName, message || undefined);
+      clearPendingAttachment();
+      return;
+    }
     if (!message || !channelId) return;
 
     setIsSending(true);
@@ -116,7 +143,7 @@ export function ConversationThread({
     }
   }
 
-  async function sendMediaFile(file: File | Blob, fileName?: string) {
+  async function sendMediaFile(file: File | Blob, fileName?: string, caption?: string) {
     if (!channelId) return;
     const contentType = file.type || "application/octet-stream";
     const kind = inferMediaKind(contentType);
@@ -134,11 +161,13 @@ export function ConversationThread({
         contentType,
         fileName,
         kind,
+        caption,
         channelId,
         contactId,
         replyToMessageId: replyingTo?.id,
         replyToCreatedAt: replyingTo?.createdAt.toISOString(),
       });
+      setText("");
       setReplyingTo(null);
       router.refresh();
     } catch (e) {
@@ -154,6 +183,8 @@ export function ConversationThread({
     for (const file of files) void sendMediaFile(file, file.name);
   }
 
+  // Print (Ctrl+V) fica em espera igual um anexo comum — dá pra escrever um
+  // texto complementando antes de enviar, em vez de disparar a imagem na hora.
   function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const fileItem = Array.from(e.clipboardData.items).find(
       (item) => item.kind === "file"
@@ -162,7 +193,13 @@ export function ConversationThread({
     const file = fileItem.getAsFile();
     if (!file) return;
     e.preventDefault();
-    void sendMediaFile(file, file.name);
+    clearPendingAttachment();
+    setPendingAttachment({
+      file,
+      fileName: file.name || undefined,
+      previewUrl: URL.createObjectURL(file),
+      isImage: file.type.startsWith("image/"),
+    });
   }
 
   async function handleAudioRecorded(blob: Blob) {
@@ -259,7 +296,7 @@ export function ConversationThread({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
         <MessageList
           messages={initialMessages}
           favoritesOnly={showFavoritesOnly}
@@ -279,6 +316,31 @@ export function ConversationThread({
           </p>
         ) : (
           <>
+            {pendingAttachment && (
+              <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/60 bg-muted px-2.5 py-1.5 text-xs">
+                {pendingAttachment.isImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pendingAttachment.previewUrl}
+                    alt="Anexo colado"
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <Paperclip size={16} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+                )}
+                <p className="line-clamp-1 flex-1 text-muted-foreground">
+                  {pendingAttachment.fileName ?? "Anexo colado"} — escreva um texto e envie junto
+                </p>
+                <button
+                  type="button"
+                  onClick={clearPendingAttachment}
+                  aria-label="Remover anexo"
+                  className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <X size={14} strokeWidth={1.75} />
+                </button>
+              </div>
+            )}
             {replyingTo && (
               <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/60 bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
                 <Reply size={14} strokeWidth={1.75} className="shrink-0" />
@@ -378,8 +440,11 @@ export function ConversationThread({
                 rows={2}
                 className="min-h-[40px] flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
               />
-              <Button onClick={handleSend} disabled={isSending || !text.trim()}>
-                {isSending ? "Enviando..." : "Enviar"}
+              <Button
+                onClick={handleSend}
+                disabled={isSending || isUploading || (!text.trim() && !pendingAttachment)}
+              >
+                {isSending || isUploading ? "Enviando..." : "Enviar"}
               </Button>
             </div>
             {isUploading && (

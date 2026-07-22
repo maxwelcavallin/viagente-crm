@@ -1,7 +1,15 @@
 import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, instagramChannels, messages, users, whatsappChannels } from "@/db/schema";
+import {
+  contactTags,
+  contacts,
+  instagramChannels,
+  messages,
+  tags,
+  users,
+  whatsappChannels,
+} from "@/db/schema";
 import { ownerVisibilityFilter, type VisibilityUser } from "@/lib/visibility";
 
 const replyToMessages = alias(messages, "reply_to_messages");
@@ -28,6 +36,7 @@ export type ConversationSummary = {
   unreadCount: number;
   ownerId: string | null;
   ownerName: string | null;
+  tags: { id: string; name: string; color: string | null }[];
 };
 
 // Uma "conversa" é o par (contato, canal) — não o contato sozinho: um
@@ -131,6 +140,23 @@ export async function listConversations(
     unreadRows.map((r) => [`${r.contactId}:${r.channelId}`, r.count])
   );
 
+  const tagRows = await db
+    .select({
+      contactId: contactTags.contactId,
+      id: tags.id,
+      name: tags.name,
+      color: tags.color,
+    })
+    .from(contactTags)
+    .innerJoin(tags, eq(tags.id, contactTags.tagId))
+    .where(inArray(contactTags.contactId, contactIds));
+  const tagsByContact = new Map<string, { id: string; name: string; color: string | null }[]>();
+  for (const row of tagRows) {
+    const list = tagsByContact.get(row.contactId) ?? [];
+    list.push({ id: row.id, name: row.name, color: row.color });
+    tagsByContact.set(row.contactId, list);
+  }
+
   const summaries: ConversationSummary[] = latest.map((m) => {
     const contact = contactById.get(m.contactId);
     const channel = m.channelId ? channelById.get(m.channelId) : undefined;
@@ -156,6 +182,7 @@ export async function listConversations(
       unreadCount,
       ownerId: contact?.ownerId ?? null,
       ownerName: contact?.ownerName ?? null,
+      tags: tagsByContact.get(m.contactId) ?? [],
     };
   });
 
@@ -207,6 +234,9 @@ export type ThreadMessage = {
   editedAt: Date | null;
   deletedAt: Date | null;
   deletedScope: "everyone" | "me" | null;
+  // Chave é o telefone de quem reagiu, valor é o emoji (ver handleReaction no
+  // webhook do WhatsApp).
+  reactions: Record<string, string>;
 };
 
 // Base compartilhada por getThread e getThreadPage — mesmas colunas/joins,
@@ -235,6 +265,7 @@ function threadBaseQuery() {
       editedAt: messages.editedAt,
       deletedAt: messages.deletedAt,
       deletedScope: messages.deletedScope,
+      reactions: messages.reactions,
     })
     .from(messages)
     .leftJoin(whatsappChannels, eq(messages.channelId, whatsappChannels.id))
