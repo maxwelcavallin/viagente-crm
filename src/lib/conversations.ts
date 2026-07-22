@@ -1,5 +1,5 @@
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, instagramChannels, messages, users, whatsappChannels } from "@/db/schema";
 import { ownerVisibilityFilter, type VisibilityUser } from "@/lib/visibility";
@@ -288,43 +288,24 @@ export async function getThread(
   return rows.map(mapThreadRow);
 }
 
-const THREAD_PAGE_SIZE = 30;
-
-export type ThreadPage = { messages: ThreadMessage[]; hasMore: boolean };
-
-// Paginação por cursor (createdAt da mensagem mais antiga já carregada),
-// mesmo princípio de getDealActivityLogPage — mas em vez de "mais recentes
-// primeiro", a página é sempre devolvida em ordem cronológica (mais antiga →
-// mais nova) porque é assim que uma conversa se lê; "carregar mais" busca
-// mensagens mais antigas que o cursor e o caller as insere ANTES das que já
-// tem (ver deal-conversation-card.tsx). Usada pela página do negócio, que
-// mostra o histórico mesclado como referência sem carregar a conversa
-// inteira de uma vez — diferente de getThread (Atendimento, exportação),
-// que continua trazendo tudo.
-export async function getThreadPage(
+// Últimas N mensagens, em ordem cronológica (mais antiga → mais nova, como
+// se lê uma conversa) — usada pelas prévias de conversa em negócio e contato
+// (ver conversation-preview-card.tsx), que só mostram um resumo rápido com
+// atalho pro Atendimento pro histórico completo, diferente de getThread
+// (Atendimento, exportação), que continua trazendo tudo.
+export async function getRecentThreadMessages(
   contactId: string,
   channelId: string | null | undefined,
   allowedChannelIds: string[],
-  before?: string
-): Promise<ThreadPage> {
+  limit = 3
+): Promise<ThreadMessage[]> {
   const channelFilter = buildChannelFilter(allowedChannelIds);
-  const beforeDate = before ? new Date(before) : undefined;
-
   const rows = await threadBaseQuery()
-    .where(
-      and(
-        eq(messages.contactId, contactId),
-        conversationFilterFor(channelId),
-        channelFilter,
-        beforeDate ? lt(messages.createdAt, beforeDate) : undefined
-      )
-    )
+    .where(and(eq(messages.contactId, contactId), conversationFilterFor(channelId), channelFilter))
     .orderBy(desc(messages.createdAt))
-    .limit(THREAD_PAGE_SIZE + 1);
+    .limit(limit);
 
-  const hasMore = rows.length > THREAD_PAGE_SIZE;
-  const page = rows.slice(0, THREAD_PAGE_SIZE).reverse();
-  return { messages: page.map(mapThreadRow), hasMore };
+  return rows.reverse().map(mapThreadRow);
 }
 
 // Canal da conversa mais recente de um contato — usado como padrão de qual

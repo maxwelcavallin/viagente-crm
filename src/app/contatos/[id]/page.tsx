@@ -18,12 +18,12 @@ import {
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
-import { getThread } from "@/lib/conversations";
+import { getRecentThreadMessages } from "@/lib/conversations";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DuplicateContactBanner } from "@/components/duplicate-contact-banner";
-import { MessageList } from "@/components/message-list";
+import { ConversationPreviewCard } from "@/components/conversation-preview-card";
 import { MeetingNotesList, type MeetingNoteItem } from "@/components/meeting-notes-list";
 import { ContactFormDialog, type FieldDef, type TagOption } from "../contact-form-dialog";
 import { DeleteContactDialog } from "../delete-contact-dialog";
@@ -115,8 +115,10 @@ export default async function ContatoDetailPage({
   ]);
 
   // undefined = sem filtro de canal — esta página mostra o histórico como
-  // referência mesclada, diferente do Atendimento (que separa por canal).
-  const thread = await getThread(id, undefined, allowedChannelIds);
+  // referência mesclada, diferente do Atendimento (que separa por canal). Só
+  // as últimas mensagens (ver ConversationPreviewCard), não a conversa
+  // inteira.
+  const recentMessages = await getRecentThreadMessages(id, undefined, allowedChannelIds);
   const duplicate = await findDuplicateContact(contact.phone, contact.email, id);
 
   const fieldDefinitions: FieldDef[] = fieldDefRows.map((row) => ({
@@ -316,19 +318,14 @@ export default async function ContatoDetailPage({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader>
           <CardTitle>Histórico de conversa</CardTitle>
-          <a
-            href={`/api/conversations/${contact.id}/export`}
-            className="text-sm text-primary hover:underline"
-          >
-            Exportar conversa (.md)
-          </a>
         </CardHeader>
         <CardContent>
-          <MessageList
-            messages={thread}
-            emptyMessage="Nenhuma conversa registrada com este contato ainda."
+          <ConversationPreviewCard
+            contactId={contact.id}
+            messages={recentMessages}
+            historyHref={`/atendimento/${contact.id}`}
           />
         </CardContent>
       </Card>

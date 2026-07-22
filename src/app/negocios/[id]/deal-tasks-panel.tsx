@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   Check,
   ListTodo,
   Mail,
@@ -17,6 +18,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   EmailTaskExecutor,
   MessageTaskExecutor,
   SchedulingTaskExecutor,
@@ -24,7 +31,6 @@ import {
 } from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
-import { cn } from "@/lib/utils";
 import { addStageTaskToDealAction, completeTaskAction } from "../actions";
 
 export type DealTask = TaskLike;
@@ -256,6 +262,104 @@ function AutomaticPreviewRow({ config }: { config: StageTaskConfig }) {
   );
 }
 
+type ExecutorProps = {
+  dealId: string;
+  contactId: string;
+  contactEmail: string | null;
+  isGoogleConnected: boolean;
+  channels: { id: string; label: string }[];
+  preselectedChannelId: string | null;
+  onDone: () => void;
+};
+
+function StageTaskSection({
+  stage,
+  configs,
+  tasks,
+  executorProps,
+}: {
+  stage: PipelineStageInfo;
+  configs: StageTaskConfig[];
+  tasks: DealTask[];
+  executorProps: ExecutorProps;
+}) {
+  return (
+    <div className="space-y-1.5 rounded-lg border border-border p-2.5">
+      <p className="text-xs font-semibold">{stage.name}</p>
+      <div className="space-y-1.5">
+        {configs.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nenhuma tarefa configurada nesta etapa.
+          </p>
+        )}
+        {configs.map((config) => {
+          const instances = tasks.filter((t) => t.stageTaskId === config.id);
+          if (instances.length > 0) {
+            return instances.map((task) => (
+              <TaskRow key={task.id} task={task} {...executorProps} />
+            ));
+          }
+          if (config.isAutomatic) {
+            return <AutomaticPreviewRow key={config.id} config={config} />;
+          }
+          return (
+            <AddManualTaskRow
+              key={config.id}
+              stageTask={config}
+              dealId={executorProps.dealId}
+              onDone={executorProps.onDone}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NextStagesDialog({
+  stages,
+  stageTaskConfigs,
+  tasks,
+  pendingCount,
+  executorProps,
+}: {
+  stages: PipelineStageInfo[];
+  stageTaskConfigs: StageTaskConfig[];
+  tasks: DealTask[];
+  pendingCount: number;
+  executorProps: ExecutorProps;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <ArrowRight size={14} strokeWidth={1.75} />
+        Próximas tarefas
+        {pendingCount > 0 && <Badge variant="secondary">{pendingCount}</Badge>}
+      </Button>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Tarefas de outras etapas</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[70vh] space-y-2 overflow-y-auto">
+          {stages.map((stage) => (
+            <StageTaskSection
+              key={stage.id}
+              stage={stage}
+              configs={stageTaskConfigs
+                .filter((c) => c.stageId === stage.id)
+                .sort((a, b) => a.order - b.order)}
+              tasks={tasks}
+              executorProps={executorProps}
+            />
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DealTasksPanel({
   dealId,
   contactId,
@@ -281,6 +385,15 @@ export function DealTasksPanel({
 }) {
   const router = useRouter();
   const onDone = () => router.refresh();
+  const executorProps: ExecutorProps = {
+    dealId,
+    contactId,
+    contactEmail,
+    isGoogleConnected,
+    channels,
+    preselectedChannelId,
+    onDone,
+  };
 
   // Tarefa real sem modelo de etapa correspondente (nasceu de automação de
   // tag, sequência, ou o stage_task de origem foi excluído depois) — não tem
@@ -292,17 +405,45 @@ export function DealTasksPanel({
   const ungroupedPending = ungroupedTasks.filter((t) => t.status === "pendente");
   const ungroupedDone = ungroupedTasks.filter((t) => t.status === "concluida");
 
-  // Etapa atual sempre aparece, mesmo sem nenhuma tarefa configurada — é o
-  // marcador de "onde o negócio está" na timeline; as demais só entram se
-  // tiverem alguma tarefa configurada, senão vira ruído.
-  const stagesWithTasks = pipelineStages.filter(
-    (stage) => stage.id === currentStageId || stageTaskConfigs.some((c) => c.stageId === stage.id)
-  );
+  const currentStage = pipelineStages.find((s) => s.id === currentStageId);
+  const currentStageConfigs = stageTaskConfigs
+    .filter((c) => c.stageId === currentStageId)
+    .sort((a, b) => a.order - b.order);
 
-  const isEmpty = ungroupedTasks.length === 0 && stagesWithTasks.length === 0;
+  // Demais etapas com alguma tarefa configurada — só a atual fica no corpo
+  // principal (item 2: página do negócio menor); o resto vai pro modal
+  // "Próximas tarefas" pra não repetir a timeline inteira da pipeline aqui.
+  const otherStages = pipelineStages.filter(
+    (stage) => stage.id !== currentStageId && stageTaskConfigs.some((c) => c.stageId === stage.id)
+  );
+  const otherStagesPendingCount = otherStages.reduce((total, stage) => {
+    const configIdsForStage = new Set(
+      stageTaskConfigs.filter((c) => c.stageId === stage.id).map((c) => c.id)
+    );
+    return (
+      total +
+      tasks.filter(
+        (t) => t.stageTaskId && configIdsForStage.has(t.stageTaskId) && t.status === "pendente"
+      ).length
+    );
+  }, 0);
+
+  const isEmpty = ungroupedTasks.length === 0 && !currentStage;
 
   return (
     <div className="space-y-4">
+      {otherStages.length > 0 && (
+        <div className="flex justify-end">
+          <NextStagesDialog
+            stages={otherStages}
+            stageTaskConfigs={stageTaskConfigs}
+            tasks={tasks}
+            pendingCount={otherStagesPendingCount}
+            executorProps={executorProps}
+          />
+        </div>
+      )}
+
       {isEmpty && (
         <EmptyState
           icon={ListTodo}
@@ -314,81 +455,18 @@ export function DealTasksPanel({
       {ungroupedTasks.length > 0 && (
         <div className="space-y-2">
           {[...ungroupedPending, ...ungroupedDone].map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              dealId={dealId}
-              contactId={contactId}
-              contactEmail={contactEmail}
-              isGoogleConnected={isGoogleConnected}
-              channels={channels}
-              preselectedChannelId={preselectedChannelId}
-              onDone={onDone}
-            />
+            <TaskRow key={task.id} task={task} {...executorProps} />
           ))}
         </div>
       )}
 
-      {stagesWithTasks.length > 0 && (
-        <div className="space-y-2">
-          {stagesWithTasks.map((stage) => {
-            const configs = stageTaskConfigs
-              .filter((c) => c.stageId === stage.id)
-              .sort((a, b) => a.order - b.order);
-            const isCurrent = stage.id === currentStageId;
-
-            return (
-              <div
-                key={stage.id}
-                className={cn(
-                  "space-y-1.5 rounded-lg border p-2.5",
-                  isCurrent ? "border-primary/40 bg-primary/5" : "border-border"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <p className="text-xs font-semibold">{stage.name}</p>
-                  {isCurrent && <Badge variant="info">Etapa atual</Badge>}
-                </div>
-                <div className="space-y-1.5">
-                  {configs.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Nenhuma tarefa configurada nesta etapa.
-                    </p>
-                  )}
-                  {configs.map((config) => {
-                    const instances = tasks.filter((t) => t.stageTaskId === config.id);
-                    if (instances.length > 0) {
-                      return instances.map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          dealId={dealId}
-                          contactId={contactId}
-                          contactEmail={contactEmail}
-                          isGoogleConnected={isGoogleConnected}
-                          channels={channels}
-                          preselectedChannelId={preselectedChannelId}
-                          onDone={onDone}
-                        />
-                      ));
-                    }
-                    if (config.isAutomatic) {
-                      return <AutomaticPreviewRow key={config.id} config={config} />;
-                    }
-                    return (
-                      <AddManualTaskRow
-                        key={config.id}
-                        stageTask={config}
-                        dealId={dealId}
-                        onDone={onDone}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {currentStage && (
+        <StageTaskSection
+          stage={currentStage}
+          configs={currentStageConfigs}
+          tasks={tasks}
+          executorProps={executorProps}
+        />
       )}
     </div>
   );

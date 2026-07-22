@@ -494,9 +494,9 @@ export function MessageList({
   favoritesOnly = false,
   onReply,
   isGroup = false,
-  // Editar/apagar só faz sentido no Atendimento (conversa ao vivo) — a
-  // referência mesclada da página do negócio (deal-conversation-card.tsx)
-  // não passa essa prop, então fica read-only lá.
+  // Editar/apagar só faz sentido no Atendimento (conversa ao vivo) — as
+  // prévias mescladas (conversation-preview-card.tsx, em negócio e contato)
+  // não passam essa prop, então ficam read-only lá.
   canEditDelete = false,
 }: {
   messages: ThreadMessage[];

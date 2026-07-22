@@ -4,8 +4,31 @@ import { count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { userPipelineVisibility, users } from "@/db/schema";
 import { generateTempPassword, hashPassword } from "@/lib/password";
+
+type PipelineSettingInput = { id: string; visible: boolean };
+
+function parsePipelineSettings(raw: FormDataEntryValue | null): PipelineSettingInput[] | null {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    if (
+      !parsed.every(
+        (p) =>
+          p &&
+          typeof p.id === "string" &&
+          typeof p.visible === "boolean"
+      )
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 export type CreateUserState =
   | { status: "idle" }
@@ -30,6 +53,10 @@ export async function updateUserAction(
   const email = formData.get("email");
   const role = formData.get("role");
   const restrictToOwnRecords = formData.get("restrictToOwnRecords") === "true";
+  const defaultPipelineIdRaw = formData.get("defaultPipelineId");
+  const defaultPipelineId =
+    typeof defaultPipelineIdRaw === "string" && defaultPipelineIdRaw ? defaultPipelineIdRaw : null;
+  const pipelineSettings = parsePipelineSettings(formData.get("pipelineSettings"));
 
   if (typeof id !== "string" || !id) {
     return { status: "error", message: "Usuário inválido." };
@@ -42,6 +69,18 @@ export async function updateUserAction(
   }
   if (role !== "admin" && role !== "atendente") {
     return { status: "error", message: "Role inválida." };
+  }
+  if (pipelineSettings === null) {
+    return { status: "error", message: "Configuração de pipelines inválida." };
+  }
+  if (
+    defaultPipelineId &&
+    !pipelineSettings.some((p) => p.id === defaultPipelineId && p.visible)
+  ) {
+    return {
+      status: "error",
+      message: "A pipeline padrão precisa estar entre as pipelines visíveis.",
+    };
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -87,8 +126,27 @@ export async function updateUserAction(
 
   await db
     .update(users)
-    .set({ name: name.trim(), email: normalizedEmail, role, restrictToOwnRecords })
+    .set({
+      name: name.trim(),
+      email: normalizedEmail,
+      role,
+      restrictToOwnRecords,
+      defaultPipelineId,
+    })
     .where(eq(users.id, id));
+
+  if (pipelineSettings.length > 0) {
+    const upserts = pipelineSettings.map((p, index) =>
+      db
+        .insert(userPipelineVisibility)
+        .values({ userId: id, pipelineId: p.id, visible: p.visible, order: index })
+        .onConflictDoUpdate({
+          target: [userPipelineVisibility.userId, userPipelineVisibility.pipelineId],
+          set: { visible: p.visible, order: index },
+        })
+    );
+    await db.batch(upserts as [(typeof upserts)[number], ...(typeof upserts)[number][]]);
+  }
 
   revalidatePath("/configuracoes/usuarios");
   return { status: "idle" };

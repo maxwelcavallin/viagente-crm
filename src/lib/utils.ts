@@ -14,3 +14,20 @@ export function initialOf(name: string): string {
   const first = Array.from(name.trim())[0]
   return first ? first.toUpperCase() : "?"
 }
+
+// Download client-side sem round-trip ao servidor — os dados (resumo de
+// reunião, conversa) já estão carregados na página; só monta um Blob e
+// simula o clique num link temporário, padrão sem lib nenhuma.
+export function downloadTextFile(
+  filename: string,
+  content: string,
+  mime = "text/markdown;charset=utf-8"
+) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}

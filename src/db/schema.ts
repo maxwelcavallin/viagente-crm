@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   foreignKey,
   index,
@@ -189,6 +190,14 @@ export const users = pgTable(
     // em si fica privado no R2, servido via redirect assinado, não uma URL
     // pública). Null = sem foto, cai no fallback de iniciais.
     avatarUrl: text("avatar_url"),
+    // Pipeline pré-selecionada ao abrir /negocios pra este usuário — ver
+    // src/lib/pipeline-visibility.ts. Null = cai na primeira pipeline
+    // visível pra ele (comportamento antigo). set null na exclusão da
+    // pipeline pra não travar a exclusão por causa de uma preferência.
+    defaultPipelineId: uuid("default_pipeline_id").references(
+      (): AnyPgColumn => pipelines.id,
+      { onDelete: "set null" }
+    ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -244,6 +253,31 @@ export const pipelineOwnerDistribution = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex("pipeline_owner_distribution_pipeline_user_idx").on(t.pipelineId, t.userId)]
+);
+
+// Quais pipelines cada usuário vê na barra de abas de /negocios, e em que
+// ordem — ver src/lib/pipeline-visibility.ts (getPipelinesForUser). Um
+// registro por (usuário, pipeline); pipeline sem registro pro usuário conta
+// como visível (fallback pra não esconder pipeline nova até o admin
+// configurar explicitamente). Admin sempre vê todas independente de
+// `visible`, mas ainda respeita `order`.
+export const userPipelineVisibility = pgTable(
+  "user_pipeline_visibility",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "cascade" }),
+    visible: boolean("visible").notNull().default(true),
+    order: integer("order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("user_pipeline_visibility_user_pipeline_idx").on(t.userId, t.pipelineId)]
 );
 
 export const stages = pgTable(

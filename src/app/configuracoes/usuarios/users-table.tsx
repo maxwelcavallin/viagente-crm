@@ -19,14 +19,18 @@ type UserRow = {
   role: "admin" | "atendente";
   mustChangePassword: boolean;
   restrictToOwnRecords: boolean;
+  defaultPipelineId: string | null;
+  pipelineSettings: { pipelineId: string; visible: boolean; order: number }[];
 };
 
 export function UsersTable({
   users,
   currentUserId,
+  allPipelines,
 }: {
   users: UserRow[];
   currentUserId: string;
+  allPipelines: { id: string; name: string }[];
 }) {
   if (users.length === 0) {
     return (
@@ -75,7 +79,7 @@ export function UsersTable({
             </TableCell>
             <TableCell>
               <div className="flex items-center justify-end gap-1.5">
-                <EditUserDialog user={user} />
+                <EditUserDialog user={user} allPipelines={allPipelines} />
                 {user.id !== currentUserId && <DeleteUserDialog user={user} />}
               </div>
             </TableCell>

@@ -15,6 +15,7 @@ import {
   users,
 } from "@/db/schema";
 import { getLastMessagePreviewsByContactId } from "@/lib/deals";
+import { getPipelinesForUser } from "@/lib/pipeline-visibility";
 import type { TagOption } from "@/lib/tags";
 import { ownerVisibilityFilter } from "@/lib/visibility";
 import { KanbanBoard } from "./kanban-board";
@@ -32,35 +33,57 @@ export default async function NegociosPage({
 
   const { pipelineId: requestedPipelineId } = await searchParams;
 
-  const [allPipelines, allTagRows, contactRows, ownerRows, fieldDefRows] =
-    await Promise.all([
-      db.select().from(pipelines).orderBy(asc(pipelines.order)),
-      db.select().from(tags).orderBy(tags.name),
-      db
-        .select({
-          id: contacts.id,
-          name: contacts.name,
-          phone: contacts.phone,
-          avatarUrl: contacts.avatarUrl,
-        })
-        .from(contacts)
-        .orderBy(asc(contacts.name)),
-      db
-        .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
-        .from(users)
-        .orderBy(asc(users.name)),
-      db
-        .select()
-        .from(customFieldDefinitions)
-        .where(eq(customFieldDefinitions.entity, "deal"))
-        .orderBy(asc(customFieldDefinitions.order)),
-    ]);
+  const [
+    allPipelines,
+    visiblePipelines,
+    currentUserRow,
+    allTagRows,
+    contactRows,
+    ownerRows,
+    fieldDefRows,
+  ] = await Promise.all([
+    db.select().from(pipelines).orderBy(asc(pipelines.order)),
+    getPipelinesForUser(session.user),
+    db
+      .select({ defaultPipelineId: users.defaultPipelineId })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1)
+      .then((r) => r[0]),
+    db.select().from(tags).orderBy(tags.name),
+    db
+      .select({
+        id: contacts.id,
+        name: contacts.name,
+        phone: contacts.phone,
+        avatarUrl: contacts.avatarUrl,
+      })
+      .from(contacts)
+      .orderBy(asc(contacts.name)),
+    db
+      .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+      .from(users)
+      .orderBy(asc(users.name)),
+    db
+      .select()
+      .from(customFieldDefinitions)
+      .where(eq(customFieldDefinitions.entity, "deal"))
+      .orderBy(asc(customFieldDefinitions.order)),
+  ]);
 
+  const defaultPipelineId = currentUserRow?.defaultPipelineId ?? null;
+
+  // Pipeline pré-selecionada: a pedida na URL (se visível pra este usuário)
+  // → a padrão configurada pra ele (se visível) → a primeira visível — ver
+  // getPipelinesForUser em src/lib/pipeline-visibility.ts.
   const selectedPipelineId =
     (requestedPipelineId &&
-      allPipelines.some((p) => p.id === requestedPipelineId) &&
+      visiblePipelines.some((p) => p.id === requestedPipelineId) &&
       requestedPipelineId) ||
-    allPipelines[0]?.id ||
+    (defaultPipelineId &&
+      visiblePipelines.some((p) => p.id === defaultPipelineId) &&
+      defaultPipelineId) ||
+    visiblePipelines[0]?.id ||
     "";
 
   // Busca as etapas de TODAS as pipelines (não só a selecionada): o modal
@@ -195,7 +218,7 @@ export default async function NegociosPage({
       <h1 className="text-2xl font-bold">Negócios</h1>
       <KanbanBoard
         key={selectedPipelineId}
-        pipelines={allPipelines.map((p) => ({ id: p.id, name: p.name }))}
+        pipelines={visiblePipelines}
         selectedPipelineId={selectedPipelineId}
         stages={allStages}
         deals={dealCards}

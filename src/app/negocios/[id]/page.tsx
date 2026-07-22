@@ -27,7 +27,7 @@ import {
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
-import { getThreadPage } from "@/lib/conversations";
+import { getRecentThreadMessages } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { getDealActivityLogPage } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
@@ -49,7 +49,7 @@ import { DealFormDialog } from "../deal-form-dialog";
 import { DeleteDealDialog } from "../delete-deal-dialog";
 import { DealActivityLogCard } from "./deal-activity-log-card";
 import { DealStatusActions } from "./deal-status-actions";
-import { DealConversationCard } from "./deal-conversation-card";
+import { ConversationPreviewCard } from "@/components/conversation-preview-card";
 import { SyncMeetingNotesButton } from "./sync-meeting-notes-button";
 import { DealTasksPanel, type DealTask, type StageTaskConfig } from "./deal-tasks-panel";
 import { EmailComposeDialog } from "@/components/email-compose-dialog";
@@ -165,7 +165,7 @@ export default async function DealDetailPage({
   const pipelineStageIds = pipelineStages.map((s) => s.id);
 
   const [
-    threadPage,
+    recentMessages,
     contactFieldDefRows,
     contactTagRows,
     taskRows,
@@ -182,10 +182,10 @@ export default async function DealDetailPage({
   ] = await Promise.all([
       // undefined = sem filtro de canal — esta página mostra o histórico
       // como referência mesclada, diferente do Atendimento (que separa por
-      // canal). Só a última página (ver DealConversationCard) — sem isso a
-      // conversa inteira carregava de uma vez, pesado pra contato com
+      // canal). Só as últimas mensagens (ver ConversationPreviewCard) — sem
+      // isso a conversa inteira carregava de uma vez, pesado pra contato com
       // histórico longo.
-      getThreadPage(contact.id, undefined, allowedChannelIds),
+      getRecentThreadMessages(contact.id, undefined, allowedChannelIds),
       db
         .select()
         .from(customFieldDefinitions)
@@ -339,6 +339,13 @@ export default async function DealDetailPage({
 
   const customFields = (deal.customFields as Record<string, unknown>) ?? {};
   const value = formatCurrencyBRL(deal.value);
+  // Só mostra campo customizado com valor preenchido — página muito grande
+  // sobrando "—" pra cada campo vazio, quando a maioria dos negócios só usa
+  // uma fração dos campos configurados.
+  const filledDealFields = fieldDefinitions.filter((field) => {
+    const raw = customFields[field.key];
+    return raw != null && raw !== "";
+  });
 
   const contactFieldDefinitions: FieldDef[] = contactFieldDefRows.map((row) => ({
     id: row.id,
@@ -348,6 +355,10 @@ export default async function DealDetailPage({
     options: (row.options as { value: string; label: string }[] | null) ?? null,
   }));
   const contactCustomFields = (contact.customFields as Record<string, unknown>) ?? {};
+  const filledContactFields = contactFieldDefinitions.filter((field) => {
+    const raw = contactCustomFields[field.key];
+    return raw != null && raw !== "";
+  });
 
   const variableValues: Record<string, string> = {
     nome_contato: contact.name,
@@ -412,7 +423,7 @@ export default async function DealDetailPage({
     };
   });
 
-  const lastChannelId = [...threadPage.messages].reverse().find((m) => m.channelId)?.channelId;
+  const lastChannelId = [...recentMessages].reverse().find((m) => m.channelId)?.channelId;
   const defaultChannel = allowedChannels.find((c) => c.isDefault);
   const preselectedChannelId =
     (lastChannelId && allowedChannels.some((c) => c.id === lastChannelId)
@@ -494,7 +505,7 @@ export default async function DealDetailPage({
             <CardTitle>Dados do negócio</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-0.5">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                   Valor
@@ -529,7 +540,7 @@ export default async function DealDetailPage({
                   {deal.temperature ? TEMPERATURE_LABELS[deal.temperature] : "—"}
                 </dd>
               </div>
-              <div className="space-y-0.5 sm:col-span-2">
+              <div className="space-y-0.5 sm:col-span-2 lg:col-span-3">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                   Tags
                 </dt>
@@ -547,7 +558,7 @@ export default async function DealDetailPage({
                   )}
                 </dd>
               </div>
-              {fieldDefinitions.map((field) => (
+              {filledDealFields.map((field) => (
                 <div key={field.id} className="space-y-0.5">
                   <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                     {field.label}
@@ -565,7 +576,13 @@ export default async function DealDetailPage({
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Dados do contato</CardTitle>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" render={<Link href={`/contatos/${contact.id}`} />}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={`/contatos/${contact.id}`} />}
+              >
                 Ver contato
               </Button>
               <ContactFormDialog
@@ -595,7 +612,7 @@ export default async function DealDetailPage({
             >
               {contactDealCount} negócio{contactDealCount === 1 ? "" : "s"} com este contato
             </Link>
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-0.5">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                   Nome
@@ -621,7 +638,7 @@ export default async function DealDetailPage({
                 </dt>
                 <dd className="text-sm">{contact.email ?? "—"}</dd>
               </div>
-              <div className="space-y-0.5 sm:col-span-2">
+              <div className="space-y-0.5 sm:col-span-2 lg:col-span-3">
                 <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                   Tags
                 </dt>
@@ -639,7 +656,7 @@ export default async function DealDetailPage({
                   )}
                 </dd>
               </div>
-              {contactFieldDefinitions.map((field) => (
+              {filledContactFields.map((field) => (
                 <div key={field.id} className="space-y-0.5">
                   <dt className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                     {field.label}
@@ -718,6 +735,7 @@ export default async function DealDetailPage({
               id: e.id,
               toEmail: e.toEmail,
               subject: e.subject,
+              body: e.body,
               status: e.status,
               errorMessage: e.errorMessage,
               sentAt: e.sentAt.toISOString(),
@@ -751,20 +769,14 @@ export default async function DealDetailPage({
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader>
           <CardTitle>Histórico de conversa</CardTitle>
-          <a
-            href={`/api/conversations/${contact.id}/export`}
-            className="text-sm text-primary hover:underline"
-          >
-            Exportar conversa (.md)
-          </a>
         </CardHeader>
         <CardContent>
-          <DealConversationCard
-            dealId={deal.id}
-            initialMessages={threadPage.messages}
-            initialHasMore={threadPage.hasMore}
+          <ConversationPreviewCard
+            contactId={contact.id}
+            messages={recentMessages}
+            historyHref={`/atendimento/${contact.id}`}
           />
         </CardContent>
       </Card>
