@@ -18,6 +18,7 @@ import type { FieldDef } from "@/lib/custom-fields";
 import type { TagOption } from "@/lib/tags";
 import { FieldMappingEditor } from "./field-mapping-editor";
 import { WebhookTagsEditor } from "./webhook-tags-editor";
+import { WebhookDynamicTagEditor } from "./webhook-dynamic-tag-editor";
 import { TestPayloadPanel } from "./test-payload-panel";
 import { LogsList, type LogRow } from "./logs-list";
 import { EditOutboundForm } from "./edit-outbound-form";
@@ -168,6 +169,23 @@ export default async function WebhookDetailPage({
                 allTags={allTags}
                 initialContactTagIds={(webhook.contactTagIds as string[]) ?? []}
                 initialDealTagIds={(webhook.dealTagIds as string[]) ?? []}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tag dinâmica por valor do payload</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WebhookDynamicTagEditor
+                webhookId={webhook.id}
+                allTags={allTags}
+                initialField={webhook.dynamicTagField}
+                initialMapping={
+                  (webhook.dynamicTagMapping as { value: string; tagId: string }[]) ?? []
+                }
+                initialDefaultTagId={webhook.dynamicTagDefaultId}
               />
             </CardContent>
           </Card>

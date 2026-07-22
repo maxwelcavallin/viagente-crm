@@ -1116,6 +1116,27 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           name: z.string().min(1),
           defaultPipelineId: z.string().uuid().optional().nullable().describe("obrigatório se direction='entrada'"),
           defaultStageId: z.string().uuid().optional().nullable().describe("obrigatório se direction='entrada'"),
+          dynamicTagField: z
+            .string()
+            .optional()
+            .nullable()
+            .describe(
+              "só p/ direction='entrada'. Caminho no JSON recebido com o valor de classificação (ex: 'payload.classificacao'), mesma notação do mapeamento de campos."
+            ),
+          dynamicTagMapping: z
+            .array(z.object({ value: z.string(), tagId: z.string().uuid() }))
+            .optional()
+            .describe(
+              "só p/ direction='entrada'. Lista de {value, tagId}: cada valor recebido no campo de dynamicTagField que casar (case-insensitive) aplica a tag correspondente ao negócio. Coexiste com as tags fixas."
+            ),
+          dynamicTagDefaultId: z
+            .string()
+            .uuid()
+            .optional()
+            .nullable()
+            .describe(
+              "só p/ direction='entrada'. Tag aplicada quando o valor recebido não bate com nenhuma linha de dynamicTagMapping (ou o campo vem vazio). Sem isso, nenhuma tag dinâmica é aplicada nesse caso."
+            ),
           targetUrl: z.string().url().optional().nullable().describe("obrigatório se direction='saida'"),
           events: z
             .array(z.string())
@@ -1145,6 +1166,11 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
           name: z.string().min(1),
           defaultPipelineId: z.string().uuid().optional().nullable(),
           defaultStageId: z.string().uuid().optional().nullable(),
+          dynamicTagField: z.string().optional().nullable(),
+          dynamicTagMapping: z
+            .array(z.object({ value: z.string(), tagId: z.string().uuid() }))
+            .optional(),
+          dynamicTagDefaultId: z.string().uuid().optional().nullable(),
           targetUrl: z.string().url().optional().nullable(),
           events: z.array(z.string()).optional(),
           pipelineId: z.string().uuid().optional().nullable(),

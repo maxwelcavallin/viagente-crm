@@ -25,6 +25,9 @@ export async function POST(request: Request) {
     name?: string;
     defaultPipelineId?: string | null;
     defaultStageId?: string | null;
+    dynamicTagField?: string | null;
+    dynamicTagMapping?: { value: string; tagId: string }[];
+    dynamicTagDefaultId?: string | null;
     targetUrl?: string | null;
     events?: string[];
     pipelineId?: string | null;
@@ -40,6 +43,9 @@ export async function POST(request: Request) {
     name: body.name,
     defaultPipelineId: body.defaultPipelineId,
     defaultStageId: body.defaultStageId,
+    dynamicTagField: body.dynamicTagField,
+    dynamicTagMapping: body.dynamicTagMapping,
+    dynamicTagDefaultId: body.dynamicTagDefaultId,
     targetUrl: body.targetUrl,
     events: body.events,
     pipelineId: body.pipelineId,

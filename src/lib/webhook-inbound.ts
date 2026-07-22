@@ -34,6 +34,29 @@ export function getByPath(source: unknown, path: string): unknown {
 
 export type FieldMapping = Record<string, string>;
 
+export type DynamicTagMapping = { value: string; tagId: string }[];
+
+// Resolve qual tag dinâmica aplicar: valor do payload no caminho `field`
+// casado (case-insensitive, trim) contra `mapping`; sem match — ou campo
+// vazio/ausente/não configurado — cai no `defaultTagId` (pode ser null,
+// e nesse caso não aplica tag nenhuma, sem erro). Coexiste com as tags
+// fixas (contactTagIds/dealTagIds), que continuam sempre aplicando.
+export function resolveDynamicTagId(
+  payload: unknown,
+  field: string | null,
+  mapping: DynamicTagMapping,
+  defaultTagId: string | null
+): string | null {
+  if (!field) return defaultTagId;
+  const raw = getByPath(payload, field);
+  if (raw != null && raw !== "") {
+    const normalized = String(raw).trim().toLowerCase();
+    const match = mapping.find((m) => m.value.trim().toLowerCase() === normalized);
+    if (match) return match.tagId;
+  }
+  return defaultTagId;
+}
+
 type TemperatureCondition =
   | { all: { field: string; op: string; value: unknown }[] }
   | { any: { field: string; op: string; value: unknown }[] }
@@ -111,12 +134,21 @@ export async function processInboundPayload(
     defaultStageId: string | null;
     contactTagIds?: unknown;
     dealTagIds?: unknown;
+    dynamicTagField?: unknown;
+    dynamicTagMapping?: unknown;
+    dynamicTagDefaultId?: unknown;
   },
   payload: unknown
 ): Promise<InboundProcessResult> {
   const fieldMapping = (webhookConfig.fieldMapping as FieldMapping) ?? {};
   const contactTagIds = (webhookConfig.contactTagIds as string[] | null) ?? [];
   const dealTagIds = (webhookConfig.dealTagIds as string[] | null) ?? [];
+  const dynamicTagId = resolveDynamicTagId(
+    payload,
+    (webhookConfig.dynamicTagField as string | null) ?? null,
+    (webhookConfig.dynamicTagMapping as DynamicTagMapping | null) ?? [],
+    (webhookConfig.dynamicTagDefaultId as string | null) ?? null
+  );
 
   if (!webhookConfig.defaultPipelineId || !webhookConfig.defaultStageId) {
     return {
@@ -259,8 +291,14 @@ export async function processInboundPayload(
   if (contactTagIds.length > 0) {
     await attachTagsToContact(contactId, contactTagIds);
   }
-  if (dealTagIds.length > 0) {
-    await attachTagsToDeal(createdDeal.id, dealTagIds);
+  // Tag dinâmica entra junto das fixas no mesmo attachTagsToDeal — dedupe
+  // via Set pra não inserir a mesma tag duas vezes se ela também estiver
+  // marcada como fixa.
+  const finalDealTagIds = dynamicTagId
+    ? Array.from(new Set([...dealTagIds, dynamicTagId]))
+    : dealTagIds;
+  if (finalDealTagIds.length > 0) {
+    await attachTagsToDeal(createdDeal.id, finalDealTagIds);
   }
 
   return {

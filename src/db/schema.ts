@@ -928,6 +928,21 @@ export const webhookConfigs = pgTable("webhook_configs", {
   // decisão em webhook-inbound.ts). Array de tags.id em texto puro.
   contactTagIds: jsonb("contact_tag_ids").notNull().default([]),
   dealTagIds: jsonb("deal_tag_ids").notNull().default([]),
+  // Mapeamento dinâmico de tag por valor do payload (entrada): caminho tipo
+  // "payload.classificacao" (mesma notação de fieldMapping) resolvido a cada
+  // execução — diferente das tags fixas acima, que não olham o payload.
+  // Coexiste com elas: fixas sempre aplicam, dinâmica aplica só a que casar
+  // com o valor recebido (ver resolveDynamicTagId em webhook-inbound.ts).
+  dynamicTagField: text("dynamic_tag_field"),
+  // Array de { value: string, tagId: string } — primeiro valor cujo
+  // value bate (case-insensitive, trim) com o resolvido no payload vence.
+  dynamicTagMapping: jsonb("dynamic_tag_mapping").notNull().default([]),
+  // Aplicada quando o valor resolvido não bate com nenhuma linha do
+  // mapeamento (ou o campo veio vazio/ausente) — null = não aplica nada
+  // nesse caso, sem erro.
+  dynamicTagDefaultId: uuid("dynamic_tag_default_id").references(() => tags.id, {
+    onDelete: "set null",
+  }),
   // Não listados na tabela de referência da seção 5, mas necessários para o
   // fluxo descrito na seção 6 ("cria negócio na pipeline/etapa padrão
   // configurada pra aquele webhook") — adicionados agora para não exigir

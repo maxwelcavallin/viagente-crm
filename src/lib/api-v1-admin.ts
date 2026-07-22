@@ -997,6 +997,12 @@ type WebhookInput = {
   // entrada
   defaultPipelineId?: string | null;
   defaultStageId?: string | null;
+  // entrada — mapeamento dinâmico de tag por valor do payload (coexiste com
+  // as tags fixas, que essa API ainda não expõe — ver contactTagIds/
+  // dealTagIds em webhook-tags-editor.tsx, configuráveis só pela tela).
+  dynamicTagField?: string | null;
+  dynamicTagMapping?: { value: string; tagId: string }[];
+  dynamicTagDefaultId?: string | null;
   // saida
   targetUrl?: string | null;
   events?: string[];
@@ -1051,6 +1057,9 @@ export async function createWebhookForApiKey(
       secretToken: secretToken ?? null,
       defaultPipelineId: params.direction === "entrada" ? params.defaultPipelineId : null,
       defaultStageId: params.direction === "entrada" ? params.defaultStageId : null,
+      dynamicTagField: params.direction === "entrada" ? (params.dynamicTagField?.trim() || null) : null,
+      dynamicTagMapping: params.direction === "entrada" ? (params.dynamicTagMapping ?? []) : [],
+      dynamicTagDefaultId: params.direction === "entrada" ? (params.dynamicTagDefaultId ?? null) : null,
       targetUrl: params.direction === "saida" ? params.targetUrl?.trim() : null,
       events: params.direction === "saida" ? params.events : null,
       pipelineId: params.direction === "saida" ? (params.pipelineId ?? null) : null,
@@ -1080,6 +1089,9 @@ export async function updateWebhookForApiKey(
       name: params.name.trim(),
       defaultPipelineId: params.direction === "entrada" ? params.defaultPipelineId : null,
       defaultStageId: params.direction === "entrada" ? params.defaultStageId : null,
+      dynamicTagField: params.direction === "entrada" ? (params.dynamicTagField?.trim() || null) : null,
+      dynamicTagMapping: params.direction === "entrada" ? (params.dynamicTagMapping ?? []) : [],
+      dynamicTagDefaultId: params.direction === "entrada" ? (params.dynamicTagDefaultId ?? null) : null,
       targetUrl: params.direction === "saida" ? params.targetUrl?.trim() : null,
       events: params.direction === "saida" ? params.events : null,
       pipelineId: params.direction === "saida" ? (params.pipelineId ?? null) : null,

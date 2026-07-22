@@ -242,6 +242,34 @@ export async function updateWebhookTagsAction(
   return { ok: true };
 }
 
+// Mapeamento dinâmico (coexiste com as tags fixas de updateWebhookTagsAction):
+// caminho no payload + lista de {valor recebido -> tag} + tag padrão opcional
+// pra quando nada bate. Ver resolveDynamicTagId em webhook-inbound.ts.
+export async function updateDynamicTagMappingAction(
+  webhookId: string,
+  field: string,
+  mapping: { value: string; tagId: string }[],
+  defaultTagId: string | null
+): Promise<{ ok: boolean }> {
+  if (!(await requireAdmin())) return { ok: false };
+
+  const cleanedMapping = mapping
+    .map((m) => ({ value: m.value.trim(), tagId: m.tagId }))
+    .filter((m) => m.value && m.tagId);
+
+  await db
+    .update(webhookConfigs)
+    .set({
+      dynamicTagField: field.trim() || null,
+      dynamicTagMapping: cleanedMapping,
+      dynamicTagDefaultId: defaultTagId,
+    })
+    .where(eq(webhookConfigs.id, webhookId));
+
+  revalidatePath(`/configuracoes/webhooks/${webhookId}`);
+  return { ok: true };
+}
+
 export async function toggleWebhookActiveAction(
   id: string,
   active: boolean
