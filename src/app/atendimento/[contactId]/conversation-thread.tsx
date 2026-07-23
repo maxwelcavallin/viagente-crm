@@ -86,16 +86,45 @@ export function ConversationThread({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const hasScrolledToBottomRef = useRef(false);
 
   const selectedChannel = channels.find((c) => c.id === channelId);
   const isInstagramChannel = selectedChannel?.channelType === "instagram";
 
-  // Mensagens vêm da mais antiga pra mais nova (ver getThread em
-  // conversations.ts) — sem isso, o overflow-y-auto abre parado no topo
-  // (mensagens antigas) em vez de mostrar a mais recente.
+  // AtendimentoShell dá um router.refresh() a cada 4s pra manter a lista de
+  // conversas viva (poll-based) — isso re-renderiza esta página com um
+  // "initialMessages" novo (nova referência de array) mesmo quando as
+  // mensagens são exatamente as mesmas de antes. Rolar pro fim a cada vez
+  // que ISSO acontece é o que fazia a barra "voltar sozinha" enquanto a
+  // pessoa tentava ler mensagens antigas — mesmo segurando o scroll, o
+  // próximo refresh (até 4s depois) chutava de volta pro fim.
+  // Só forçamos o scroll pro fim: (1) na primeira renderização da conversa
+  // (abrir a conversa deve mostrar a mensagem mais recente, não o topo), ou
+  // (2) quando chega uma mensagem REALMENTE nova (id do último item mudou) e
+  // a pessoa já estava perto do fim — nunca quando é só o mesmo conteúdo
+  // redesenhado pelo polling, e nunca puxando de volta quem rolou pra cima
+  // de propósito pra ler o histórico.
   useEffect(() => {
     const el = scrollContainerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+
+    const latestId = initialMessages[initialMessages.length - 1]?.id ?? null;
+    const isNewMessage = latestId !== lastMessageIdRef.current;
+    lastMessageIdRef.current = latestId;
+
+    if (!hasScrolledToBottomRef.current) {
+      hasScrolledToBottomRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+
+    if (!isNewMessage) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 150) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [initialMessages]);
 
   function clearPendingAttachment() {
