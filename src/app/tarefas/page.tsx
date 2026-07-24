@@ -43,6 +43,7 @@ export default async function TarefasPage() {
           title: tasks.title,
           type: tasks.type,
           status: tasks.status,
+          errorMessage: tasks.errorMessage,
           dueAt: tasks.dueAt,
           messageTemplateId: stageTasks.messageTemplateId,
           emailTemplateSubject: emailTemplates.subject,
@@ -158,6 +159,7 @@ export default async function TarefasPage() {
       title: row.title,
       type: row.type,
       status: row.status,
+      errorMessage: row.errorMessage,
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
       messageItems: templateItems.map((it) => ({
         id: it.id,

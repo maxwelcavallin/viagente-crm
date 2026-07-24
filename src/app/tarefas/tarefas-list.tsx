@@ -30,7 +30,8 @@ export type TarefaItem = {
   id: string;
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
-  status: "pendente" | "concluida";
+  status: "pendente" | "concluida" | "falhou";
+  errorMessage?: string | null;
   dueAt: string | null;
   messagePreview: string | null;
   messageItems?: TaskMessageItem[];
@@ -48,6 +49,7 @@ export type TarefaItem = {
 const STATUS_OPTIONS: Record<string, string> = {
   aberto: "Em aberto",
   atrasada: "Atrasadas",
+  falhou: "Falharam",
   concluida: "Concluídas",
   todas: "Todas",
 };
@@ -114,6 +116,7 @@ function TarefaRow({
   const [isPending, setIsPending] = useState(false);
   const Icon = TYPE_ICON[item.type];
   const isDone = item.status === "concluida";
+  const isFailed = item.status === "falhou";
   const overdue = isOverdue(item.dueAt, isDone);
 
   const task: TaskLike = {
@@ -121,6 +124,7 @@ function TarefaRow({
     title: item.title,
     type: item.type,
     status: item.status,
+    errorMessage: item.errorMessage,
     messagePreview: item.messagePreview,
     messageItems: item.messageItems,
     dueAt: item.dueAt,
@@ -146,8 +150,8 @@ function TarefaRow({
           <span className={isDone ? "text-muted-foreground line-through" : "font-medium"}>
             {item.title}
           </span>
-          <Badge variant={isDone ? "success" : "secondary"}>
-            {isDone ? "Concluída" : TYPE_LABELS[item.type]}
+          <Badge variant={isDone ? "success" : isFailed ? "danger" : "secondary"}>
+            {isDone ? "Concluída" : isFailed ? "Falhou" : TYPE_LABELS[item.type]}
           </Badge>
           {item.dueAt && (
             <Badge variant={overdue ? "danger" : "secondary"}>
@@ -187,6 +191,9 @@ function TarefaRow({
           {" · "}
           {item.pipelineName}
         </p>
+        {isFailed && item.errorMessage && (
+          <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p>
+        )}
         {!isDone && item.type === "mensagem" && (
           <MessageTaskExecutor
             task={task}
@@ -289,6 +296,7 @@ export function TarefasList({
       const overdue = isOverdue(t.dueAt, done, now);
       if (status === "aberto" && done) return false;
       if (status === "atrasada" && !overdue) return false;
+      if (status === "falhou" && t.status !== "falhou") return false;
       if (status === "concluida" && !done) return false;
       if (from && (!t.dueAt || new Date(t.dueAt) < from)) return false;
       if (to && (!t.dueAt || new Date(t.dueAt) > to)) return false;

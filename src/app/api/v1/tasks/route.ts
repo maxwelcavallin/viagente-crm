@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   const tasks = await listTasks(auth.apiKey.actingUser, {
     dealId: params.get("dealId") ?? undefined,
-    status: (params.get("status") as "pendente" | "concluida" | null) ?? undefined,
+    status: (params.get("status") as "pendente" | "concluida" | "falhou" | null) ?? undefined,
     limit: limitRaw ? Number(limitRaw) : undefined,
     offset: offsetRaw ? Number(offsetRaw) : undefined,
   });

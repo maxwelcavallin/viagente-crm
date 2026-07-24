@@ -35,7 +35,11 @@ export const stageTaskTypeEnum = pgEnum("stage_task_type", [
   "generica",
   "email",
 ]);
-export const taskStatusEnum = pgEnum("task_status", ["pendente", "concluida"]);
+// "falhou" = auto-envio (stage_task/sequência com autoSend) que rodou e
+// falhou (ex: erro na API do WhatsApp) — antes disso o erro só ia pro
+// console do servidor e a task ficava presa em "pendente" pra sempre, sem
+// nenhum sinal visível pra equipe (ver maybeAutoSendTask).
+export const taskStatusEnum = pgEnum("task_status", ["pendente", "concluida", "falhou"]);
 // Etapa de automação avançada: quando a task de uma tag_automation é criada.
 // "tag_adicionada" dispara na hora (evento síncrono); "dias_apos_tag" é
 // varrido pelo cron de automação usando deal_tags.created_at.
@@ -572,6 +576,9 @@ export const tasks = pgTable(
     title: text("title").notNull(),
     type: stageTaskTypeEnum("type").notNull(),
     status: taskStatusEnum("status").notNull().default("pendente"),
+    // Preenchido só quando status='falhou' — mesmo padrão de
+    // scheduled_messages.error_message.
+    errorMessage: text("error_message"),
     dueAt: timestamp("due_at", { withTimezone: true }),
     // Necessário pro dedupe do cron de automação (compara com
     // deals.stage_entered_at / deal_tags.created_at pra saber se a task

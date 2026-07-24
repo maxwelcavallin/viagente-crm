@@ -114,12 +114,19 @@ export async function maybeAutoSendTask(params: {
   if (result.ok) {
     await db
       .update(tasks)
-      .set({ status: "concluida", completedAt: new Date() })
+      .set({ status: "concluida", completedAt: new Date(), errorMessage: null })
       .where(eq(tasks.id, params.taskId));
   } else {
     console.error(
       `[task-automation] falha ao auto-enviar task ${params.taskId}: ${result.error}`
     );
+    // Antes disso o erro só ia pro console — a task ficava presa em
+    // "pendente" pra sempre, sem nenhum sinal visível pra equipe (ver
+    // TaskRow/tarefas-list.tsx, que mostram o badge "Falhou" + este texto).
+    await db
+      .update(tasks)
+      .set({ status: "falhou", errorMessage: result.error ?? null })
+      .where(eq(tasks.id, params.taskId));
   }
 }
 

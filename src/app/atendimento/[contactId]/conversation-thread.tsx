@@ -25,6 +25,7 @@ import {
 } from "@/components/scheduled-messages-list";
 import { inferMediaKind, uploadAndSendMedia } from "@/lib/upload-media-client";
 import type { ThreadMessage } from "@/lib/conversations";
+import type { QuickFillMessageTemplate } from "@/lib/templates";
 import {
   DuplicateContactBanner,
   type DuplicateContactInfo,
@@ -56,6 +57,7 @@ export function ConversationThread({
   preselectedChannelId,
   scheduledMessages,
   params,
+  messageTemplates,
 }: {
   contactId: string;
   contactName: string;
@@ -71,6 +73,7 @@ export function ConversationThread({
   preselectedChannelId: string | null;
   scheduledMessages: ScheduledMessageItem[];
   params: ContactDealParam[];
+  messageTemplates: QuickFillMessageTemplate[];
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -456,6 +459,7 @@ export function ConversationThread({
                 channels={channels}
                 defaultChannelId={channelId || preselectedChannelId}
                 defaultMessage={text}
+                templates={messageTemplates}
                 onScheduled={() => setText("")}
                 trigger={
                   <Button

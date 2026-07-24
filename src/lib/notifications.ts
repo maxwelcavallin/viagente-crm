@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { deals, notifications, tasks } from "@/db/schema";
 import { getUsersWithChannelAccess } from "@/lib/channel-access";
@@ -64,7 +64,9 @@ export async function runOverdueTaskNotifications(): Promise<{ notified: number 
     })
     .from(tasks)
     .innerJoin(deals, eq(tasks.dealId, deals.id))
-    .where(and(eq(tasks.status, "pendente"), lte(tasks.dueAt, new Date())));
+    // "falhou" entra junto — um auto-envio que falhou já passou do prazo
+    // (mesma checagem de maybeAutoSendTask) e também precisa avisar o dono.
+    .where(and(inArray(tasks.status, ["pendente", "falhou"]), lte(tasks.dueAt, new Date())));
 
   let notified = 0;
   for (const task of overdue) {

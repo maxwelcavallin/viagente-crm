@@ -251,6 +251,77 @@ export async function getUnreadCountsByContactId(
   return countByContactId;
 }
 
+export type ContactChannelPreview = {
+  channelId: string | null;
+  channelLabel: string | null;
+  channelType: "whatsapp" | "instagram" | null;
+  lastMessageAt: Date;
+  messages: ThreadMessage[];
+};
+
+// Uma entrada por canal que ESSE contato já usou (não mescla WhatsApp e
+// Instagram numa lista só) — usada pelas prévias de conversa da página de
+// negócio/contato (ver ConversationPreviewCard), que deixam escolher qual
+// canal ver e voltar pro Atendimento já naquela conversa específica. Mesma
+// noção de "conversa = (contato, canal)" de listConversations, só que pra um
+// contato só.
+export async function getContactChannelPreviews(
+  contactId: string,
+  allowedChannelIds: string[],
+  limit = 5
+): Promise<ContactChannelPreview[]> {
+  const channelFilter = buildChannelFilter(allowedChannelIds);
+
+  const channelRows = await db
+    .selectDistinctOn([messages.channelId], {
+      channelId: messages.channelId,
+      lastMessageAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(and(eq(messages.contactId, contactId), channelFilter))
+    .orderBy(messages.channelId, desc(messages.createdAt));
+
+  if (channelRows.length === 0) return [];
+
+  const channelIds = channelRows
+    .map((r) => r.channelId)
+    .filter((id): id is string => Boolean(id));
+  const [whatsappChannelRows, instagramChannelRows] =
+    channelIds.length > 0
+      ? await Promise.all([
+          db
+            .select({ id: whatsappChannels.id, label: whatsappChannels.label })
+            .from(whatsappChannels)
+            .where(inArray(whatsappChannels.id, channelIds)),
+          db
+            .select({ id: instagramChannels.id, label: instagramChannels.label })
+            .from(instagramChannels)
+            .where(inArray(instagramChannels.id, channelIds)),
+        ])
+      : [[], []];
+  const whatsappIds = new Set(whatsappChannelRows.map((c) => c.id));
+  const labelById = new Map(
+    [...whatsappChannelRows, ...instagramChannelRows].map((c) => [c.id, c.label])
+  );
+
+  const previews = await Promise.all(
+    channelRows.map(async (row) => ({
+      channelId: row.channelId,
+      channelLabel: row.channelId ? (labelById.get(row.channelId) ?? null) : null,
+      channelType: row.channelId
+        ? whatsappIds.has(row.channelId)
+          ? ("whatsapp" as const)
+          : ("instagram" as const)
+        : null,
+      lastMessageAt: row.lastMessageAt,
+      messages: await getRecentThreadMessages(contactId, row.channelId, allowedChannelIds, limit),
+    }))
+  );
+
+  previews.sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
+  return previews;
+}
+
 export type ThreadMessage = {
   id: string;
   direction: "entrada" | "saida";

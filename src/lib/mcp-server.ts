@@ -364,7 +364,7 @@ export function createMcpServer(apiKey: AuthenticatedApiKey): McpServer {
       description: "Lista tarefas, opcionalmente filtradas por negócio e status.",
       inputSchema: {
         dealId: z.string().uuid().optional(),
-        status: z.enum(["pendente", "concluida"]).optional(),
+        status: z.enum(["pendente", "concluida", "falhou"]).optional(),
         limit: z.number().int().min(1).max(200).optional(),
       },
     },

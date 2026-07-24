@@ -18,7 +18,7 @@ import {
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
-import { getRecentThreadMessages } from "@/lib/conversations";
+import { getContactChannelPreviews } from "@/lib/conversations";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,11 +114,10 @@ export default async function ContatoDetailPage({
       .orderBy(desc(deals.createdAt)),
   ]);
 
-  // undefined = sem filtro de canal — esta página mostra o histórico como
-  // referência mesclada, diferente do Atendimento (que separa por canal). Só
-  // as últimas mensagens (ver ConversationPreviewCard), não a conversa
-  // inteira.
-  const recentMessages = await getRecentThreadMessages(id, undefined, allowedChannelIds);
+  // Uma entrada por canal que este contato já usou, cada uma com só as
+  // últimas mensagens (ver ConversationPreviewCard) — não a conversa
+  // inteira, e sem misturar WhatsApp e Instagram numa lista só.
+  const channelPreviews = await getContactChannelPreviews(id, allowedChannelIds);
   const duplicate = await findDuplicateContact(contact.phone, contact.email, id);
 
   const fieldDefinitions: FieldDef[] = fieldDefRows.map((row) => ({
@@ -322,11 +321,7 @@ export default async function ContatoDetailPage({
           <CardTitle>Histórico de conversa</CardTitle>
         </CardHeader>
         <CardContent>
-          <ConversationPreviewCard
-            contactId={contact.id}
-            messages={recentMessages}
-            historyHref={`/atendimento/${contact.id}`}
-          />
+          <ConversationPreviewCard contactId={contact.id} channels={channelPreviews} />
         </CardContent>
       </Card>
     </div>

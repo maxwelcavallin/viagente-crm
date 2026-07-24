@@ -562,7 +562,12 @@ export async function completeTaskAction(
 
   await db
     .update(tasks)
-    .set({ status: "concluida", completedAt: new Date(), completedBy: user.id })
+    .set({
+      status: "concluida",
+      completedAt: new Date(),
+      completedBy: user.id,
+      errorMessage: null,
+    })
     .where(eq(tasks.id, taskId));
 
   revalidatePath(`/negocios/${dealId}`);
@@ -591,6 +596,34 @@ export async function updateTaskAction(
       dueAt: fields.dueAt ? new Date(fields.dueAt) : null,
     })
     .where(eq(tasks.id, taskId));
+
+  revalidatePath(`/negocios/${dealId}`);
+  revalidatePath("/negocios");
+  revalidatePath("/tarefas");
+  return { ok: true };
+}
+
+// Tarefa livre, sem modelo de etapa — diferente de addStageTaskToDealAction
+// (que instancia um stage_task pré-configurado), esta cria título/tipo/prazo
+// do zero, direto no negócio (ver "Nova tarefa" em DealTasksPanel).
+export async function createManualTaskAction(
+  dealId: string,
+  fields: {
+    title: string;
+    type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
+    dueAt: string | null;
+  }
+): Promise<{ ok: boolean }> {
+  const user = await requireSession();
+  if (!user || !fields.title.trim()) return { ok: false };
+
+  await db.insert(tasks).values({
+    dealId,
+    title: fields.title.trim(),
+    type: fields.type,
+    status: "pendente",
+    dueAt: fields.dueAt ? new Date(fields.dueAt) : null,
+  });
 
   revalidatePath(`/negocios/${dealId}`);
   revalidatePath("/negocios");

@@ -27,14 +27,14 @@ import {
 } from "@/db/schema";
 import { getAllowedChannelIds } from "@/lib/channel-access";
 import { findDuplicateContact } from "@/lib/contact-merge";
-import { getRecentThreadMessages } from "@/lib/conversations";
+import { getContactChannelPreviews } from "@/lib/conversations";
 import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { getDealActivityLogPage } from "@/lib/deal-activity-log";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { resolveConnectionOwner } from "@/lib/google-calendar";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
 import { canViewOwnedRecord } from "@/lib/visibility";
-import { firstNameOf, substituteTemplate } from "@/lib/templates";
+import { firstNameOf, getQuickFillMessageTemplates, substituteTemplate } from "@/lib/templates";
 import { TEMPERATURE_BADGE_VARIANT, TEMPERATURE_LABELS } from "@/lib/temperature";
 import type { TagOption } from "@/lib/tags";
 import { Badge } from "@/components/ui/badge";
@@ -165,7 +165,7 @@ export default async function DealDetailPage({
   const pipelineStageIds = pipelineStages.map((s) => s.id);
 
   const [
-    recentMessages,
+    channelPreviews,
     contactFieldDefRows,
     contactTagRows,
     taskRows,
@@ -180,12 +180,12 @@ export default async function DealDetailPage({
     meetingNoteRows,
     templateItemRows,
   ] = await Promise.all([
-      // undefined = sem filtro de canal — esta página mostra o histórico
-      // como referência mesclada, diferente do Atendimento (que separa por
-      // canal). Só as últimas mensagens (ver ConversationPreviewCard) — sem
-      // isso a conversa inteira carregava de uma vez, pesado pra contato com
-      // histórico longo.
-      getRecentThreadMessages(contact.id, undefined, allowedChannelIds),
+      // Uma entrada por canal que este contato já usou, cada uma com só as
+      // últimas mensagens (ver ConversationPreviewCard) — sem isso a
+      // conversa inteira carregava de uma vez, pesado pra contato com
+      // histórico longo, e canais diferentes ficavam mesclados numa prévia
+      // só.
+      getContactChannelPreviews(contact.id, allowedChannelIds),
       db
         .select()
         .from(customFieldDefinitions)
@@ -201,6 +201,7 @@ export default async function DealDetailPage({
           title: tasks.title,
           type: tasks.type,
           status: tasks.status,
+          errorMessage: tasks.errorMessage,
           dueAt: tasks.dueAt,
           stageTaskId: tasks.stageTaskId,
           messageTemplateId: stageTasks.messageTemplateId,
@@ -377,6 +378,8 @@ export default async function DealDetailPage({
     }
   }
 
+  const quickFillTemplates = await getQuickFillMessageTemplates(variableValues);
+
   const meetingNoteItems: MeetingNoteItem[] = meetingNoteRows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -404,6 +407,7 @@ export default async function DealDetailPage({
       title: row.title,
       type: row.type,
       status: row.status,
+      errorMessage: row.errorMessage,
       dueAt: row.dueAt ? row.dueAt.toISOString() : null,
       stageTaskId: row.stageTaskId,
       messageItems: templateItems.map((it) => ({
@@ -423,7 +427,10 @@ export default async function DealDetailPage({
     };
   });
 
-  const lastChannelId = [...recentMessages].reverse().find((m) => m.channelId)?.channelId;
+  // channelPreviews já vem ordenado por lastMessageAt desc (ver
+  // getContactChannelPreviews) — o primeiro com channelId é o canal mais
+  // recente.
+  const lastChannelId = channelPreviews.find((c) => c.channelId)?.channelId;
   const defaultChannel = allowedChannels.find((c) => c.isDefault);
   const preselectedChannelId =
     (lastChannelId && allowedChannels.some((c) => c.id === lastChannelId)
@@ -687,6 +694,7 @@ export default async function DealDetailPage({
               dealId={deal.id}
               channels={allowedChannels.map((c) => ({ id: c.id, label: c.label }))}
               defaultChannelId={preselectedChannelId}
+              templates={quickFillTemplates}
               trigger={<Button type="button" variant="outline" size="sm" />}
               triggerLabel="Agendar mensagem"
             />
@@ -773,11 +781,7 @@ export default async function DealDetailPage({
           <CardTitle>Histórico de conversa</CardTitle>
         </CardHeader>
         <CardContent>
-          <ConversationPreviewCard
-            contactId={contact.id}
-            messages={recentMessages}
-            historyHref={`/atendimento/${contact.id}`}
-          />
+          <ConversationPreviewCard contactId={contact.id} channels={channelPreviews} />
         </CardContent>
       </Card>
     </div>

@@ -1,3 +1,7 @@
+import { asc } from "drizzle-orm";
+import { db } from "@/db";
+import { messageTemplateItems, messageTemplates } from "@/db/schema";
+
 const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
 export function extractVariables(content: string): string[] {
@@ -54,6 +58,58 @@ export function buildVariableCatalog(
   }));
 
   return [...base, ...fromFields];
+}
+
+export type QuickFillMessageTemplate = {
+  id: string;
+  name: string;
+  content: string;
+  hasMedia: boolean;
+};
+
+// Usado pelos seletores de "preencher com template" em campos de texto livre
+// (agendamento de mensagem no Atendimento e no negócio) — junta os itens do
+// template num texto só, já com as variáveis substituídas pelos valores
+// desse contato/negócio. scheduled_messages só guarda texto (sem suporte a
+// mídia, ver cron send-scheduled-messages), então anexos do template não
+// entram no conteúdo — hasMedia avisa a UI quando isso acontece.
+export async function getQuickFillMessageTemplates(
+  variableValues: Record<string, string>
+): Promise<QuickFillMessageTemplate[]> {
+  const [templateRows, itemRows] = await Promise.all([
+    db
+      .select({ id: messageTemplates.id, name: messageTemplates.name })
+      .from(messageTemplates)
+      .orderBy(asc(messageTemplates.name)),
+    db
+      .select({
+        templateId: messageTemplateItems.templateId,
+        content: messageTemplateItems.content,
+        mediaType: messageTemplateItems.mediaType,
+      })
+      .from(messageTemplateItems)
+      .orderBy(asc(messageTemplateItems.order)),
+  ]);
+
+  const itemsByTemplateId = new Map<string, typeof itemRows>();
+  for (const item of itemRows) {
+    const list = itemsByTemplateId.get(item.templateId) ?? [];
+    list.push(item);
+    itemsByTemplateId.set(item.templateId, list);
+  }
+
+  return templateRows.map((template) => {
+    const items = itemsByTemplateId.get(template.id) ?? [];
+    return {
+      id: template.id,
+      name: template.name,
+      content: items
+        .map((item) => substituteTemplate(item.content, variableValues))
+        .filter(Boolean)
+        .join("\n\n"),
+      hasMedia: items.some((item) => Boolean(item.mediaType)),
+    };
+  });
 }
 
 function exampleForField(field: {

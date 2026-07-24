@@ -151,7 +151,14 @@ export default async function NegociosPage({
       ? db
           .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
           .from(tasks)
-          .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
+          .where(
+            and(
+              inArray(tasks.dealId, dealIds),
+              // "falhou" também precisa de atenção — conta junto com
+              // "pendente" pro badge não esconder um auto-envio que falhou.
+              inArray(tasks.status, ["pendente", "falhou"])
+            )
+          )
           .groupBy(tasks.dealId)
       : Promise.resolve([]),
     selectedPipelineId

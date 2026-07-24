@@ -31,6 +31,7 @@ import {
 } from "@/components/task-executors";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { DeleteTaskDialog } from "@/components/delete-task-dialog";
+import { CreateTaskDialog } from "@/components/create-task-dialog";
 import { addStageTaskToDealAction, completeTaskAction } from "../actions";
 
 export type DealTask = TaskLike;
@@ -113,6 +114,7 @@ function TaskRow({
   const [isPending, setIsPending] = useState(false);
   const Icon = TYPE_ICON[task.type];
   const isDone = task.status === "concluida";
+  const isFailed = task.status === "falhou";
   const isOverdue = isTaskOverdue(task.dueAt, isDone);
 
   async function handleComplete() {
@@ -134,8 +136,8 @@ function TaskRow({
           <span className={isDone ? "text-muted-foreground line-through" : "font-medium"}>
             {task.title}
           </span>
-          <Badge variant={isDone ? "success" : "secondary"}>
-            {isDone ? "Concluída" : TYPE_LABELS[task.type]}
+          <Badge variant={isDone ? "success" : isFailed ? "danger" : "secondary"}>
+            {isDone ? "Concluída" : isFailed ? "Falhou" : TYPE_LABELS[task.type]}
           </Badge>
           {task.dueAt && (
             <Badge variant={isOverdue ? "danger" : "secondary"}>
@@ -166,6 +168,9 @@ function TaskRow({
             />
           </div>
         </div>
+        {isFailed && task.errorMessage && (
+          <p className="mt-1 text-xs text-destructive">{task.errorMessage}</p>
+        )}
         {!isDone && task.type === "mensagem" && (
           <MessageTaskExecutor
             task={task}
@@ -432,8 +437,18 @@ export function DealTasksPanel({
 
   return (
     <div className="space-y-4">
-      {otherStages.length > 0 && (
-        <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <CreateTaskDialog
+          dealId={dealId}
+          onDone={onDone}
+          trigger={
+            <Button type="button" variant="outline" size="sm">
+              <Plus size={14} strokeWidth={1.75} />
+              Nova tarefa
+            </Button>
+          }
+        />
+        {otherStages.length > 0 && (
           <NextStagesDialog
             stages={otherStages}
             stageTaskConfigs={stageTaskConfigs}
@@ -441,14 +456,14 @@ export function DealTasksPanel({
             pendingCount={otherStagesPendingCount}
             executorProps={executorProps}
           />
-        </div>
-      )}
+        )}
+      </div>
 
       {isEmpty && (
         <EmptyState
           icon={ListTodo}
           title="Nenhuma tarefa ainda"
-          description="Tarefas automáticas aparecem aqui quando o negócio entra numa etapa com tarefas configuradas."
+          description="Tarefas automáticas aparecem aqui quando o negócio entra numa etapa com tarefas configuradas — ou crie uma manualmente em &quot;Nova tarefa&quot;."
         />
       )}
 

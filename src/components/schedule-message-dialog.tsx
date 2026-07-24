@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { QuickFillMessageTemplate } from "@/lib/templates";
 
 // Formato aceito por <input type="datetime-local">: "YYYY-MM-DDTHH:mm" em
 // horário local (não UTC) — por isso não dá pra usar toISOString() direto.
@@ -37,6 +38,7 @@ export function ScheduleMessageDialog({
   channels,
   defaultChannelId,
   defaultMessage,
+  templates = [],
   trigger,
   triggerLabel,
   onScheduled,
@@ -46,6 +48,7 @@ export function ScheduleMessageDialog({
   channels: { id: string; label: string }[];
   defaultChannelId: string | null;
   defaultMessage?: string;
+  templates?: QuickFillMessageTemplate[];
   trigger: React.ReactElement;
   triggerLabel: React.ReactNode;
   onScheduled?: () => void;
@@ -55,8 +58,11 @@ export function ScheduleMessageDialog({
   const [message, setMessage] = useState(defaultMessage ?? "");
   const [channelId, setChannelId] = useState(defaultChannelId ?? channels[0]?.id ?? "");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedTemplate = templates.find((t) => t.id === templateId);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -64,8 +70,18 @@ export function ScheduleMessageDialog({
       setMessage(defaultMessage ?? "");
       setChannelId(defaultChannelId ?? channels[0]?.id ?? "");
       setScheduledAt("");
+      setTemplateId("");
       setError(null);
     }
+  }
+
+  // Preenche o texto com o template escolhido — o campo continua editável
+  // depois, então dá pra ajustar manualmente em cima do template ou ignorar
+  // o seletor e escrever do zero.
+  function handleTemplateChange(nextId: string) {
+    setTemplateId(nextId);
+    const template = templates.find((t) => t.id === nextId);
+    if (template) setMessage(template.content);
   }
 
   async function handleSubmit() {
@@ -135,6 +151,36 @@ export function ScheduleMessageDialog({
                   </SelectContent>
                 </Select>
               </div>
+              {templates.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Preencher com template (opcional)</Label>
+                  <Select
+                    items={Object.fromEntries([
+                      ["", "Escrever manualmente"],
+                      ...templates.map((t) => [t.id, t.name]),
+                    ])}
+                    value={templateId}
+                    onValueChange={(v) => handleTemplateChange(v ?? "")}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Escrever manualmente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Escrever manualmente</SelectItem>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate?.hasMedia && (
+                    <p className="text-xs text-muted-foreground">
+                      Este template tem anexo — mensagens agendadas só enviam texto, o anexo não entra.
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="schedule-message">Mensagem</Label>
                 <textarea

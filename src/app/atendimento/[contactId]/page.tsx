@@ -16,7 +16,7 @@ import { formatCustomFieldValue, type FieldDef } from "@/lib/custom-fields";
 import { formatCurrencyBRL } from "@/lib/deal-format";
 import { findOpenDealIdForContact } from "@/lib/messaging";
 import { getPendingScheduledMessages } from "@/lib/scheduled-messages";
-import { firstNameOf } from "@/lib/templates";
+import { firstNameOf, getQuickFillMessageTemplates } from "@/lib/templates";
 import { canViewOwnedRecord } from "@/lib/visibility";
 import type { ContactDealParam } from "@/components/insert-param-button";
 import type { LinkContactTarget } from "./link-contact-dialog";
@@ -197,7 +197,15 @@ export default async function ConversationPage({
   const preselectedChannelId =
     selectedChannelId ?? defaultChannel?.id ?? allowedChannels[0]?.id ?? null;
 
-  const duplicateContact = await findDuplicateContact(contact.phone, contact.email, contact.id);
+  // Mesmos valores do InsertParamButton, reaproveitados pra já entregar o
+  // template de agendamento com as variáveis substituídas (ver
+  // getQuickFillMessageTemplates).
+  const variableValues = Object.fromEntries(contactParams.map((p) => [p.key, p.value]));
+
+  const [duplicateContact, quickFillTemplates] = await Promise.all([
+    findDuplicateContact(contact.phone, contact.email, contact.id),
+    getQuickFillMessageTemplates(variableValues),
+  ]);
 
   return (
     <ConversationThread
@@ -215,6 +223,7 @@ export default async function ConversationPage({
       channels={allowedChannels.map((c) => ({ id: c.id, label: c.label, channelType: c.channelType }))}
       preselectedChannelId={preselectedChannelId}
       params={contactParams}
+      messageTemplates={quickFillTemplates}
       scheduledMessages={pendingScheduled.map((m) => ({
         id: m.id,
         content: m.content,

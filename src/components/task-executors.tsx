@@ -26,7 +26,11 @@ export type TaskLike = {
   id: string;
   title: string;
   type: "mensagem" | "ligacao" | "agendamento" | "generica" | "email";
-  status: "pendente" | "concluida";
+  status: "pendente" | "concluida" | "falhou";
+  // Preenchido só quando status='falhou' (ver maybeAutoSendTask) — motivo do
+  // auto-envio ter falhado, pra equipe saber o que aconteceu sem ir no log
+  // do servidor.
+  errorMessage?: string | null;
   messagePreview: string | null;
   dueAt: string | null;
   emailSubjectPreview?: string | null;

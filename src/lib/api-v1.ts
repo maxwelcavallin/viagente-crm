@@ -669,7 +669,7 @@ export async function sendMessageForApiKey(
 
 export type TaskListFilters = {
   dealId?: string;
-  status?: "pendente" | "concluida";
+  status?: "pendente" | "concluida" | "falhou";
   limit?: number;
   offset?: number;
 };
@@ -680,6 +680,7 @@ const TASK_SELECTION = {
   title: tasks.title,
   type: tasks.type,
   status: tasks.status,
+  errorMessage: tasks.errorMessage,
   dueAt: tasks.dueAt,
   completedAt: tasks.completedAt,
   createdAt: tasks.createdAt,
