@@ -52,6 +52,7 @@ export type DealCardData = {
   stageId: string;
   pipelineId: string;
   messagePreview: DealMessagePreview | null;
+  unreadCount: number;
   pendingTaskCount: number;
 };
 
@@ -251,9 +252,19 @@ export function DealCard({
 
       {deal.messagePreview && (
         <div className="space-y-0.5 rounded-md bg-muted/50 px-2 py-1">
-          <p className="text-[10px] font-medium text-muted-foreground">
-            {deal.messagePreview.direction === "saida" ? "Você" : deal.contactName}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-[10px] font-medium text-muted-foreground">
+              {deal.messagePreview.direction === "saida" ? "Você" : deal.contactName}
+            </p>
+            {deal.unreadCount > 0 && (
+              <span
+                aria-label={`${deal.unreadCount} mensagens não lidas`}
+                className="flex size-4.5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground"
+              >
+                {deal.unreadCount > 9 ? "9+" : deal.unreadCount}
+              </span>
+            )}
+          </div>
           <p className="line-clamp-1 text-xs">
             {messagePreviewLabel(deal.messagePreview)}
           </p>

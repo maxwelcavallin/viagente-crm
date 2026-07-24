@@ -12,6 +12,8 @@ import {
   Star,
   Trash2,
   TriangleAlert,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -396,8 +398,13 @@ function DownloadLink({
   );
 }
 
+const IMAGE_ZOOM_MIN = 1;
+const IMAGE_ZOOM_MAX = 3;
+const IMAGE_ZOOM_STEP = 0.5;
+
 function MessageMedia({ message }: { message: ThreadMessage }) {
   const [open, setOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   // Mídia que a Z-API falhou em servir (ver comentário em handleIncomingMessage
   // no webhook) ainda grava a mensagem, só sem mediaUrl — sem isso aqui, a
   // bolha ficava totalmente vazia (nem o aviso aparecia).
@@ -433,16 +440,60 @@ function MessageMedia({ message }: { message: ThreadMessage }) {
         <div className="mt-1">
           <DownloadLink message={message} />
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-[calc(100%-2rem)] gap-3 sm:max-w-2xl">
+        <Dialog
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) setZoom(1);
+          }}
+        >
+          <DialogContent className="max-w-[calc(100%-2rem)] gap-3 sm:max-w-4xl">
             <DialogTitle className="sr-only">Imagem ampliada</DialogTitle>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={message.mediaUrl}
-              alt="Imagem ampliada"
-              className="max-h-[75vh] w-full rounded-lg object-contain"
-            />
-            <div className="flex justify-end">
+            <div className="max-h-[75vh] w-full overflow-auto rounded-lg bg-black/5 dark:bg-white/5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={message.mediaUrl}
+                alt="Imagem ampliada"
+                onClick={() =>
+                  setZoom((z) => (z > IMAGE_ZOOM_MIN ? IMAGE_ZOOM_MIN : 2))
+                }
+                style={{ transform: `scale(${zoom})` }}
+                className={cn(
+                  "mx-auto block w-full origin-top object-contain transition-transform",
+                  zoom > IMAGE_ZOOM_MIN ? "cursor-zoom-out" : "cursor-zoom-in"
+                )}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Diminuir zoom"
+                  disabled={zoom <= IMAGE_ZOOM_MIN}
+                  onClick={() =>
+                    setZoom((z) => Math.max(IMAGE_ZOOM_MIN, +(z - IMAGE_ZOOM_STEP).toFixed(1)))
+                  }
+                >
+                  <ZoomOut size={14} strokeWidth={1.75} />
+                </Button>
+                <span className="w-10 text-center text-xs text-muted-foreground">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Aumentar zoom"
+                  disabled={zoom >= IMAGE_ZOOM_MAX}
+                  onClick={() =>
+                    setZoom((z) => Math.min(IMAGE_ZOOM_MAX, +(z + IMAGE_ZOOM_STEP).toFixed(1)))
+                  }
+                >
+                  <ZoomIn size={14} strokeWidth={1.75} />
+                </Button>
+              </div>
               <Button
                 size="sm"
                 nativeButton={false}

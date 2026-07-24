@@ -14,6 +14,7 @@ import {
   tasks,
   users,
 } from "@/db/schema";
+import { getUnreadCountsByContactId } from "@/lib/conversations";
 import { getLastMessagePreviewsByContactId } from "@/lib/deals";
 import { getPipelinesForUser } from "@/lib/pipeline-visibility";
 import type { TagOption } from "@/lib/tags";
@@ -131,30 +132,36 @@ export default async function NegociosPage({
   const contactById = new Map(contactRows.map((c) => [c.id, c]));
   const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
 
-  const [dealTagRows, messagePreviewByContactId, pendingTaskRows, pipelineLossReasons] =
-    await Promise.all([
-      dealIds.length > 0
-        ? db
-            .select({ dealId: dealTags.dealId, tagId: dealTags.tagId })
-            .from(dealTags)
-            .where(inArray(dealTags.dealId, dealIds))
-        : Promise.resolve([]),
-      getLastMessagePreviewsByContactId(contactIds),
-      dealIds.length > 0
-        ? db
-            .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
-            .from(tasks)
-            .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
-            .groupBy(tasks.dealId)
-        : Promise.resolve([]),
-      selectedPipelineId
-        ? db
-            .select({ id: lossReasons.id, label: lossReasons.label })
-            .from(lossReasons)
-            .where(eq(lossReasons.pipelineId, selectedPipelineId))
-            .orderBy(asc(lossReasons.order))
-        : Promise.resolve([]),
-    ]);
+  const [
+    dealTagRows,
+    messagePreviewByContactId,
+    unreadCountByContactId,
+    pendingTaskRows,
+    pipelineLossReasons,
+  ] = await Promise.all([
+    dealIds.length > 0
+      ? db
+          .select({ dealId: dealTags.dealId, tagId: dealTags.tagId })
+          .from(dealTags)
+          .where(inArray(dealTags.dealId, dealIds))
+      : Promise.resolve([]),
+    getLastMessagePreviewsByContactId(contactIds),
+    getUnreadCountsByContactId(contactIds),
+    dealIds.length > 0
+      ? db
+          .select({ dealId: tasks.dealId, pendingCount: count(tasks.id) })
+          .from(tasks)
+          .where(and(inArray(tasks.dealId, dealIds), eq(tasks.status, "pendente")))
+          .groupBy(tasks.dealId)
+      : Promise.resolve([]),
+    selectedPipelineId
+      ? db
+          .select({ id: lossReasons.id, label: lossReasons.label })
+          .from(lossReasons)
+          .where(eq(lossReasons.pipelineId, selectedPipelineId))
+          .orderBy(asc(lossReasons.order))
+      : Promise.resolve([]),
+  ]);
 
   const pendingTaskCountByDeal = new Map(
     pendingTaskRows.map((row) => [row.dealId, row.pendingCount])
@@ -201,6 +208,7 @@ export default async function NegociosPage({
       stageId: deal.stageId,
       pipelineId: deal.pipelineId,
       messagePreview: messagePreviewByContactId.get(deal.contactId) ?? null,
+      unreadCount: unreadCountByContactId.get(deal.contactId) ?? 0,
       pendingTaskCount: pendingTaskCountByDeal.get(deal.id) ?? 0,
     };
   });

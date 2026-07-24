@@ -210,6 +210,47 @@ export async function markContactUnread(contactId: string): Promise<void> {
     .where(eq(contacts.id, contactId));
 }
 
+// Total de mensagens não lidas por CONTATO (soma todos os canais dele) —
+// mesma regra de "não lida" de listConversations (lastReadAt + markedUnread
+// forçando pelo menos 1), só que agregada por contato em vez de por
+// (contato, canal). Usada pelo badge de não lidas no card de negócio, que
+// não distingue conversas por canal.
+export async function getUnreadCountsByContactId(
+  contactIds: string[]
+): Promise<Map<string, number>> {
+  if (contactIds.length === 0) return new Map();
+
+  const [unreadRows, contactRows] = await Promise.all([
+    db
+      .select({
+        contactId: messages.contactId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(messages)
+      .innerJoin(contacts, eq(contacts.id, messages.contactId))
+      .where(
+        and(
+          eq(messages.direction, "entrada"),
+          inArray(messages.contactId, contactIds),
+          or(isNull(contacts.lastReadAt), gt(messages.createdAt, contacts.lastReadAt))
+        )
+      )
+      .groupBy(messages.contactId),
+    db
+      .select({ id: contacts.id, markedUnread: contacts.markedUnread })
+      .from(contacts)
+      .where(inArray(contacts.id, contactIds)),
+  ]);
+
+  const countByContactId = new Map(unreadRows.map((r) => [r.contactId, r.count]));
+  for (const contact of contactRows) {
+    if (contact.markedUnread && (countByContactId.get(contact.id) ?? 0) === 0) {
+      countByContactId.set(contact.id, 1);
+    }
+  }
+  return countByContactId;
+}
+
 export type ThreadMessage = {
   id: string;
   direction: "entrada" | "saida";

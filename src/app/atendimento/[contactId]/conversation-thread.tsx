@@ -37,6 +37,10 @@ const ATTACHMENT_ACCEPT =
 // "document" genérico (ver sendInstagramAttachment em instagram-graph.ts).
 const INSTAGRAM_ATTACHMENT_ACCEPT = "image/*,video/*,audio/*";
 
+// Altura máxima da caixa de digitação antes de virar scroll interno (~6
+// linhas), igual ao comportamento do composer do WhatsApp Web.
+const COMPOSER_MAX_HEIGHT = 160;
+
 export function ConversationThread({
   contactId,
   contactName,
@@ -126,6 +130,15 @@ export function ConversationThread({
       el.scrollTop = el.scrollHeight;
     }
   }, [initialMessages]);
+
+  // Cresce junto com o texto (estilo WhatsApp Web) até um teto, e depois
+  // vira scroll interno em vez de continuar empurrando o resto da tela.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+  }, [text]);
 
   function clearPendingAttachment() {
     setPendingAttachment((prev) => {
@@ -274,8 +287,8 @@ export function ConversationThread({
               )}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <div className="font-semibold">{contactName}</div>
+          <Link href={`/contatos/${contactId}`} className="min-w-0 hover:opacity-80">
+            <div className="truncate font-semibold hover:underline">{contactName}</div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               {isGroup ? (
                 <>
@@ -288,7 +301,7 @@ export function ConversationThread({
                 contactPhone
               )}
             </div>
-          </div>
+          </Link>
         </div>
         <div className="flex items-center gap-3">
           {isInstagramContact && (
@@ -466,8 +479,9 @@ export function ConversationThread({
                 }}
                 onPaste={handlePaste}
                 placeholder="Escreva uma mensagem... (Ctrl+V também cola imagens)"
-                rows={2}
-                className="min-h-[40px] flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+                rows={1}
+                style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
+                className="min-h-[40px] flex-1 resize-none overflow-y-auto rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
               />
               <Button
                 onClick={handleSend}
